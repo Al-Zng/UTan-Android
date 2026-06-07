@@ -2252,9 +2252,9 @@ jobs:
           cp utan_flutter/pubspec.yaml build_project/
       - name: Fix Android build configuration (minSdk 21, compileSdk 34)
         run: |
-          sed -i 's/minSdkVersion [0-9]\+/minSdkVersion 21/g' build_project/android/app/build.gradle
-          sed -i 's/compileSdkVersion [0-9]\+/compileSdkVersion 34/g' build_project/android/app/build.gradle
-          sed -i 's/targetSdkVersion [0-9]\+/targetSdkVersion 34/g' build_project/android/app/build.gradle
+          sed -i -e 's/minSdkVersion .*/minSdkVersion 21/g' build_project/android/app/build.gradle
+          sed -i -e 's/compileSdkVersion .*/compileSdkVersion 34/g' build_project/android/app/build.gradle
+          sed -i -e 's/targetSdkVersion .*/targetSdkVersion 34/g' build_project/android/app/build.gradle
       - name: Get dependencies
         working-directory: ./build_project
         run: flutter pub get
