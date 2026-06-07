@@ -28,7 +28,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  http: ^1.1.0
+  http: ^0.13.6
   shared_preferences: ^2.2.2
   video_player: ^2.8.1
   path_provider: ^2.1.1
