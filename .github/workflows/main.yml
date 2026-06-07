@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Generate Flutter project from generator script
+      - name: Generate Flutter project (Dart files only)
         run: python generate_flutter_utan.py
       
       - name: Set up Flutter
@@ -26,19 +26,28 @@ jobs:
           flutter-version: '3.16.0'
           channel: 'stable'
       
+      - name: Create fresh Flutter project with native configs
+        run: flutter create --project-name utan_flutter --org com.mustaqil build_project
+      
+      - name: Copy generated code into the new project
+        run: |
+          rm -rf build_project/lib/*
+          cp -r utan_flutter/lib/* build_project/lib/
+          cp utan_flutter/pubspec.yaml build_project/
+      
       - name: Get dependencies
-        working-directory: ./utan_flutter
+        working-directory: ./build_project
         run: flutter pub get
       
       - name: Build APK
-        working-directory: ./utan_flutter
+        working-directory: ./build_project
         run: flutter build apk --release
       
       - name: Build iOS (no codesign)
-        working-directory: ./utan_flutter
+        working-directory: ./build_project
         run: flutter build ios --release --no-codesign
       
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: utan_flutter/build/app/outputs/flutter-apk/app-release.apk
+          path: build_project/build/app/outputs/flutter-apk/app-release.apk
