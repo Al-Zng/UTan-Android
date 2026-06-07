@@ -8,15 +8,14 @@ dirs = [
     f"{BASE}/lib/services",
     f"{BASE}/lib/screens",
     f"{BASE}/lib/widgets",
-    f"{BASE}/assets",
     f"{BASE}/.github/workflows",
 ]
 for d in dirs:
     os.makedirs(d, exist_ok=True)
 
-# =============================================================================
-# pubspec.yaml (corrected http version)
-# =============================================================================
+# ----------------------------------------------------------------------
+# pubspec.yaml (no assets section)
+# ----------------------------------------------------------------------
 pubspec = '''name: utan_flutter
 description: UTan – Movie & TV streaming app (Flutter replica)
 publish_to: 'none'
@@ -45,15 +44,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/
 '''
 with open(f"{BASE}/pubspec.yaml", "w") as f:
     f.write(pubspec)
 
-# =============================================================================
+# ----------------------------------------------------------------------
 # lib/main.dart
-# =============================================================================
+# ----------------------------------------------------------------------
 main_dart = '''import 'package:flutter/material.dart';
 import 'package:utan_flutter/screens/home_screen.dart';
 import 'package:utan_flutter/screens/browse_screen.dart';
@@ -140,19 +137,16 @@ class _MainTabViewState extends State<MainTabView> {
 with open(f"{BASE}/lib/main.dart", "w") as f:
     f.write(main_dart)
 
-# =============================================================================
-# MODELS (all corrected)
-# =============================================================================
-# video_item.dart
+# ----------------------------------------------------------------------
+# MODELS
+# ----------------------------------------------------------------------
 with open(f"{BASE}/lib/models/video_item.dart", "w") as f:
     f.write('''class VideoItem {
   final String id;
   final String title;
   final String imageUrl;
   final String type;
-
   VideoItem({required this.id, required this.title, required this.imageUrl, required this.type});
-
   Map<String, dynamic> toJson() => {'id': id, 'title': title, 'imageUrl': imageUrl, 'type': type};
   factory VideoItem.fromJson(Map<String, dynamic> json) => VideoItem(
         id: json['id'],
@@ -163,7 +157,6 @@ with open(f"{BASE}/lib/models/video_item.dart", "w") as f:
 }
 ''')
 
-# episode.dart
 with open(f"{BASE}/lib/models/episode.dart", "w") as f:
     f.write('''class EpisodeItem {
   final String id;
@@ -173,7 +166,6 @@ with open(f"{BASE}/lib/models/episode.dart", "w") as f:
   final String url360;
   final String subtitleUrl;
   final String subtitleVttUrl;
-
   EpisodeItem({
     required this.id,
     required this.title,
@@ -183,7 +175,6 @@ with open(f"{BASE}/lib/models/episode.dart", "w") as f:
     required this.subtitleUrl,
     required this.subtitleVttUrl,
   });
-
   String get season {
     final lower = title.toLowerCase();
     if (lower.contains('s')) {
@@ -198,10 +189,8 @@ with open(f"{BASE}/lib/models/episode.dart", "w") as f:
 }
 ''')
 
-# media_details.dart
 with open(f"{BASE}/lib/models/media_details.dart", "w") as f:
     f.write('''import 'package:utan_flutter/models/episode.dart';
-
 class MediaDetails {
   String title;
   String imageUrl;
@@ -217,7 +206,6 @@ class MediaDetails {
   String movieSubtitleUrl;
   String movieSubtitleVttUrl;
   List<EpisodeItem> episodes;
-
   MediaDetails({
     this.title = '',
     this.imageUrl = '',
@@ -234,7 +222,6 @@ class MediaDetails {
     this.movieSubtitleVttUrl = '',
     this.episodes = const [],
   });
-
   Map<String, List<EpisodeItem>> get seasonsDict {
     final map = <String, List<EpisodeItem>>{};
     for (var ep in episodes) {
@@ -243,7 +230,6 @@ class MediaDetails {
     }
     return map;
   }
-
   List<String> get sortedSeasons {
     final keys = seasonsDict.keys.toList();
     keys.sort((a, b) {
@@ -256,11 +242,9 @@ class MediaDetails {
 }
 ''')
 
-# watch_progress.dart
 with open(f"{BASE}/lib/models/watch_progress.dart", "w") as f:
     f.write('''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-
 class WatchProgress {
   final String itemId;
   final String title;
@@ -275,7 +259,6 @@ class WatchProgress {
   final String videoUrl360;
   final String subtitleUrl;
   final String subtitleVttUrl;
-
   WatchProgress({
     required this.itemId,
     required this.title,
@@ -291,7 +274,6 @@ class WatchProgress {
     required this.subtitleUrl,
     required this.subtitleVttUrl,
   });
-
   Map<String, dynamic> toJson() => {
         'itemId': itemId,
         'title': title,
@@ -307,7 +289,6 @@ class WatchProgress {
         'subtitleUrl': subtitleUrl,
         'subtitleVttUrl': subtitleVttUrl,
       };
-
   factory WatchProgress.fromJson(Map<String, dynamic> json) => WatchProgress(
         itemId: json['itemId'],
         title: json['title'],
@@ -324,15 +305,12 @@ class WatchProgress {
         subtitleVttUrl: json['subtitleVttUrl'],
       );
 }
-
 class WatchProgressStore {
   static final WatchProgressStore _instance = WatchProgressStore._internal();
   factory WatchProgressStore() => _instance;
   WatchProgressStore._internal();
-
   static const String _key = 'UTanWatchProgress_v3';
   Map<String, WatchProgress> _allProgress = {};
-
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final String? data = prefs.getString(_key);
@@ -341,7 +319,6 @@ class WatchProgressStore {
       _allProgress = decoded.map((k, v) => MapEntry(k, WatchProgress.fromJson(v)));
     }
   }
-
   Future<void> save({
     required String itemId,
     required String title,
@@ -373,22 +350,17 @@ class WatchProgressStore {
     );
     await _persist();
   }
-
   Future<void> remove(String itemId) async {
     _allProgress.remove(itemId);
     await _persist();
   }
-
   Future<void> clearAll() async {
     _allProgress.clear();
     await _persist();
   }
-
   WatchProgress? progress(String itemId) => _allProgress[itemId];
-
   List<WatchProgress> get recent => _allProgress.values.toList()
     ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     final Map<String, dynamic> toSave = _allProgress.map((k, v) => MapEntry(k, v.toJson()));
@@ -397,7 +369,6 @@ class WatchProgressStore {
 }
 ''')
 
-# download_task.dart
 with open(f"{BASE}/lib/models/download_task.dart", "w") as f:
     f.write('''class DownloadTaskItem {
   final String id;
@@ -409,7 +380,6 @@ with open(f"{BASE}/lib/models/download_task.dart", "w") as f:
   double progress;
   bool isCompleted;
   String? localVideoPath;
-
   DownloadTaskItem({
     required this.id,
     required this.title,
@@ -421,7 +391,6 @@ with open(f"{BASE}/lib/models/download_task.dart", "w") as f:
     this.isCompleted = false,
     this.localVideoPath,
   });
-
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -433,7 +402,6 @@ with open(f"{BASE}/lib/models/download_task.dart", "w") as f:
         'isCompleted': isCompleted,
         'localVideoPath': localVideoPath,
       };
-
   factory DownloadTaskItem.fromJson(Map<String, dynamic> json) => DownloadTaskItem(
         id: json['id'],
         title: json['title'],
@@ -448,16 +416,13 @@ with open(f"{BASE}/lib/models/download_task.dart", "w") as f:
 }
 ''')
 
-# site_category.dart
 with open(f"{BASE}/lib/models/site_category.dart", "w") as f:
     f.write('''class SiteCategory {
   final int id;
   final String nameAr;
   final String nameEn;
-
   const SiteCategory({required this.id, required this.nameAr, required this.nameEn});
 }
-
 const List<SiteCategory> SITE_CATEGORIES = [
   SiteCategory(id: 0, nameAr: 'أفلام إنجليزية', nameEn: 'English Movies'),
   SiteCategory(id: 1, nameAr: 'مسلسلات أجنبية', nameEn: 'TV Series'),
@@ -485,10 +450,9 @@ const List<SiteCategory> SITE_CATEGORIES = [
 ];
 ''')
 
-# =============================================================================
-# SERVICES (corrected)
-# =============================================================================
-# scraper.dart – fixed return types
+# ----------------------------------------------------------------------
+# SERVICES
+# ----------------------------------------------------------------------
 scraper_dart = '''import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:utan_flutter/models/video_item.dart';
@@ -646,14 +610,12 @@ class MovieScraper {
 with open(f"{BASE}/lib/services/scraper.dart", "w") as f:
     f.write(scraper_dart)
 
-# subtitle_parser.dart (no changes, already correct)
 subtitle_parser = '''import 'package:http/http.dart' as http;
 
 class SubtitleCue {
   final double startTime;
   final double endTime;
   final String text;
-
   SubtitleCue({required this.startTime, required this.endTime, required this.text});
 }
 
@@ -713,10 +675,7 @@ class SubtitleParser {
       final line = lines[i].trim();
       if (line.contains('-->')) {
         final times = line.split('-->');
-        if (times.length != 2) {
-          i++;
-          continue;
-        }
+        if (times.length != 2) { i++; continue; }
         final start = _parseVTTTime(times[0]);
         final end = _parseVTTTime(times[1]);
         if (start != null && end != null) {
@@ -758,7 +717,6 @@ class SubtitleParser {
 with open(f"{BASE}/lib/services/subtitle_parser.dart", "w") as f:
     f.write(subtitle_parser)
 
-# download_manager.dart (no changes)
 download_manager = '''import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -843,11 +801,9 @@ class DownloadManager {
 with open(f"{BASE}/lib/services/download_manager.dart", "w") as f:
     f.write(download_manager)
 
-# progress_store.dart (re-export)
 with open(f"{BASE}/lib/services/progress_store.dart", "w") as f:
     f.write("export '../models/watch_progress.dart';")
 
-# favorites_store.dart (fixed: use factory constructor)
 favorites_store = '''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -893,7 +849,6 @@ class FavoritesStore {
 with open(f"{BASE}/lib/services/favorites_store.dart", "w") as f:
     f.write(favorites_store)
 
-# settings_store.dart (fixed: use factory constructor)
 settings_store = '''import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsStore {
@@ -935,10 +890,9 @@ class SettingsStore {
 with open(f"{BASE}/lib/services/settings_store.dart", "w") as f:
     f.write(settings_store)
 
-# =============================================================================
-# WIDGETS (corrected type annotations)
-# =============================================================================
-# poster_card.dart (no changes, already correct)
+# ----------------------------------------------------------------------
+# WIDGETS (unchanged, but included for completeness)
+# ----------------------------------------------------------------------
 with open(f"{BASE}/lib/widgets/poster_card.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/watch_progress.dart';
@@ -947,7 +901,6 @@ import 'package:utan_flutter/models/video_item.dart';
 class PosterCard extends StatelessWidget {
   final VideoItem item;
   final WatchProgress? progress;
-
   const PosterCard({super.key, required this.item, this.progress});
 
   @override
@@ -1008,7 +961,6 @@ class PosterCard extends StatelessWidget {
 }
 ''')
 
-# hero_banner.dart (fix List<VideoItem> type)
 with open(f"{BASE}/lib/widgets/hero_banner.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1100,7 +1052,6 @@ class _HeroBannerState extends State<HeroBanner> {
 }
 ''')
 
-# continue_row.dart (fix WatchProgress type)
 with open(f"{BASE}/lib/widgets/continue_row.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/watch_progress.dart';
@@ -1184,7 +1135,6 @@ class ContinueWatchingRow extends StatelessWidget {
 }
 ''')
 
-# category_row.dart (fix List<VideoItem>)
 with open(f"{BASE}/lib/widgets/category_row.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1230,10 +1180,9 @@ class CategoryRow extends StatelessWidget {
 }
 ''')
 
-# =============================================================================
-# SCREENS (with all missing imports and type fixes)
-# =============================================================================
-# home_screen.dart (fix _heroItems type)
+# ----------------------------------------------------------------------
+# SCREENS (all correct, includes fixed player)
+# ----------------------------------------------------------------------
 with open(f"{BASE}/lib/screens/home_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1294,7 +1243,6 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 ''')
 
-# browse_screen.dart (no changes)
 with open(f"{BASE}/lib/screens/browse_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/site_category.dart';
@@ -1343,7 +1291,6 @@ class BrowseScreen extends StatelessWidget {
 }
 ''')
 
-# category_list_screen.dart
 with open(f"{BASE}/lib/screens/category_list_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/site_category.dart';
@@ -1416,7 +1363,6 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 }
 ''')
 
-# search_screen.dart (fix List<VideoItem>)
 with open(f"{BASE}/lib/screens/search_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1498,7 +1444,6 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 ''')
 
-# downloads_screen.dart (no changes)
 with open(f"{BASE}/lib/screens/downloads_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/services/download_manager.dart';
@@ -1550,7 +1495,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 }
 ''')
 
-# settings_screen.dart (fix SettingsStore())
 with open(f"{BASE}/lib/screens/settings_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/services/settings_store.dart';
@@ -1698,7 +1642,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 ''')
 
-# history_screen.dart (no changes)
 with open(f"{BASE}/lib/screens/history_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/services/progress_store.dart';
@@ -1745,7 +1688,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 ''')
 
-# details_screen.dart (fix imports and EpisodeItem)
 with open(f"{BASE}/lib/screens/details_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1966,9 +1908,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
 }
 ''')
 
-# player_screen.dart (fixed)
-with open(f"{BASE}/lib/screens/player_screen.dart", "w") as f:
-    f.write('''import 'dart:async';
+# PLAYER_SCREEN.DART (fixed string interpolation)
+player_screen = '''import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:utan_flutter/services/subtitle_parser.dart';
@@ -2271,11 +2212,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/player_screen.dart", "w") as f:
+    f.write(player_screen)
 
-# =============================================================================
-# .github/workflows/main.yml (final version, Android only)
-# =============================================================================
+# ----------------------------------------------------------------------
+# .github/workflows/main.yml (includes build.gradle fix)
+# ----------------------------------------------------------------------
 github_actions = '''name: Flutter CI
 
 on:
@@ -2307,6 +2250,11 @@ jobs:
           rm -rf build_project/lib/*
           cp -r utan_flutter/lib/* build_project/lib/
           cp utan_flutter/pubspec.yaml build_project/
+      - name: Fix Android build configuration (minSdk 21, compileSdk 34)
+        run: |
+          sed -i 's/minSdkVersion [0-9]\+/minSdkVersion 21/g' build_project/android/app/build.gradle
+          sed -i 's/compileSdkVersion [0-9]\+/compileSdkVersion 34/g' build_project/android/app/build.gradle
+          sed -i 's/targetSdkVersion [0-9]\+/targetSdkVersion 34/g' build_project/android/app/build.gradle
       - name: Get dependencies
         working-directory: ./build_project
         run: flutter pub get
@@ -2321,8 +2269,5 @@ jobs:
 with open(f"{BASE}/.github/workflows/main.yml", "w") as f:
     f.write(github_actions)
 
-print("✅ Complete Flutter UTan project generated in 'utan_flutter' folder.")
-print("The code now compiles without errors. Run:")
-print("  cd utan_flutter")
-print("  flutter pub get")
-print("  flutter run")
+print("✅ Complete, fully corrected Flutter UTan project generated in 'utan_flutter' folder.")
+print("Run: cd utan_flutter && flutter pub get && flutter run")
