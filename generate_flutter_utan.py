@@ -1,6 +1,6 @@
 import os
 
-BASE = "utan_full_fixed"
+BASE = "utan_flutter"   # بدلاً من "utan_full_fixed"
 
 # إنشاء جميع المجلدات المطلوبة
 dirs = [
