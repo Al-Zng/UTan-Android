@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./utan_flutter   # 👈 Important: navigate into the Flutter project
     steps:
       - uses: actions/checkout@v3
       - uses: subosito/flutter-action@v2
@@ -22,4 +25,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: utan_flutter/build/app/outputs/flutter-apk/app-release.apk
