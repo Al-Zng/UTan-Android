@@ -9,19 +9,39 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./utan_flutter   # 👈 Important: navigate into the Flutter project
     steps:
       - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Generate Flutter project from generator script
+        run: python generate_flutter_utan.py
+      
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.0'
           channel: 'stable'
-      - run: flutter pub get
-      - run: flutter test
-      - run: flutter build apk --release
-      - run: flutter build ios --release --no-codesign
+      
+      - name: Get dependencies
+        working-directory: ./utan_flutter
+        run: flutter pub get
+      
+      - name: Run tests
+        working-directory: ./utan_flutter
+        run: flutter test
+      
+      - name: Build APK
+        working-directory: ./utan_flutter
+        run: flutter build apk --release
+      
+      - name: Build iOS (no codesign)
+        working-directory: ./utan_flutter
+        run: flutter build ios --release --no-codesign
+      
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk
