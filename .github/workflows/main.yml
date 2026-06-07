@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Generate Flutter project (Dart files only)
+      - name: Generate Flutter project
         run: python generate_flutter_utan.py
       
       - name: Set up Flutter
@@ -26,14 +26,33 @@ jobs:
           flutter-version: '3.16.0'
           channel: 'stable'
       
-      - name: Create fresh Flutter project with native configs
+      - name: Create fresh Flutter project
         run: flutter create --project-name utan_flutter --org com.mustaqil build_project
       
-      - name: Copy generated code into the new project
+      - name: Copy generated code
         run: |
           rm -rf build_project/lib/*
           cp -r utan_flutter/lib/* build_project/lib/
           cp utan_flutter/pubspec.yaml build_project/
+      
+      - name: Fix Android build configuration
+        run: |
+          cat > fix_gradle.py << 'EOF'
+          import re
+          gradle_file = 'build_project/android/app/build.gradle'
+          with open(gradle_file, 'r') as f:
+              content = f.read()
+          # Change minSdkVersion to 21
+          content = re.sub(r'minSdkVersion\s+\d+', 'minSdkVersion 21', content)
+          # Change compileSdkVersion to 34
+          content = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 34', content)
+          # Change targetSdkVersion to 34 (if present)
+          content = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 34', content)
+          with open(gradle_file, 'w') as f:
+              f.write(content)
+          print("Fixed build.gradle")
+          EOF
+          python fix_gradle.py
       
       - name: Get dependencies
         working-directory: ./build_project
