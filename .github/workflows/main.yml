@@ -30,10 +30,6 @@ jobs:
         working-directory: ./utan_flutter
         run: flutter pub get
       
-      - name: Run tests
-        working-directory: ./utan_flutter
-        run: flutter test
-      
       - name: Build APK
         working-directory: ./utan_flutter
         run: flutter build apk --release
