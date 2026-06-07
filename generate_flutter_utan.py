@@ -1,25 +1,24 @@
 import os
 
-BASE = "utan_flutter"
+BASE = "utan_full_fixed"
 
-# 1. إنشاء المجلدات
+# إنشاء جميع المجلدات المطلوبة
 dirs = [
     f"{BASE}/lib/models",
     f"{BASE}/lib/services",
     f"{BASE}/lib/screens",
     f"{BASE}/lib/widgets",
+    f"{BASE}/android/app/src/main/res/xml",
     f"{BASE}/android/app/src/main",
 ]
 for d in dirs:
     os.makedirs(d, exist_ok=True)
 
-# ==========================================
-# 2. PUBSPEC.YAML
-# ==========================================
-pubspec = '''name: utan_flutter
-description: UTan – Movie & TV streaming app (Full Flutter Replica)
+# ========== 1. pubspec.yaml ==========
+pubspec = '''name: utan_full_fixed
+description: UTan – Full Android replica of iOS version (Dark Purple theme, Rubik font)
 publish_to: 'none'
-version: 3.0.0+5
+version: 3.0.2+7
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -49,9 +48,18 @@ flutter:
 with open(f"{BASE}/pubspec.yaml", "w", encoding="utf-8") as f:
     f.write(pubspec)
 
-# ==========================================
-# 3. ANDROID MANIFEST (لحل مشكلة حظر الشبكة والـ Loading)
-# ==========================================
+# ========== 2. Android Network Security & Manifest ==========
+network_security = '''<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">movie.vodu.me</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+'''
+with open(f"{BASE}/android/app/src/main/res/xml/network_security_config.xml", "w", encoding="utf-8") as f:
+    f.write(network_security)
+
 android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
@@ -61,7 +69,8 @@ android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/re
         android:label="UTan"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -86,9 +95,7 @@ android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/re
 with open(f"{BASE}/android/app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
     f.write(android_manifest)
 
-# ==========================================
-# 4. LIB/MAIN.DART (تطبيق ثيم الآيفون وخط Rubik)
-# ==========================================
+# ========== 3. Main.dart (لون iOS البنفسجي الغامق وخط Rubik) ==========
 main_dart = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -121,7 +128,8 @@ class UTanApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0D0D14), // لون خلفية الآيفون
+        // لون خلفية مطابق تماماً لنسخة iOS (بنفسجي غامق #0D0517)
+        scaffoldBackgroundColor: const Color(0xFF0D0517),
         primaryColor: const Color(0xFFE50914),
         textTheme: GoogleFonts.rubikTextTheme(ThemeData.dark().textTheme).apply(
           bodyColor: Colors.white,
@@ -130,10 +138,10 @@ class UTanApp extends StatelessWidget {
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFE50914),
           surface: Color(0xFF1C1C24),
-          background: Color(0xFF0D0D14),
+          background: Color(0xFF0D0517),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0D0D14),
+          backgroundColor: Color(0xFF0D0517),
           elevation: 0,
           centerTitle: true,
         ),
@@ -152,7 +160,6 @@ class MainTabView extends StatefulWidget {
 
 class _MainTabViewState extends State<MainTabView> {
   int _selectedIndex = 0;
-
   final List<Widget> _screens = const [
     HomeScreen(),
     BrowseScreen(),
@@ -166,7 +173,7 @@ class _MainTabViewState extends State<MainTabView> {
     return Scaffold(
       body: _screens[_selectedIndex],
       bottomNavigationBar: CupertinoTabBar(
-        backgroundColor: const Color(0xFF0D0D14).withOpacity(0.9),
+        backgroundColor: const Color(0xFF0D0517).withOpacity(0.9),
         activeColor: Colors.white,
         inactiveColor: Colors.grey.shade600,
         currentIndex: _selectedIndex,
@@ -186,11 +193,9 @@ class _MainTabViewState extends State<MainTabView> {
 with open(f"{BASE}/lib/main.dart", "w", encoding="utf-8") as f:
     f.write(main_dart)
 
-# ==========================================
-# 5. MODELS (كاملة كما في نسختك الأصلية)
-# ==========================================
-with open(f"{BASE}/lib/models/video_item.dart", "w", encoding="utf-8") as f:
-    f.write('''class VideoItem {
+# ========== 4. Models (كاملة) ==========
+models = {
+    "video_item.dart": '''class VideoItem {
   final String id;
   final String title;
   final String imageUrl;
@@ -201,10 +206,8 @@ with open(f"{BASE}/lib/models/video_item.dart", "w", encoding="utf-8") as f:
         id: json['id'], title: json['title'], imageUrl: json['imageUrl'], type: json['type'],
       );
 }
-''')
-
-with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
-    f.write('''class EpisodeItem {
+''',
+    "episode.dart": '''class EpisodeItem {
   final String id;
   final String title;
   final String url;
@@ -228,10 +231,8 @@ with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
     return 'الموسم 1';
   }
 }
-''')
-
-with open(f"{BASE}/lib/models/media_details.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'episode.dart';
+''',
+    "media_details.dart": '''import 'episode.dart';
 class MediaDetails {
   String title; String imageUrl; String year; String genre; String rating;
   String runtime; String synopsis; bool isMovie; String movieUrl;
@@ -261,10 +262,8 @@ class MediaDetails {
     return keys;
   }
 }
-''')
-
-with open(f"{BASE}/lib/models/watch_progress.dart", "w", encoding="utf-8") as f:
-    f.write('''class WatchProgress {
+''',
+    "watch_progress.dart": '''class WatchProgress {
   final String itemId; final String title; final String imageUrl;
   final String episodeId; final String episodeTitle; final double progressSeconds;
   final double durationSeconds; final DateTime updatedAt; final String videoUrl;
@@ -293,10 +292,8 @@ with open(f"{BASE}/lib/models/watch_progress.dart", "w", encoding="utf-8") as f:
         subtitleUrl: json['subtitleUrl'], subtitleVttUrl: json['subtitleVttUrl'],
       );
 }
-''')
-
-with open(f"{BASE}/lib/models/download_task.dart", "w", encoding="utf-8") as f:
-    f.write('''class DownloadTaskItem {
+''',
+    "download_task.dart": '''class DownloadTaskItem {
   final String id; final String title; final String imageUrl; final bool isMovie;
   final String videoUrl; final String subtitleUrl; double progress;
   bool isCompleted; String? localVideoPath;
@@ -316,10 +313,8 @@ with open(f"{BASE}/lib/models/download_task.dart", "w", encoding="utf-8") as f:
         progress: json['progress'], isCompleted: json['isCompleted'], localVideoPath: json['localVideoPath'],
       );
 }
-''')
-
-with open(f"{BASE}/lib/models/site_category.dart", "w", encoding="utf-8") as f:
-    f.write('''class SiteCategory {
+''',
+    "site_category.dart": '''class SiteCategory {
   final int id; final String nameAr; final String nameEn;
   const SiteCategory({required this.id, required this.nameAr, required this.nameEn});
 }
@@ -348,12 +343,13 @@ const List<SiteCategory> SITE_CATEGORIES = [
   SiteCategory(id: 1022, nameAr: 'أنمي عربي', nameEn: 'Arabic Anime'),
   SiteCategory(id: 1029, nameAr: 'أنمي مدبلج إنجليزي', nameEn: 'English Dubbed Anime'),
 ];
-''')
+'''
+}
+for fname, content in models.items():
+    with open(f"{BASE}/lib/models/{fname}", "w", encoding="utf-8") as f:
+        f.write(content)
 
-
-# ==========================================
-# 6. SERVICES (الاسكرابر القوي مع معالجة الأخطاء لمنع التعليق)
-# ==========================================
+# ========== 5. Services (مع User-Agent في السكرابر) ==========
 scraper_dart = '''import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../models/video_item.dart';
@@ -362,26 +358,36 @@ import '../models/media_details.dart';
 
 class MovieScraper {
   static const String baseUrl = 'https://movie.vodu.me/';
+  static const String userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  Future<http.Response> _getWithHeaders(String url) async {
+    return await http.get(
+      Uri.parse(url),
+      headers: {'User-Agent': userAgent, 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'},
+    ).timeout(const Duration(seconds: 20));
+  }
 
   Future<({List<VideoItem> hero, List<Map<String, dynamic>> categories})> fetchHome() async {
     try {
-      final response = await http.get(Uri.parse(baseUrl + 'index.php')).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) throw Exception('Status not 200');
-      
+      final response = await _getWithHeaders(baseUrl + 'index.php');
+      if (response.statusCode != 200) throw Exception('HTTP \${response.statusCode}');
       final html = response.body;
       List<VideoItem> hero = [];
       List<Map<String, dynamic>> categoryList = [];
 
-      final carReg = RegExp(r'<a href="index\\.php\\?do=view&type=post&id=(\\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">');
+      final carReg = RegExp(r'<a href="index\\.php\\?do=view&type=post&id=(\\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)"');
       for (final match in carReg.allMatches(html)) {
-        final id = match.group(1)!; var img = match.group(2)!; final title = match.group(3)!;
+        final id = match.group(1)!;
+        var img = match.group(2)!;
+        final title = match.group(3)!;
         if (!img.startsWith('http')) img = baseUrl + img;
         hero.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
       }
 
       final sectionReg = RegExp(r'<h3[^>]*>\\s*([^<]+)\\s*</h3>.*?<div class="homeseries">(.*?)</div>\\s*</div>', dotAll: true);
       for (final match in sectionReg.allMatches(html)) {
-        final secTitle = match.group(1)!.trim(); final body = match.group(2)!;
+        final secTitle = match.group(1)!.trim();
+        final body = match.group(2)!;
         final items = _parseItemXBlock(body);
         if (items.isNotEmpty) categoryList.add({'name': secTitle, 'items': items});
       }
@@ -389,11 +395,9 @@ class MovieScraper {
       if (categoryList.isEmpty && hero.isNotEmpty) {
         categoryList.add({'name': 'الرائج الآن', 'items': hero.take(10).toList()});
       }
-
       return (hero: hero, categories: categoryList);
     } catch (e) {
       print('Scraper Error Home: $e');
-      // لا نجعل التطبيق يعلق أبداً، نعيد قائمة فارغة
       return (hero: <VideoItem>[], categories: <Map<String, dynamic>>[]);
     }
   }
@@ -401,19 +405,17 @@ class MovieScraper {
   Future<List<VideoItem>> fetchCategory(int typeId, int page) async {
     try {
       final url = '$baseUrl/index.php?do=list&type=$typeId&page=$page';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final response = await _getWithHeaders(url);
       if (response.statusCode != 200) return [];
       return _parseListPage(response.body);
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
   Future<List<VideoItem>> search(String query) async {
     try {
       final encoded = Uri.encodeComponent(query);
       final url = '$baseUrl/index.php?do=list&title=$encoded';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final response = await _getWithHeaders(url);
       if (response.statusCode != 200) return [];
       return _parseListPage(response.body);
     } catch (e) { return []; }
@@ -422,7 +424,7 @@ class MovieScraper {
   Future<MediaDetails> fetchDetails(String id) async {
     try {
       final url = '$baseUrl/index.php?do=view&type=post&id=$id';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final response = await _getWithHeaders(url);
       if (response.statusCode != 200) return MediaDetails();
       return _parseDetails(response.body);
     } catch (e) {
@@ -434,7 +436,9 @@ class MovieScraper {
     final List<VideoItem> items = [];
     final pattern = RegExp(r'href="index\\.php\\?do=view&type=post&id=(\\d+)"><img src="([^"]+)"[^>]*>\\s*</a>\\s*<div class="mytitle">\\s*<a[^>]*>([^<]+)</a>');
     for (final match in pattern.allMatches(html)) {
-      final id = match.group(1)!; var img = match.group(2)!; final title = match.group(3)!.trim();
+      final id = match.group(1)!;
+      var img = match.group(2)!;
+      final title = match.group(3)!.trim();
       if (!img.startsWith('http')) img = baseUrl + img;
       items.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
     }
@@ -446,7 +450,8 @@ class MovieScraper {
     final pattern = RegExp(r'<div class="itemx"[^>]*>.*?<img src="([^"]+)".*?<div class="mytitle">([^<]+)</div>', dotAll: true);
     int idx = 1;
     for (final match in pattern.allMatches(html)) {
-      var img = match.group(1)!; final title = match.group(2)!.trim();
+      var img = match.group(1)!;
+      final title = match.group(2)!.trim();
       if (!img.startsWith('http')) img = baseUrl + img;
       items.add(VideoItem(id: 'home_${idx}_${title.substring(0, title.length > 10 ? 10 : title.length)}', title: title, imageUrl: img, type: 'post'));
       idx++;
@@ -456,12 +461,18 @@ class MovieScraper {
 
   MediaDetails _parseDetails(String html) {
     MediaDetails d = MediaDetails();
-    d.title = RegExp(r'<h1>(.*?)</h1>').firstMatch(html)?.group(1) ?? '';
-    d.year = RegExp(r'<span>Year:\\s*</span>\\s*([^<]+)').firstMatch(html)?.group(1)?.trim() ?? '';
-    d.genre = RegExp(r'<span>Genre:\\s*</span>\\s*([^<]+)').firstMatch(html)?.group(1)?.trim() ?? '';
-    d.rating = RegExp(r'<span>IMdB Rating:\\s*</span>\\s*([^<]+)').firstMatch(html)?.group(1)?.trim() ?? '';
-    d.runtime = RegExp(r'<span>Runtime:\\s*</span>\\s*([^<]+)').firstMatch(html)?.group(1)?.trim() ?? '';
-    d.synopsis = RegExp(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true).firstMatch(html)?.group(1)?.trim() ?? '';
+    final titleMatch = RegExp(r'<h1>(.*?)</h1>').firstMatch(html);
+    if (titleMatch != null) d.title = titleMatch.group(1)!;
+    final yearMatch = RegExp(r'<span>Year:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (yearMatch != null) d.year = yearMatch.group(1)!.trim();
+    final genreMatch = RegExp(r'<span>Genre:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (genreMatch != null) d.genre = genreMatch.group(1)!.trim();
+    final ratingMatch = RegExp(r'<span>IMdB Rating:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (ratingMatch != null) d.rating = ratingMatch.group(1)!.trim();
+    final runtimeMatch = RegExp(r'<span>Runtime:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (runtimeMatch != null) d.runtime = runtimeMatch.group(1)!.trim();
+    final synopsisMatch = RegExp(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true).firstMatch(html);
+    if (synopsisMatch != null) d.synopsis = synopsisMatch.group(1)!.trim();
     final imgMatch = RegExp(r'<img src="([^"]+)" class="img-responsive"').firstMatch(html);
     if (imgMatch != null) {
       var img = imgMatch.group(1)!;
@@ -482,18 +493,21 @@ class MovieScraper {
       final vtt = RegExp(r'data-webvtt="([^"]*)"').firstMatch(block)?.group(1) ?? '';
       if (url.isNotEmpty) {
         episodes.add(EpisodeItem(
-          id: id, title: title.isEmpty ? 'الحلقة ${episodes.length + 1}' : title,
+          id: id, title: title.isEmpty ? 'الحلقة \${episodes.length + 1}' : title,
           url: url, url1080: url1080, url360: url360, subtitleUrl: srt, subtitleVttUrl: vtt,
         ));
       }
     }
     if (episodes.isNotEmpty) {
-      d.isMovie = false; d.episodes = episodes;
+      d.isMovie = false;
+      d.episodes = episodes;
     } else {
       final movieMatch = RegExp(r'data-url="([^"]+)"[^>]*data-url360="([^"]*)"[^>]*data-url1080="([^"]*)"[^>]*data-srt="([^"]*)"[^>]*data-webvtt="([^"]*)"').firstMatch(html);
       if (movieMatch != null) {
-        d.movieUrl = movieMatch.group(1)!; d.movieUrl360 = movieMatch.group(2)!;
-        d.movieUrl1080 = movieMatch.group(3)!; d.movieSubtitleUrl = movieMatch.group(4)!;
+        d.movieUrl = movieMatch.group(1)!;
+        d.movieUrl360 = movieMatch.group(2)!;
+        d.movieUrl1080 = movieMatch.group(3)!;
+        d.movieSubtitleUrl = movieMatch.group(4)!;
         d.movieSubtitleVttUrl = movieMatch.group(5)!;
       }
     }
@@ -504,7 +518,9 @@ class MovieScraper {
 with open(f"{BASE}/lib/services/scraper.dart", "w", encoding="utf-8") as f:
     f.write(scraper_dart)
 
-subtitle_parser = '''import 'package:http/http.dart' as http;
+# باقي الخدمات (نفس المحتوى السليم)
+services_extra = {
+    "subtitle_parser.dart": '''import 'package:http/http.dart' as http;
 class SubtitleCue {
   final double startTime; final double endTime; final String text;
   SubtitleCue({required this.startTime, required this.endTime, required this.text});
@@ -582,12 +598,8 @@ class SubtitleParser {
     return h * 3600 + m * 60 + s;
   }
 }
-'''
-with open(f"{BASE}/lib/services/subtitle_parser.dart", "w", encoding="utf-8") as f:
-    f.write(subtitle_parser)
-
-with open(f"{BASE}/lib/services/progress_store.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'dart:convert';
+''',
+    "progress_store.dart": '''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/watch_progress.dart';
 class WatchProgressStore {
@@ -627,10 +639,8 @@ class WatchProgressStore {
     await prefs.setString(_key, jsonEncode(_allProgress.map((k, v) => MapEntry(k, v.toJson()))));
   }
 }
-''')
-
-with open(f"{BASE}/lib/services/download_manager.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'dart:convert';
+''',
+    "download_manager.dart": '''import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -689,10 +699,8 @@ class DownloadManager {
     await prefs.setString(_key, jsonEncode(_activeDownloads.map((e) => e.toJson()).toList()));
   }
 }
-''')
-
-with open(f"{BASE}/lib/services/favorites_store.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'dart:convert';
+''',
+    "favorites_store.dart": '''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/video_item.dart';
 class FavoritesStore {
@@ -722,10 +730,8 @@ class FavoritesStore {
     await prefs.setString(_key, jsonEncode(_items.map((e) => e.toJson()).toList()));
   }
 }
-''')
-
-with open(f"{BASE}/lib/services/settings_store.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:shared_preferences/shared_preferences.dart';
+''',
+    "settings_store.dart": '''import 'package:shared_preferences/shared_preferences.dart';
 class SettingsStore {
   static final SettingsStore _instance = SettingsStore._internal();
   factory SettingsStore() => _instance;
@@ -749,13 +755,15 @@ class SettingsStore {
     await prefs.setBool('sub_enabled', subtitlesEnabled);
   }
 }
-''')
+'''
+}
+for fname, content in services_extra.items():
+    with open(f"{BASE}/lib/services/{fname}", "w", encoding="utf-8") as f:
+        f.write(content)
 
-# ==========================================
-# 7. WIDGETS
-# ==========================================
-with open(f"{BASE}/lib/widgets/poster_card.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+# ========== 6. Widgets ==========
+widgets = {
+    "poster_card.dart": '''import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/watch_progress.dart';
 import '../models/video_item.dart';
@@ -812,10 +820,8 @@ class PosterCard extends StatelessWidget {
     );
   }
 }
-''')
-
-with open(f"{BASE}/lib/widgets/hero_banner.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+''',
+    "hero_banner.dart": '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/video_item.dart';
@@ -851,7 +857,7 @@ class _HeroBannerState extends State<HeroBanner> {
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: 500, // Hero iOS Style
+      height: 500,
       child: PageView.builder(
         controller: _controller,
         onPageChanged: (i) => setState(() => _current = i),
@@ -865,7 +871,7 @@ class _HeroBannerState extends State<HeroBanner> {
               Container(decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.transparent, Color(0x990D0D14), Color(0xFF0D0D14)],
+                  colors: [Colors.transparent, Colors.transparent, Color(0x990D0517), Color(0xFF0D0517)],
                   stops: [0.0, 0.5, 0.8, 1.0]
                 )
               )),
@@ -907,10 +913,8 @@ class _HeroBannerState extends State<HeroBanner> {
     );
   }
 }
-''')
-
-with open(f"{BASE}/lib/widgets/continue_row.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+''',
+    "continue_row.dart": '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/progress_store.dart';
@@ -979,10 +983,8 @@ class ContinueWatchingRow extends StatelessWidget {
     );
   }
 }
-''')
-
-with open(f"{BASE}/lib/widgets/category_row.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+''',
+    "category_row.dart": '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
 import 'poster_card.dart';
@@ -1025,13 +1027,15 @@ class CategoryRow extends StatelessWidget {
     );
   }
 }
-''')
+'''
+}
+for fname, content in widgets.items():
+    with open(f"{BASE}/lib/widgets/{fname}", "w", encoding="utf-8") as f:
+        f.write(content)
 
-# ==========================================
-# 8. SCREENS (مع واجهة الآيفون والتداخل)
-# ==========================================
-with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+# ========== 7. Screens (جميع الشاشات كاملة) ==========
+# home_screen (بالفعل أعلاه لكن سنعيد كتابتها للتأكد من استخدام الألوان الجديدة)
+home_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
 import '../services/scraper.dart';
@@ -1070,7 +1074,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_error.isNotEmpty) return Scaffold(body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(_error, style: const TextStyle(color: Colors.white)), const SizedBox(height: 10), CupertinoButton.filled(onPressed: _loadData, child: const Text('إعادة المحاولة'))])));
     
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       extendBodyBehindAppBar: true,
       body: SingleChildScrollView(
         padding: const EdgeInsets.only(bottom: 50),
@@ -1078,7 +1082,6 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             HeroBanner(items: _heroItems),
-            // تداخل قسم متابعة المشاهدة مع البانر لتطابق الآيفون
             Transform.translate(
               offset: const Offset(0, -30),
               child: const ContinueWatchingRow(),
@@ -1095,10 +1098,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
+    f.write(home_screen)
 
-with open(f"{BASE}/lib/screens/browse_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+# باقي الشاشات (من الملف الأصلي ولكن مع تعديل الألوان إلى #0D0517)
+browse_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/site_category.dart';
 import 'category_list_screen.dart';
@@ -1109,7 +1114,7 @@ class BrowseScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       appBar: AppBar(title: const Text('تصفح', style: TextStyle(fontWeight: FontWeight.bold))),
       body: GridView.builder(
         padding: const EdgeInsets.all(15),
@@ -1136,10 +1141,11 @@ class BrowseScreen extends StatelessWidget {
     );
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/browse_screen.dart", "w", encoding="utf-8") as f:
+    f.write(browse_screen)
 
-with open(f"{BASE}/lib/screens/category_list_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+category_list = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/site_category.dart';
 import '../models/video_item.dart';
@@ -1175,7 +1181,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       appBar: AppBar(title: Text(widget.category.nameAr)),
       body: GridView.builder(
         padding: const EdgeInsets.all(15),
@@ -1190,10 +1196,11 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
     );
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/category_list_screen.dart", "w", encoding="utf-8") as f:
+    f.write(category_list)
 
-with open(f"{BASE}/lib/screens/search_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+search_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
 import '../services/scraper.dart';
@@ -1221,7 +1228,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       appBar: AppBar(title: const Text('بحث')),
       body: Column(
         children: [
@@ -1251,10 +1258,11 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/search_screen.dart", "w", encoding="utf-8") as f:
+    f.write(search_screen)
 
-with open(f"{BASE}/lib/screens/downloads_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+downloads_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/download_manager.dart';
@@ -1272,7 +1280,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Widget build(BuildContext context) {
     final downloads = _manager.activeDownloads;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       appBar: AppBar(title: const Text('التحميلات')),
       body: downloads.isEmpty
           ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(CupertinoIcons.arrow_down_circle, size: 60, color: Colors.grey), SizedBox(height: 16), Text('لا توجد تحميلات', style: TextStyle(color: Colors.grey))]))
@@ -1293,10 +1301,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/downloads_screen.dart", "w", encoding="utf-8") as f:
+    f.write(downloads_screen)
 
-with open(f"{BASE}/lib/screens/settings_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+settings_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../services/settings_store.dart';
 import '../services/progress_store.dart';
@@ -1316,7 +1325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       appBar: AppBar(title: const Text('المزيد')),
       body: ListView(
         children: [
@@ -1351,10 +1360,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ]);
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/settings_screen.dart", "w", encoding="utf-8") as f:
+    f.write(settings_screen)
 
-with open(f"{BASE}/lib/screens/history_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+history_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/progress_store.dart';
@@ -1372,7 +1382,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final items = _store.recent;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       appBar: AppBar(title: const Text('سجل المشاهدة')),
       body: ListView.builder(
         itemCount: items.length,
@@ -1389,10 +1399,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/history_screen.dart", "w", encoding="utf-8") as f:
+    f.write(history_screen)
 
-with open(f"{BASE}/lib/screens/details_screen.dart", "w", encoding="utf-8") as f:
-    f.write('''import 'package:flutter/material.dart';
+details_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/video_item.dart';
@@ -1429,17 +1440,17 @@ class _DetailsScreenState extends State<DetailsScreen> {
     if (_loading) return const Scaffold(body: Center(child: CupertinoActivityIndicator()));
     final d = _details!;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: const Color(0xFF0D0517),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 350, pinned: true, backgroundColor: const Color(0xFF0D0D14).withOpacity(0.9),
+            expandedHeight: 350, pinned: true, backgroundColor: const Color(0xFF0D0517).withOpacity(0.9),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
                 children: [
                   CachedNetworkImage(imageUrl: d.imageUrl, fit: BoxFit.cover),
-                  Container(decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xFF0D0D14)], stops: [0.5, 1.0]))),
+                  Container(decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xFF0D0517)], stops: [0.5, 1.0]))),
                 ],
               ),
             ),
@@ -1534,11 +1545,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
     Navigator.push(context, CupertinoPageRoute(builder: (_) => PlayerScreen(itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl, videoUrl: ep.url, videoUrl1080: ep.url1080, videoUrl360: ep.url360, subtitleUrl: ep.subtitleUrl, subtitleVttUrl: ep.subtitleVttUrl, episodeId: ep.id, episodeTitle: ep.title, startAt: 0)));
   }
 }
-''')
+'''
+with open(f"{BASE}/lib/screens/details_screen.dart", "w", encoding="utf-8") as f:
+    f.write(details_screen)
 
-# ==========================================
-# 9. PLAYER SCREEN (المشغل المتكامل للآيفون)
-# ==========================================
 player_screen = '''import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1715,5 +1725,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 with open(f"{BASE}/lib/screens/player_screen.dart", "w", encoding="utf-8") as f:
     f.write(player_screen)
 
-print("✅ تم استخراج المشروع الكامل بنجاح.")
-print("يحتوي على: Subtitle Parser, Download Manager, Settings, Categories, Hero Overlap, Error Handling.")
+print("✅ تم إنشاء المشروع الكامل في المجلد: " + BASE)
+print("📌 الألوان: خلفية بنفسجية غامقة (#0D0517) كما في iOS")
+print("📌 الخط: Rubik عبر google_fonts (تم تثبيت التطبيق)")
+print("📌 تم حل مشكلة الاتصال عبر User-Agent وشبكة الأمان")
+print("🔧 الآن نفذ: cd " + BASE + " && flutter clean && flutter pub get && flutter run")
