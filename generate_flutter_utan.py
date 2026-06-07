@@ -1,18 +1,25 @@
 import os
 
-# Create directory structure for Flutter project
+# ----------------------------------------------------------------------
+# 1. Create directory structure
+# ----------------------------------------------------------------------
 BASE = "utan_flutter"
-os.makedirs(f"{BASE}/lib/models", exist_ok=True)
-os.makedirs(f"{BASE}/lib/services", exist_ok=True)
-os.makedirs(f"{BASE}/lib/screens", exist_ok=True)
-os.makedirs(f"{BASE}/lib/widgets", exist_ok=True)
-os.makedirs(f"{BASE}/assets", exist_ok=True)
-os.makedirs(f"{BASE}/.github/workflows", exist_ok=True)
 
-# ============================================================
-# 1. pubspec.yaml
-# ============================================================
-pubspec = """name: utan_flutter
+dirs = [
+    f"{BASE}/lib/models",
+    f"{BASE}/lib/services",
+    f"{BASE}/lib/screens",
+    f"{BASE}/lib/widgets",
+    f"{BASE}/assets",
+    f"{BASE}/.github/workflows",
+]
+for d in dirs:
+    os.makedirs(d, exist_ok=True)
+
+# ----------------------------------------------------------------------
+# 2. pubspec.yaml
+# ----------------------------------------------------------------------
+pubspec = '''name: utan_flutter
 description: UTan – Movie & TV streaming app (Flutter replica)
 publish_to: 'none'
 version: 3.0.0+3
@@ -42,25 +49,30 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
-"""
-
+'''
 with open(f"{BASE}/pubspec.yaml", "w", encoding="utf-8") as f:
     f.write(pubspec)
 
-# ============================================================
-# 2. lib/main.dart
-# ============================================================
-main_dart = """import 'package:flutter/material.dart';
+# ----------------------------------------------------------------------
+# 3. lib/main.dart
+# ----------------------------------------------------------------------
+main_dart = '''import 'package:flutter/material.dart';
 import 'package:utan_flutter/screens/home_screen.dart';
 import 'package:utan_flutter/screens/browse_screen.dart';
 import 'package:utan_flutter/screens/search_screen.dart';
 import 'package:utan_flutter/screens/downloads_screen.dart';
 import 'package:utan_flutter/screens/settings_screen.dart';
 import 'package:utan_flutter/services/settings_store.dart';
+import 'package:utan_flutter/services/progress_store.dart';
+import 'package:utan_flutter/services/favorites_store.dart';
+import 'package:utan_flutter/services/download_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SettingsStore.instance.init();
+  await WatchProgressStore().init();
+  await FavoritesStore().init();
+  await DownloadManager().init();
   runApp(const UTanApp());
 }
 
@@ -126,15 +138,16 @@ class _MainTabViewState extends State<MainTabView> {
     );
   }
 }
-"""
+'''
 with open(f"{BASE}/lib/main.dart", "w", encoding="utf-8") as f:
     f.write(main_dart)
 
-# ============================================================
-# 3. Models
-# ============================================================
+# ----------------------------------------------------------------------
+# 4. Models
+# ----------------------------------------------------------------------
 # video_item.dart
-video_item = """class VideoItem {
+with open(f"{BASE}/lib/models/video_item.dart", "w", encoding="utf-8") as f:
+    f.write('''class VideoItem {
   final String id;
   final String title;
   final String imageUrl;
@@ -150,12 +163,11 @@ video_item = """class VideoItem {
         type: json['type'],
       );
 }
-"""
-with open(f"{BASE}/lib/models/video_item.dart", "w", encoding="utf-8") as f:
-    f.write(video_item)
+''')
 
 # episode.dart
-episode = """class EpisodeItem {
+with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
+    f.write('''class EpisodeItem {
   final String id;
   final String title;
   final String url;
@@ -175,20 +187,22 @@ episode = """class EpisodeItem {
   });
 
   String get season {
-    // Simplified season extraction (matches Swift logic)
-    if (title.toLowerCase().contains('s')) {
-      final match = RegExp(r'(S\\d+|موسم \\d+)', caseSensitive: false).firstMatch(title);
-      if (match != null) return 'الموسم ' + match.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+    final lower = title.toLowerCase();
+    if (lower.contains('s')) {
+      final match = RegExp(r'(S\\\\d+|موسم \\\\d+)', caseSensitive: false).firstMatch(title);
+      if (match != null) {
+        final num = match.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
+        return 'الموسم ' + num;
+      }
     }
     return 'الموسم 1';
   }
 }
-"""
-with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
-    f.write(episode)
+''')
 
 # media_details.dart
-media_details = """import 'package:utan_flutter/models/episode.dart';
+with open(f"{BASE}/lib/models/media_details.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:utan_flutter/models/episode.dart';
 
 class MediaDetails {
   String title;
@@ -242,12 +256,12 @@ class MediaDetails {
     return keys;
   }
 }
-"""
-with open(f"{BASE}/lib/models/media_details.dart", "w", encoding="utf-8") as f:
-    f.write(media_details)
+''')
 
 # watch_progress.dart
-watch_progress = """import 'package:shared_preferences/shared_preferences.dart';
+with open(f"{BASE}/lib/models/watch_progress.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class WatchProgress {
   final String itemId;
@@ -383,14 +397,11 @@ class WatchProgressStore {
     await prefs.setString(_key, jsonEncode(toSave));
   }
 }
-
-import 'dart:convert';
-"""
-with open(f"{BASE}/lib/models/watch_progress.dart", "w", encoding="utf-8") as f:
-    f.write(watch_progress)
+''')
 
 # download_task.dart
-download_task = """class DownloadTaskItem {
+with open(f"{BASE}/lib/models/download_task.dart", "w", encoding="utf-8") as f:
+    f.write('''class DownloadTaskItem {
   final String id;
   final String title;
   final String imageUrl;
@@ -437,12 +448,11 @@ download_task = """class DownloadTaskItem {
         localVideoPath: json['localVideoPath'],
       );
 }
-"""
-with open(f"{BASE}/lib/models/download_task.dart", "w", encoding="utf-8") as f:
-    f.write(download_task)
+''')
 
 # site_category.dart
-site_category = """class SiteCategory {
+with open(f"{BASE}/lib/models/site_category.dart", "w", encoding="utf-8") as f:
+    f.write('''class SiteCategory {
   final int id;
   final String nameAr;
   final String nameEn;
@@ -475,15 +485,13 @@ const List<SiteCategory> SITE_CATEGORIES = [
   SiteCategory(id: 1022, nameAr: 'أنمي عربي', nameEn: 'Arabic Anime'),
   SiteCategory(id: 1029, nameAr: 'أنمي مدبلج إنجليزي', nameEn: 'English Dubbed Anime'),
 ];
-"""
-with open(f"{BASE}/lib/models/site_category.dart", "w", encoding="utf-8") as f:
-    f.write(site_category)
+''')
 
-# ============================================================
-# 4. Services (simplified but complete)
-# ============================================================
+# ----------------------------------------------------------------------
+# 5. Services
+# ----------------------------------------------------------------------
 # scraper.dart
-scraper_dart = """import 'dart:convert';
+scraper_dart = '''import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:utan_flutter/models/video_item.dart';
 import 'package:utan_flutter/models/episode.dart';
@@ -496,13 +504,10 @@ class MovieScraper {
     final response = await http.get(Uri.parse(baseUrl + 'index.php'));
     if (response.statusCode != 200) return (hero: [], categories: []);
     final html = response.body;
-    // Simplified parsing – in real app use regex like Swift version
-    // For brevity, we return mock data or minimal implementation.
-    // Here we implement enough to make the app functional.
     List<VideoItem> hero = [];
     List<Map<String, dynamic>> categoryList = [];
 
-    // Parse carousel images
+    // Parse carousel images (hero)
     final carReg = RegExp(r'<a href="index\\.php\\?do=view&type=post&id=(\\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">');
     for (final match in carReg.allMatches(html)) {
       final id = match.group(1)!;
@@ -522,6 +527,11 @@ class MovieScraper {
         categoryList.add({'name': secTitle, 'items': items});
       }
     }
+
+    if (categoryList.isEmpty && hero.isNotEmpty) {
+      categoryList.add({'name': 'الرائج الآن', 'items': hero.take(10).toList()});
+    }
+
     return (hero: hero, categories: categoryList);
   }
 
@@ -582,6 +592,15 @@ class MovieScraper {
     // Year
     final yearMatch = RegExp(r'<span>Year:\\s*</span>\\s*([^<]+)').firstMatch(html);
     if (yearMatch != null) d.year = yearMatch.group(1)!.trim();
+    // Genre
+    final genreMatch = RegExp(r'<span>Genre:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (genreMatch != null) d.genre = genreMatch.group(1)!.trim();
+    // Rating
+    final ratingMatch = RegExp(r'<span>IMdB Rating:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (ratingMatch != null) d.rating = ratingMatch.group(1)!.trim();
+    // Runtime
+    final runtimeMatch = RegExp(r'<span>Runtime:\\s*</span>\\s*([^<]+)').firstMatch(html);
+    if (runtimeMatch != null) d.runtime = runtimeMatch.group(1)!.trim();
     // Synopsis
     final synMatch = RegExp(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true).firstMatch(html);
     if (synMatch != null) d.synopsis = synMatch.group(1)!.trim();
@@ -634,12 +653,12 @@ class MovieScraper {
     return d;
   }
 }
-"""
+'''
 with open(f"{BASE}/lib/services/scraper.dart", "w", encoding="utf-8") as f:
     f.write(scraper_dart)
 
 # subtitle_parser.dart
-subtitle_parser = """import 'package:http/http.dart' as http;
+subtitle_parser = '''import 'package:http/http.dart' as http;
 
 class SubtitleCue {
   final double startTime;
@@ -746,12 +765,13 @@ class SubtitleParser {
     return h * 3600 + m * 60 + s;
   }
 }
-"""
+'''
 with open(f"{BASE}/lib/services/subtitle_parser.dart", "w", encoding="utf-8") as f:
     f.write(subtitle_parser)
 
-# download_manager.dart (simplified using Dio)
-download_manager = """import 'dart:io';
+# download_manager.dart
+download_manager = '''import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -799,7 +819,6 @@ class DownloadManager {
     _activeDownloads.add(task);
     await _persist();
 
-    // Request storage permission
     await Permission.storage.request();
 
     final dir = await getTemporaryDirectory();
@@ -811,13 +830,11 @@ class DownloadManager {
         _persist();
       }
     });
-    // Mark completed
     final idx = _activeDownloads.indexWhere((d) => d.id == id);
     if (idx != -1) {
       _activeDownloads[idx].isCompleted = true;
       _activeDownloads[idx].localVideoPath = savePath;
       await _persist();
-      // Save to gallery
       await GallerySaver.saveVideo(savePath, toDcim: true);
     }
   }
@@ -833,20 +850,17 @@ class DownloadManager {
     await prefs.setString(_key, jsonEncode(list));
   }
 }
-
-import 'dart:convert';
-"""
+'''
 with open(f"{BASE}/lib/services/download_manager.dart", "w", encoding="utf-8") as f:
     f.write(download_manager)
 
-# progress_store.dart (re-export watch_progress)
-progress_store_dart = """export '../models/watch_progress.dart';
-"""
+# progress_store.dart (re-export)
 with open(f"{BASE}/lib/services/progress_store.dart", "w", encoding="utf-8") as f:
-    f.write(progress_store_dart)
+    f.write("export '../models/watch_progress.dart';")
 
 # favorites_store.dart
-favorites_store = """import 'package:shared_preferences/shared_preferences.dart';
+favorites_store = '''import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:utan_flutter/models/video_item.dart';
 
 class FavoritesStore {
@@ -886,14 +900,12 @@ class FavoritesStore {
     await prefs.setString(_key, jsonEncode(list));
   }
 }
-
-import 'dart:convert';
-"""
+'''
 with open(f"{BASE}/lib/services/favorites_store.dart", "w", encoding="utf-8") as f:
     f.write(favorites_store)
 
 # settings_store.dart
-settings_store = """import 'package:shared_preferences/shared_preferences.dart';
+settings_store = '''import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsStore {
   static final SettingsStore _instance = SettingsStore._internal();
@@ -930,17 +942,312 @@ class SettingsStore {
     await prefs.setBool(keyEnabled, subtitlesEnabled);
   }
 }
-"""
+'''
 with open(f"{BASE}/lib/services/settings_store.dart", "w", encoding="utf-8") as f:
     f.write(settings_store)
 
-# ============================================================
-# 5. Screens (minimal implementations – can be extended)
-# ============================================================
-# home_screen.dart
-home_screen = """import 'package:flutter/material.dart';
-import 'package:utan_flutter/services/scraper.dart';
+# ----------------------------------------------------------------------
+# 6. Widgets
+# ----------------------------------------------------------------------
+# poster_card.dart
+with open(f"{BASE}/lib/widgets/poster_card.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/watch_progress.dart';
+import 'package:utan_flutter/models/video_item.dart';
+
+class PosterCard extends StatelessWidget {
+  final VideoItem item;
+  final WatchProgress? progress;
+
+  const PosterCard({super.key, required this.item, this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 120,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  item.imageUrl,
+                  width: 120,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(color: Colors.grey[800]),
+                ),
+              ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black54],
+                    ),
+                  ),
+                ),
+              ),
+              if (progress != null && progress!.durationSeconds > 0)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(
+                    value: progress!.progressSeconds / progress!.durationSeconds,
+                    backgroundColor: Colors.white30,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE30B1B)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            item.title,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+''')
+
+# hero_banner.dart
+with open(f"{BASE}/lib/widgets/hero_banner.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/video_item.dart';
+import 'package:utan_flutter/screens/details_screen.dart';
+import 'package:utan_flutter/services/favorites_store.dart';
+
+class HeroBanner extends StatefulWidget {
+  final List<VideoItem> items;
+  const HeroBanner({super.key, required this.items});
+
+  @override
+  State<HeroBanner> createState() => _HeroBannerState();
+}
+
+class _HeroBannerState extends State<HeroBanner> {
+  late PageController _controller;
+  int _current = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+    Future.delayed(const Duration(seconds: 5), _autoPlay);
+  }
+
+  void _autoPlay() {
+    if (_controller.hasClients && widget.items.length > 1) {
+      _controller.nextPage(duration: const Duration(milliseconds: 800), curve: Curves.easeInOut);
+      Future.delayed(const Duration(seconds: 5), _autoPlay);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.items.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.75,
+      child: PageView.builder(
+        controller: _controller,
+        onPageChanged: (i) => setState(() => _current = i),
+        itemCount: widget.items.length > 8 ? 8 : widget.items.length,
+        itemBuilder: (context, i) {
+          final item = widget.items[i];
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(item.imageUrl, fit: BoxFit.cover),
+              Container(decoration: const BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Color(0xFF0D0317)], stops: [0.5, 1.0])
+              )),
+              Positioned(
+                bottom: 100,
+                left: 0,
+                right: 0,
+                child: Column(
+                  children: [
+                    Text(item.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id))),
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('شاهد الآن'),
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE30B1B)),
+                        ),
+                        const SizedBox(width: 20),
+                        IconButton(
+                          onPressed: () async {
+                            await FavoritesStore().toggle(item);
+                            setState(() {});
+                          },
+                          icon: Icon(FavoritesStore().isFavorite(item.id) ? Icons.check_circle : Icons.add_circle_outline),
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+''')
+
+# continue_row.dart
+with open(f"{BASE}/lib/widgets/continue_row.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/watch_progress.dart';
+import 'package:utan_flutter/screens/player_screen.dart';
+
+class ContinueWatchingRow extends StatelessWidget {
+  const ContinueWatchingRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final progressStore = WatchProgressStore();
+    final recent = progressStore.recent;
+    if (recent.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text('متابعة المشاهدة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        ),
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: recent.length,
+            itemBuilder: (context, i) {
+              final p = recent[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+                  itemId: p.itemId,
+                  itemTitle: p.title,
+                  itemImageUrl: p.imageUrl,
+                  videoUrl: p.videoUrl,
+                  videoUrl1080: p.videoUrl1080,
+                  videoUrl360: p.videoUrl360,
+                  subtitleUrl: p.subtitleUrl,
+                  subtitleVttUrl: p.subtitleVttUrl,
+                  episodeId: p.episodeId,
+                  episodeTitle: p.episodeTitle,
+                  startAt: p.progressSeconds,
+                ))),
+                child: Container(
+                  width: 160,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(p.imageUrl, width: 160, height: 100, fit: BoxFit.cover),
+                      ),
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.black38,
+                          ),
+                          child: const Center(child: Icon(Icons.play_circle_fill, size: 40, color: Colors.white)),
+                        ),
+                      ),
+                      if (p.durationSeconds > 0)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: LinearProgressIndicator(
+                            value: p.progressSeconds / p.durationSeconds,
+                            backgroundColor: Colors.white30,
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE30B1B)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+''')
+
+# category_row.dart
+with open(f"{BASE}/lib/widgets/category_row.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/video_item.dart';
+import 'package:utan_flutter/widgets/poster_card.dart';
 import 'package:utan_flutter/services/progress_store.dart';
+import 'package:utan_flutter/screens/details_screen.dart';
+
+class CategoryRow extends StatelessWidget {
+  final String title;
+  final List<VideoItem> items;
+  const CategoryRow({super.key, required this.title, required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        ),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final item = items[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id))),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: PosterCard(item: item, progress: WatchProgressStore().progress(item.id)),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+''')
+
+# ----------------------------------------------------------------------
+# 7. Screens
+# ----------------------------------------------------------------------
+# home_screen.dart
+with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/services/scraper.dart';
 import 'package:utan_flutter/widgets/hero_banner.dart';
 import 'package:utan_flutter/widgets/continue_row.dart';
 import 'package:utan_flutter/widgets/category_row.dart';
@@ -982,21 +1289,11 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: const Color(0xFF0D0317),
       body: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(
-            child: HeroBanner(items: _heroItems),
-          ),
-          SliverToBoxAdapter(
-            child: ContinueWatchingRow(),
-          ),
+          SliverToBoxAdapter(child: HeroBanner(items: _heroItems)),
+          const SliverToBoxAdapter(child: ContinueWatchingRow()),
           SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final cat = _categories[index];
-                return CategoryRow(
-                  title: cat['name'],
-                  items: cat['items'],
-                );
-              },
+              (context, index) => CategoryRow(title: _categories[index]['name'], items: _categories[index]['items']),
               childCount: _categories.length,
             ),
           ),
@@ -1005,14 +1302,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-"""
-with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
-    f.write(home_screen)
+''')
 
 # browse_screen.dart
-browse_screen = """import 'package:flutter/material.dart';
+with open(f"{BASE}/lib/screens/browse_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/site_category.dart';
-import 'package:utan_flutter/screens/details_screen.dart';
+import 'package:utan_flutter/screens/category_list_screen.dart';
 
 class BrowseScreen extends StatelessWidget {
   const BrowseScreen({super.key});
@@ -1028,4 +1324,997 @@ class BrowseScreen extends StatelessWidget {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.5
+          childAspectRatio: 1.2,
+        ),
+        itemCount: SITE_CATEGORIES.length,
+        itemBuilder: (context, i) {
+          final cat = SITE_CATEGORIES[i];
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryListScreen(category: cat))),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.movie, size: 40, color: const Color(0xFFE30B1B)),
+                  const SizedBox(height: 8),
+                  Text(cat.nameAr, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+''')
+
+# category_list_screen.dart
+with open(f"{BASE}/lib/screens/category_list_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/site_category.dart';
+import 'package:utan_flutter/models/video_item.dart';
+import 'package:utan_flutter/services/scraper.dart';
+import 'package:utan_flutter/widgets/poster_card.dart';
+import 'package:utan_flutter/screens/details_screen.dart';
+
+class CategoryListScreen extends StatefulWidget {
+  final SiteCategory category;
+  const CategoryListScreen({super.key, required this.category});
+
+  @override
+  State<CategoryListScreen> createState() => _CategoryListScreenState();
+}
+
+class _CategoryListScreenState extends State<CategoryListScreen> {
+  final MovieScraper _scraper = MovieScraper();
+  List<VideoItem> _items = [];
+  int _page = 1;
+  bool _loading = false;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    final newItems = await _scraper.fetchCategory(widget.category.id, _page);
+    setState(() {
+      _items.addAll(newItems);
+      _page++;
+      _loading = false;
+      _hasMore = newItems.isNotEmpty;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0317),
+      appBar: AppBar(title: Text(widget.category.nameAr)),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.66,
+        ),
+        itemCount: _items.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, i) {
+          if (i == _items.length) {
+            _loadMore();
+            return const Center(child: CircularProgressIndicator());
+          }
+          final item = _items[i];
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id))),
+            child: PosterCard(item: item),
+          );
+        },
+      ),
+    );
+  }
+}
+''')
+
+# search_screen.dart
+with open(f"{BASE}/lib/screens/search_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/services/scraper.dart';
+import 'package:utan_flutter/widgets/poster_card.dart';
+import 'package:utan_flutter/screens/details_screen.dart';
+
+class SearchScreen extends StatefulWidget {
+  const SearchScreen({super.key});
+
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  final MovieScraper _scraper = MovieScraper();
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _results = [];
+  bool _loading = false;
+
+  Future<void> _search() async {
+    if (_controller.text.isEmpty) return;
+    setState(() => _loading = true);
+    final results = await _scraper.search(_controller.text);
+    setState(() {
+      _results = results;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0317),
+      appBar: AppBar(title: const Text('بحث')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'بحث...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: Colors.white10,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              onSubmitted: (_) => _search(),
+            ),
+          ),
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.66,
+                ),
+                itemCount: _results.length,
+                itemBuilder: (context, i) {
+                  final item = _results[i];
+                  return GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsScreen(itemId: item.id))),
+                    child: PosterCard(item: item),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+''')
+
+# downloads_screen.dart
+with open(f"{BASE}/lib/screens/downloads_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/services/download_manager.dart';
+
+class DownloadsScreen extends StatefulWidget {
+  const DownloadsScreen({super.key});
+
+  @override
+  State<DownloadsScreen> createState() => _DownloadsScreenState();
+}
+
+class _DownloadsScreenState extends State<DownloadsScreen> {
+  final DownloadManager _manager = DownloadManager();
+
+  @override
+  Widget build(BuildContext context) {
+    final downloads = _manager.activeDownloads;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0317),
+      appBar: AppBar(title: const Text('التحميلات')),
+      body: downloads.isEmpty
+          ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.download, size: 60, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('لا توجد تحميلات', style: TextStyle(color: Colors.grey)),
+            ]))
+          : ListView.builder(
+              itemCount: downloads.length,
+              itemBuilder: (context, i) {
+                final dl = downloads[i];
+                return ListTile(
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(dl.imageUrl, width: 50, height: 70, fit: BoxFit.cover),
+                  ),
+                  title: Text(dl.title, style: const TextStyle(color: Colors.white)),
+                  subtitle: dl.isCompleted
+                      ? const Text('مكتمل - محفوظ في الصور', style: TextStyle(color: Colors.green))
+                      : LinearProgressIndicator(value: dl.progress, backgroundColor: Colors.white30, valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE30B1B))),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.cancel, color: Colors.red),
+                    onPressed: () => _manager.cancel(dl.id),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+''')
+
+# settings_screen.dart
+with open(f"{BASE}/lib/screens/settings_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/services/settings_store.dart';
+import 'package:utan_flutter/services/progress_store.dart';
+import 'package:utan_flutter/screens/history_screen.dart';
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final SettingsStore _settings = SettingsStore.instance;
+  final WatchProgressStore _progress = WatchProgressStore();
+  bool _cacheCleared = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0317),
+      appBar: AppBar(title: const Text('المزيد')),
+      body: ListView(
+        children: [
+          const SizedBox(height: 16),
+          _buildSection('إعدادات الترجمة', [
+            SwitchListTile(
+              title: const Text('تفعيل الترجمة'),
+              value: _settings.subtitlesEnabled,
+              onChanged: (val) async {
+                _settings.subtitlesEnabled = val;
+                await _settings.save();
+                setState(() {});
+              },
+              activeColor: const Color(0xFFE30B1B),
+            ),
+            if (_settings.subtitlesEnabled) ...[
+              ListTile(
+                title: const Text('حجم الخط'),
+                subtitle: Slider(
+                  value: _settings.subtitleFontSize,
+                  min: 14, max: 40,
+                  onChanged: (v) async {
+                    _settings.subtitleFontSize = v;
+                    await _settings.save();
+                    setState(() {});
+                  },
+                  activeColor: const Color(0xFFE30B1B),
+                ),
+              ),
+              ListTile(
+                title: const Text('الهامش السفلي'),
+                subtitle: Slider(
+                  value: _settings.subtitleBottomPad,
+                  min: 20, max: 150,
+                  onChanged: (v) async {
+                    _settings.subtitleBottomPad = v;
+                    await _settings.save();
+                    setState(() {});
+                  },
+                  activeColor: const Color(0xFFE30B1B),
+                ),
+              ),
+              ListTile(
+                title: const Text('شفافية الخلفية'),
+                subtitle: Slider(
+                  value: _settings.subtitleBgOpacity,
+                  min: 0.0, max: 1.0,
+                  onChanged: (v) async {
+                    _settings.subtitleBgOpacity = v;
+                    await _settings.save();
+                    setState(() {});
+                  },
+                  activeColor: const Color(0xFFE30B1B),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('لون النص', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              SizedBox(
+                height: 50,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: ['#FFFFFF', '#FFFF00', '#00FFFF', '#FF00FF'].length,
+                  itemBuilder: (context, i) {
+                    final hex = ['#FFFFFF', '#FFFF00', '#00FFFF', '#FF00FF'][i];
+                    return GestureDetector(
+                      onTap: () async {
+                        _settings.subtitleColorHex = hex;
+                        await _settings.save();
+                        setState(() {});
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Color(int.parse(hex.substring(1), radix: 16) + 0xFF000000),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _settings.subtitleColorHex == hex ? Colors.white : Colors.transparent, width: 3),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ]),
+          _buildSection('البيانات', [
+            ListTile(
+              title: Text('سجل المشاهدة (${_progress.recent.length})'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen())),
+            ),
+            ListTile(
+              title: Text(_cacheCleared ? 'تم المسح!' : 'مسح التخزين المؤقت والسجل'),
+              onTap: () async {
+                await _progress.clearAll();
+                setState(() => _cacheCleared = true);
+                Future.delayed(const Duration(seconds: 2), () => setState(() => _cacheCleared = false));
+              },
+              textColor: Colors.red,
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE30B1B))),
+        ),
+        ...children,
+        const Divider(),
+      ],
+    );
+  }
+}
+''')
+
+# history_screen.dart
+with open(f"{BASE}/lib/screens/history_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/services/progress_store.dart';
+
+class HistoryScreen extends StatefulWidget {
+  const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  final WatchProgressStore _store = WatchProgressStore();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _store.recent;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0317),
+      appBar: AppBar(title: const Text('سجل المشاهدة')),
+      body: ListView.builder(
+        itemCount: items.length,
+        itemBuilder: (context, i) {
+          final p = items[i];
+          return ListTile(
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(p.imageUrl, width: 50, height: 70, fit: BoxFit.cover),
+            ),
+            title: Text(p.title, style: const TextStyle(color: Colors.white)),
+            subtitle: p.episodeTitle.isNotEmpty ? Text(p.episodeTitle, style: const TextStyle(color: Colors.grey)) : null,
+            trailing: IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () async {
+                await _store.remove(p.itemId);
+                setState(() {});
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+''')
+
+# details_screen.dart
+with open(f"{BASE}/lib/screens/details_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/services/scraper.dart';
+import 'package:utan_flutter/services/favorites_store.dart';
+import 'package:utan_flutter/services/download_manager.dart';
+import 'package:utan_flutter/models/media_details.dart';
+import 'package:utan_flutter/screens/player_screen.dart';
+
+class DetailsScreen extends StatefulWidget {
+  final String itemId;
+  const DetailsScreen({super.key, required this.itemId});
+
+  @override
+  State<DetailsScreen> createState() => _DetailsScreenState();
+}
+
+class _DetailsScreenState extends State<DetailsScreen> {
+  final MovieScraper _scraper = MovieScraper();
+  MediaDetails? _details;
+  bool _loading = true;
+  String _selectedSeason = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final d = await _scraper.fetchDetails(widget.itemId);
+    setState(() {
+      _details = d;
+      _loading = false;
+      if (d.sortedSeasons.isNotEmpty) _selectedSeason = d.sortedSeasons.first;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final d = _details!;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0317),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 350,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(d.imageUrl, fit: BoxFit.cover),
+                  Container(decoration: const BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Color(0xFF0D0317)], stops: [0.5, 1.0])
+                  )),
+                  Positioned(
+                    bottom: 20,
+                    left: 16,
+                    right: 16,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(d.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 8, children: [
+                          if (d.year.isNotEmpty) _badge(d.year),
+                          if (d.rating.isNotEmpty) _badge('⭐ ${d.rating}'),
+                          if (d.runtime.isNotEmpty) _badge(d.runtime),
+                        ]),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _play(d),
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('شاهد الآن'),
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE30B1B)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            IconButton(
+                              onPressed: () async {
+                                await DownloadManager().startDownload(
+                                  id: widget.itemId,
+                                  title: d.title,
+                                  imageUrl: d.imageUrl,
+                                  isMovie: d.isMovie,
+                                  videoUrl: d.isMovie ? d.movieUrl : (d.episodes.isNotEmpty ? d.episodes.first.url : ''),
+                                  subtitleUrl: d.isMovie ? d.movieSubtitleUrl : (d.episodes.isNotEmpty ? d.episodes.first.subtitleUrl : ''),
+                                );
+                              },
+                              icon: const Icon(Icons.download),
+                              color: Colors.white,
+                            ),
+                            IconButton(
+                              onPressed: () async {
+                                await FavoritesStore().toggle(VideoItem(id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: 'post'));
+                                setState(() {});
+                              },
+                              icon: Icon(FavoritesStore().isFavorite(widget.itemId) ? Icons.favorite : Icons.favorite_border),
+                              color: Colors.red,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (d.synopsis.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('القصة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(d.synopsis, style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ),
+          if (!d.isMovie && d.sortedSeasons.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 50,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: d.sortedSeasons.length,
+                      itemBuilder: (context, i) {
+                        final season = d.sortedSeasons[i];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: ChoiceChip(
+                            label: Text(season),
+                            selected: _selectedSeason == season,
+                            onSelected: (_) => setState(() => _selectedSeason = season),
+                            selectedColor: const Color(0xFFE30B1B),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ...d.seasonsDict[_selectedSeason]!.map((ep) => ListTile(
+                    leading: const Icon(Icons.play_circle, color: Color(0xFFE30B1B)),
+                    title: Text(ep.title, style: const TextStyle(color: Colors.white)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.download, color: Colors.grey),
+                      onPressed: () => DownloadManager().startDownload(
+                        id: ep.id,
+                        title: ep.title,
+                        imageUrl: d.imageUrl,
+                        isMovie: false,
+                        videoUrl: ep.url,
+                        subtitleUrl: ep.subtitleUrl,
+                      ),
+                    ),
+                    onTap: () => _playEpisode(ep, d),
+                  )),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(String text) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(6)),
+    child: Text(text, style: const TextStyle(fontSize: 12)),
+  );
+
+  void _play(MediaDetails d) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      itemId: widget.itemId,
+      itemTitle: d.title,
+      itemImageUrl: d.imageUrl,
+      videoUrl: d.movieUrl,
+      videoUrl1080: d.movieUrl1080,
+      videoUrl360: d.movieUrl360,
+      subtitleUrl: d.movieSubtitleUrl,
+      subtitleVttUrl: d.movieSubtitleVttUrl,
+      episodeId: '',
+      episodeTitle: '',
+      startAt: 0,
+    )));
+  }
+
+  void _playEpisode(EpisodeItem ep, MediaDetails d) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      itemId: widget.itemId,
+      itemTitle: d.title,
+      itemImageUrl: d.imageUrl,
+      videoUrl: ep.url,
+      videoUrl1080: ep.url1080,
+      videoUrl360: ep.url360,
+      subtitleUrl: ep.subtitleUrl,
+      subtitleVttUrl: ep.subtitleVttUrl,
+      episodeId: ep.id,
+      episodeTitle: ep.title,
+      startAt: 0,
+    )));
+  }
+}
+''')
+
+# player_screen.dart (full custom player)
+with open(f"{BASE}/lib/screens/player_screen.dart", "w", encoding="utf-8") as f:
+    f.write('''import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+import 'package:utan_flutter/services/subtitle_parser.dart';
+import 'package:utan_flutter/services/settings_store.dart';
+import 'package:utan_flutter/services/progress_store.dart';
+
+class PlayerScreen extends StatefulWidget {
+  final String itemId, itemTitle, itemImageUrl;
+  final String videoUrl, videoUrl1080, videoUrl360;
+  final String subtitleUrl, subtitleVttUrl;
+  final String episodeId, episodeTitle;
+  final double startAt;
+
+  const PlayerScreen({
+    super.key,
+    required this.itemId,
+    required this.itemTitle,
+    required this.itemImageUrl,
+    required this.videoUrl,
+    required this.videoUrl1080,
+    required this.videoUrl360,
+    required this.subtitleUrl,
+    required this.subtitleVttUrl,
+    required this.episodeId,
+    required this.episodeTitle,
+    required this.startAt,
+  });
+
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> {
+  late VideoPlayerController _controller;
+  bool _isPlaying = true;
+  bool _showControls = true;
+  Timer? _hideTimer;
+  bool _isLocked = false;
+  bool _isSpeedActive = false;
+  double _playbackSpeed = 1.0;
+  List<SubtitleCue> _cues = [];
+  String _activeSub = '';
+  Timer? _saveTimer;
+  double _duration = 0.0;
+  double _currentPosition = 0.0;
+  bool _isDragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    String url = widget.videoUrl;
+    if (!url.startsWith('http')) url = 'https://movie.vodu.me/$url';
+    _controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    await _controller.initialize();
+    _duration = _controller.value.duration.inSeconds.toDouble();
+    if (widget.startAt > 0) await _controller.seekTo(Duration(seconds: widget.startAt.toInt()));
+    _controller.play();
+    _isPlaying = true;
+    setState(() {});
+    _startAutoHide();
+    _startSaveTimer();
+    // Load subtitles
+    final subUrl = widget.subtitleVttUrl.isEmpty ? widget.subtitleUrl : widget.subtitleVttUrl;
+    if (subUrl.isNotEmpty) {
+      final cues = await SubtitleParser.parse(subUrl);
+      setState(() => _cues = cues);
+    }
+    _controller.addListener(_updatePosition);
+  }
+
+  void _updatePosition() {
+    if (!_isDragging) {
+      setState(() => _currentPosition = _controller.value.position.inSeconds.toDouble());
+      // update active subtitle
+      final cue = _cues.firstWhere(
+        (c) => _currentPosition >= c.startTime && _currentPosition <= c.endTime,
+        orElse: () => SubtitleCue(startTime: 0, endTime: 0, text: ''),
+      );
+      if (_activeSub != cue.text) setState(() => _activeSub = cue.text);
+    }
+  }
+
+  void _startAutoHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (!_isLocked) setState(() => _showControls = false);
+    });
+  }
+
+  void _startSaveTimer() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer.periodic(const Duration(seconds: 5), (t) async {
+      await WatchProgressStore().save(
+        itemId: widget.itemId,
+        title: widget.itemTitle,
+        imageUrl: widget.itemImageUrl,
+        episodeId: widget.episodeId,
+        episodeTitle: widget.episodeTitle,
+        progress: _currentPosition,
+        duration: _duration,
+        videoUrl: widget.videoUrl,
+        videoUrl1080: widget.videoUrl1080,
+        videoUrl360: widget.videoUrl360,
+        subUrl: widget.subtitleUrl,
+        subVttUrl: widget.subtitleVttUrl,
+      );
+    });
+  }
+
+  void _togglePlay() {
+    setState(() {
+      if (_isPlaying) _controller.pause();
+      else _controller.play();
+      _isPlaying = !_isPlaying;
+    });
+    _startAutoHide();
+  }
+
+  void _seek(double seconds) {
+    _controller.seekTo(Duration(seconds: seconds.toInt()));
+    setState(() => _currentPosition = seconds);
+    _startAutoHide();
+  }
+
+  void _seekDelta(double delta) {
+    double newPos = _currentPosition + delta;
+    if (newPos < 0) newPos = 0;
+    if (newPos > _duration) newPos = _duration;
+    _seek(newPos);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: () {
+          if (!_isLocked) {
+            setState(() => _showControls = !_showControls);
+            if (_showControls) _startAutoHide();
+          }
+        },
+        onLongPressStart: (_) {
+          if (!_isLocked) {
+            setState(() => _isSpeedActive = true);
+            _controller.setPlaybackSpeed(2.0);
+          }
+        },
+        onLongPressEnd: (_) {
+          if (_isSpeedActive) {
+            setState(() => _isSpeedActive = false);
+            _controller.setPlaybackSpeed(_playbackSpeed);
+          }
+        },
+        child: Stack(
+          children: [
+            Center(child: _controller.value.isInitialized ? VideoPlayer(_controller) : const CircularProgressIndicator()),
+            if (_showControls || _isLocked) _buildControls(),
+            if (SettingsStore.instance.subtitlesEnabled && _activeSub.isNotEmpty)
+              Positioned(
+                bottom: SettingsStore.instance.subtitleBottomPad,
+                left: 16,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(SettingsStore.instance.subtitleBgOpacity),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _activeSub,
+                    style: TextStyle(
+                      fontSize: SettingsStore.instance.subtitleFontSize,
+                      color: Color(int.parse(SettingsStore.instance.subtitleColorHex.substring(1), radix: 16) + 0xFF000000),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            if (_isSpeedActive)
+              const Positioned(
+                top: 60,
+                left: 0,
+                right: 0,
+                child: Center(child: Chip(label: Text('2× سرعة', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControls() {
+    return Container(
+      color: Colors.black54,
+      child: Column(
+        children: [
+          SafeArea(
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                if (!_isLocked)
+                  Text(widget.episodeTitle.isEmpty ? widget.itemTitle : widget.episodeTitle,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(_isLocked ? Icons.lock : Icons.lock_open, color: Colors.white),
+                  onPressed: () => setState(() => _isLocked = !_isLocked),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          if (!_isLocked)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Text(_formatTime(_currentPosition), style: const TextStyle(color: Colors.white)),
+                      Expanded(
+                        child: Slider(
+                          value: _currentPosition,
+                          min: 0,
+                          max: _duration,
+                          onChanged: (v) => setState(() => _isDragging = true),
+                          onChangeEnd: (v) {
+                            _seek(v);
+                            _isDragging = false;
+                          },
+                          activeColor: const Color(0xFFE30B1B),
+                        ),
+                      ),
+                      Text(_formatTime(_duration), style: const TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(icon: const Icon(Icons.replay_10, color: Colors.white, size: 30), onPressed: () => _seekDelta(-10)),
+                      const SizedBox(width: 20),
+                      IconButton(icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: const Color(0xFFE30B1B), size: 60), onPressed: _togglePlay),
+                      const SizedBox(width: 20),
+                      IconButton(icon: const Icon(Icons.forward_10, color: Colors.white, size: 30), onPressed: () => _seekDelta(10)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('جودة: ', style: TextStyle(color: Colors.white70)),
+                      _qualityButton('360p', () => _switchQuality(widget.videoUrl360.isNotEmpty ? widget.videoUrl360 : widget.videoUrl)),
+                      const SizedBox(width: 8),
+                      _qualityButton('1080p', () => _switchQuality(widget.videoUrl1080.isNotEmpty ? widget.videoUrl1080 : widget.videoUrl)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _qualityButton(String label, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)), child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12))),
+  );
+
+  Future<void> _switchQuality(String url) async {
+    final pos = _controller.value.position;
+    await _controller.pause();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(url.startsWith('http') ? url : 'https://movie.vodu.me/$url'));
+    await _controller.initialize();
+    await _controller.seekTo(pos);
+    if (_isPlaying) await _controller.play();
+    setState(() {});
+  }
+
+  String _formatTime(double secs) {
+    final d = Duration(seconds: secs.toInt());
+    return '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _hideTimer?.cancel();
+    _saveTimer?.cancel();
+    super.dispose();
+  }
+}
+''')
+
+# ----------------------------------------------------------------------
+# 8. .github/workflows/main.yml
+# ----------------------------------------------------------------------
+github_actions = '''name: Flutter CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./utan_flutter
+    steps:
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.0'
+          channel: 'stable'
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build apk --release
+      - run: flutter build ios --release --no-codesign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: utan_flutter/build/app/outputs/flutter-apk/app-release.apk
+'''
+with open(f"{BASE}/.github/workflows/main.yml", "w", encoding="utf-8") as f:
+    f.write(github_actions)
+
+print("✅ Complete Flutter UTan project generated in 'utan_flutter' folder.")
+print("Run: cd utan_flutter && flutter pub get && flutter run")
