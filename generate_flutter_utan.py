@@ -35,7 +35,7 @@ dependencies:
   dio: ^5.3.3
   permission_handler: ^11.0.1
   gallery_saver: ^2.3.2
-  google_fonts: ^6.1.0
+google_fonts: ^4.0.4
   cached_network_image: ^3.3.0
 
 dev_dependencies:
