@@ -43,11 +43,11 @@ jobs:
           with open(gradle_file, 'r') as f:
               content = f.read()
           # Change minSdkVersion to 21
-          content = re.sub(r'minSdkVersion\s+\d+', 'minSdkVersion 21', content)
+          content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 21', content)
           # Change compileSdkVersion to 34
-          content = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 34', content)
+          content = re.sub(r'compileSdkVersion\s+.*', 'compileSdkVersion 34', content)
           # Change targetSdkVersion to 34 (if present)
-          content = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 34', content)
+          content = re.sub(r'targetSdkVersion\s+.*', 'targetSdkVersion 34', content)
           with open(gradle_file, 'w') as f:
               f.write(content)
           print("Fixed build.gradle")
