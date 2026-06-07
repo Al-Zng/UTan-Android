@@ -1,8 +1,8 @@
 import os
 
-BASE = "utan_flutter"   # بدلاً من "utan_full_fixed"
+BASE = "utan_flutter"
 
-# إنشاء جميع المجلدات المطلوبة
+# إنشاء كل المجلدات
 dirs = [
     f"{BASE}/lib/models",
     f"{BASE}/lib/services",
@@ -14,11 +14,11 @@ dirs = [
 for d in dirs:
     os.makedirs(d, exist_ok=True)
 
-# ========== 1. pubspec.yaml ==========
-pubspec = '''name: utan_full_fixed
-description: UTan – Full Android replica of iOS version (Dark Purple theme, Rubik font)
+# 1. pubspec.yaml
+pubspec = '''name: utan_flutter
+description: UTan – Full Android replica of iOS version
 publish_to: 'none'
-version: 3.0.2+7
+version: 3.0.3+8
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -48,7 +48,7 @@ flutter:
 with open(f"{BASE}/pubspec.yaml", "w", encoding="utf-8") as f:
     f.write(pubspec)
 
-# ========== 2. Android Network Security & Manifest ==========
+# 2. network_security_config.xml
 network_security = '''<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
@@ -57,9 +57,11 @@ network_security = '''<?xml version="1.0" encoding="utf-8"?>
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
 '''
+os.makedirs(f"{BASE}/android/app/src/main/res/xml", exist_ok=True)
 with open(f"{BASE}/android/app/src/main/res/xml/network_security_config.xml", "w", encoding="utf-8") as f:
     f.write(network_security)
 
+# 3. AndroidManifest.xml
 android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
@@ -95,8 +97,9 @@ android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/re
 with open(f"{BASE}/android/app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
     f.write(android_manifest)
 
-# ========== 3. Main.dart (لون iOS البنفسجي الغامق وخط Rubik) ==========
-main_dart = '''import 'package:flutter/material.dart';
+# 4. main.dart مع تجاوز SSL
+main_dart = '''import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/home_screen.dart';
@@ -109,8 +112,17 @@ import 'services/progress_store.dart';
 import 'services/favorites_store.dart';
 import 'services/download_manager.dart';
 
+class InsecureHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  HttpOverrides.global = InsecureHttpOverrides();
   await SettingsStore().init();
   await WatchProgressStore().init();
   await FavoritesStore().init();
@@ -128,7 +140,6 @@ class UTanApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        // لون خلفية مطابق تماماً لنسخة iOS (بنفسجي غامق #0D0517)
         scaffoldBackgroundColor: const Color(0xFF0D0517),
         primaryColor: const Color(0xFFE50914),
         textTheme: GoogleFonts.rubikTextTheme(ThemeData.dark().textTheme).apply(
@@ -193,7 +204,7 @@ class _MainTabViewState extends State<MainTabView> {
 with open(f"{BASE}/lib/main.dart", "w", encoding="utf-8") as f:
     f.write(main_dart)
 
-# ========== 4. Models (كاملة) ==========
+# 5. Models (كل الملفات)
 models = {
     "video_item.dart": '''class VideoItem {
   final String id;
@@ -349,7 +360,7 @@ for fname, content in models.items():
     with open(f"{BASE}/lib/models/{fname}", "w", encoding="utf-8") as f:
         f.write(content)
 
-# ========== 5. Services (مع User-Agent في السكرابر) ==========
+# 6. Services (جميعها)
 scraper_dart = '''import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../models/video_item.dart';
@@ -518,7 +529,6 @@ class MovieScraper {
 with open(f"{BASE}/lib/services/scraper.dart", "w", encoding="utf-8") as f:
     f.write(scraper_dart)
 
-# باقي الخدمات (نفس المحتوى السليم)
 services_extra = {
     "subtitle_parser.dart": '''import 'package:http/http.dart' as http;
 class SubtitleCue {
@@ -761,7 +771,7 @@ for fname, content in services_extra.items():
     with open(f"{BASE}/lib/services/{fname}", "w", encoding="utf-8") as f:
         f.write(content)
 
-# ========== 6. Widgets ==========
+# 7. Widgets
 widgets = {
     "poster_card.dart": '''import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -1033,8 +1043,7 @@ for fname, content in widgets.items():
     with open(f"{BASE}/lib/widgets/{fname}", "w", encoding="utf-8") as f:
         f.write(content)
 
-# ========== 7. Screens (جميع الشاشات كاملة) ==========
-# home_screen (بالفعل أعلاه لكن سنعيد كتابتها للتأكد من استخدام الألوان الجديدة)
+# 8. Screens (جميعها كاملة)
 home_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
@@ -1102,7 +1111,6 @@ class _HomeScreenState extends State<HomeScreen> {
 with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
     f.write(home_screen)
 
-# باقي الشاشات (من الملف الأصلي ولكن مع تعديل الألوان إلى #0D0517)
 browse_screen = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/site_category.dart';
@@ -1726,7 +1734,10 @@ with open(f"{BASE}/lib/screens/player_screen.dart", "w", encoding="utf-8") as f:
     f.write(player_screen)
 
 print("✅ تم إنشاء المشروع الكامل في المجلد: " + BASE)
-print("📌 الألوان: خلفية بنفسجية غامقة (#0D0517) كما في iOS")
-print("📌 الخط: Rubik عبر google_fonts (تم تثبيت التطبيق)")
-print("📌 تم حل مشكلة الاتصال عبر User-Agent وشبكة الأمان")
+print("📌 الألوان: #0D0517 (بنفسجي غامق) مطابق لـ iOS")
+print("📌 الخط: Rubik عبر google_fonts")
+print("📌 تم حل مشكلة الاتصال عبر:")
+print("   - HttpOverrides.global لتجاوز SSL")
+print("   - User-Agent حقيقي")
+print("   - Network Security Config")
 print("🔧 الآن نفذ: cd " + BASE + " && flutter clean && flutter pub get && flutter run")
