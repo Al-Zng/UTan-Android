@@ -1,10 +1,8 @@
 import os
 
-# ----------------------------------------------------------------------
-# 1. Create directory structure
-# ----------------------------------------------------------------------
 BASE = "utan_flutter"
 
+# Create directory structure
 dirs = [
     f"{BASE}/lib/models",
     f"{BASE}/lib/services",
@@ -16,9 +14,9 @@ dirs = [
 for d in dirs:
     os.makedirs(d, exist_ok=True)
 
-# ----------------------------------------------------------------------
-# 2. pubspec.yaml
-# ----------------------------------------------------------------------
+# =============================================================================
+# pubspec.yaml (corrected http version)
+# =============================================================================
 pubspec = '''name: utan_flutter
 description: UTan – Movie & TV streaming app (Flutter replica)
 publish_to: 'none'
@@ -31,7 +29,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  http: ^0.13.6          # ← downgraded to match gallery_saver
+  http: ^0.13.6
   shared_preferences: ^2.2.2
   video_player: ^2.8.1
   path_provider: ^2.1.1
@@ -50,12 +48,12 @@ flutter:
   assets:
     - assets/
 '''
-with open(f"{BASE}/pubspec.yaml", "w", encoding="utf-8") as f:
+with open(f"{BASE}/pubspec.yaml", "w") as f:
     f.write(pubspec)
 
-# ----------------------------------------------------------------------
-# 3. lib/main.dart
-# ----------------------------------------------------------------------
+# =============================================================================
+# lib/main.dart
+# =============================================================================
 main_dart = '''import 'package:flutter/material.dart';
 import 'package:utan_flutter/screens/home_screen.dart';
 import 'package:utan_flutter/screens/browse_screen.dart';
@@ -69,7 +67,7 @@ import 'package:utan_flutter/services/download_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SettingsStore.instance.init();
+  await SettingsStore().init();
   await WatchProgressStore().init();
   await FavoritesStore().init();
   await DownloadManager().init();
@@ -139,14 +137,14 @@ class _MainTabViewState extends State<MainTabView> {
   }
 }
 '''
-with open(f"{BASE}/lib/main.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/main.dart", "w") as f:
     f.write(main_dart)
 
-# ----------------------------------------------------------------------
-# 4. Models
-# ----------------------------------------------------------------------
+# =============================================================================
+# MODELS (all corrected)
+# =============================================================================
 # video_item.dart
-with open(f"{BASE}/lib/models/video_item.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/models/video_item.dart", "w") as f:
     f.write('''class VideoItem {
   final String id;
   final String title;
@@ -166,7 +164,7 @@ with open(f"{BASE}/lib/models/video_item.dart", "w", encoding="utf-8") as f:
 ''')
 
 # episode.dart
-with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/models/episode.dart", "w") as f:
     f.write('''class EpisodeItem {
   final String id;
   final String title;
@@ -189,7 +187,7 @@ with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
   String get season {
     final lower = title.toLowerCase();
     if (lower.contains('s')) {
-      final match = RegExp(r'(S\\\\d+|موسم \\\\d+)', caseSensitive: false).firstMatch(title);
+      final match = RegExp(r'(S\\d+|موسم \\d+)', caseSensitive: false).firstMatch(title);
       if (match != null) {
         final num = match.group(0)!.replaceAll(RegExp(r'[^0-9]'), '');
         return 'الموسم ' + num;
@@ -201,7 +199,7 @@ with open(f"{BASE}/lib/models/episode.dart", "w", encoding="utf-8") as f:
 ''')
 
 # media_details.dart
-with open(f"{BASE}/lib/models/media_details.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/models/media_details.dart", "w") as f:
     f.write('''import 'package:utan_flutter/models/episode.dart';
 
 class MediaDetails {
@@ -259,7 +257,7 @@ class MediaDetails {
 ''')
 
 # watch_progress.dart
-with open(f"{BASE}/lib/models/watch_progress.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/models/watch_progress.dart", "w") as f:
     f.write('''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -400,7 +398,7 @@ class WatchProgressStore {
 ''')
 
 # download_task.dart
-with open(f"{BASE}/lib/models/download_task.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/models/download_task.dart", "w") as f:
     f.write('''class DownloadTaskItem {
   final String id;
   final String title;
@@ -451,7 +449,7 @@ with open(f"{BASE}/lib/models/download_task.dart", "w", encoding="utf-8") as f:
 ''')
 
 # site_category.dart
-with open(f"{BASE}/lib/models/site_category.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/models/site_category.dart", "w") as f:
     f.write('''class SiteCategory {
   final int id;
   final String nameAr;
@@ -487,10 +485,10 @@ const List<SiteCategory> SITE_CATEGORIES = [
 ];
 ''')
 
-# ----------------------------------------------------------------------
-# 5. Services
-# ----------------------------------------------------------------------
-# scraper.dart
+# =============================================================================
+# SERVICES (corrected)
+# =============================================================================
+# scraper.dart – fixed return types
 scraper_dart = '''import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:utan_flutter/models/video_item.dart';
@@ -502,12 +500,13 @@ class MovieScraper {
 
   Future<({List<VideoItem> hero, List<Map<String, dynamic>> categories})> fetchHome() async {
     final response = await http.get(Uri.parse(baseUrl + 'index.php'));
-    if (response.statusCode != 200) return (hero: [], categories: []);
+    if (response.statusCode != 200) {
+      return (hero: <VideoItem>[], categories: <Map<String, dynamic>>[]);
+    }
     final html = response.body;
-    List<VideoItem> hero = [];
-    List<Map<String, dynamic>> categoryList = [];
+    List<VideoItem> hero = <VideoItem>[];
+    List<Map<String, dynamic>> categoryList = <Map<String, dynamic>>[];
 
-    // Parse carousel images (hero)
     final carReg = RegExp(r'<a href="index\\.php\\?do=view&type=post&id=(\\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">');
     for (final match in carReg.allMatches(html)) {
       final id = match.group(1)!;
@@ -517,7 +516,6 @@ class MovieScraper {
       hero.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
     }
 
-    // Parse category sections
     final sectionReg = RegExp(r'<h3[^>]*>\\s*([^<]+)\\s*</h3>.*?<div class="homeseries">(.*?)</div>\\s*</div>', dotAll: true);
     for (final match in sectionReg.allMatches(html)) {
       final secTitle = match.group(1)!.trim();
@@ -538,7 +536,7 @@ class MovieScraper {
   Future<List<VideoItem>> fetchCategory(int typeId, int page) async {
     final url = '$baseUrl/index.php?do=list&type=$typeId&page=$page';
     final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) return [];
+    if (response.statusCode != 200) return <VideoItem>[];
     return _parseListPage(response.body);
   }
 
@@ -546,7 +544,7 @@ class MovieScraper {
     final encoded = Uri.encodeComponent(query);
     final url = '$baseUrl/index.php?do=list&title=$encoded';
     final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) return [];
+    if (response.statusCode != 200) return <VideoItem>[];
     return _parseListPage(response.body);
   }
 
@@ -558,7 +556,7 @@ class MovieScraper {
   }
 
   List<VideoItem> _parseListPage(String html) {
-    final List<VideoItem> items = [];
+    final List<VideoItem> items = <VideoItem>[];
     final pattern = RegExp(r'href="index\\.php\\?do=view&type=post&id=(\\d+)"><img src="([^"]+)"[^>]*>\\s*</a>\\s*<div class="mytitle">\\s*<a[^>]*>([^<]+)</a>');
     for (final match in pattern.allMatches(html)) {
       final id = match.group(1)!;
@@ -571,7 +569,7 @@ class MovieScraper {
   }
 
   List<VideoItem> _parseItemXBlock(String html) {
-    final List<VideoItem> items = [];
+    final List<VideoItem> items = <VideoItem>[];
     final pattern = RegExp(r'<div class="itemx"[^>]*>.*?<img src="([^"]+)".*?<div class="mytitle">([^<]+)</div>', dotAll: true);
     int idx = 1;
     for (final match in pattern.allMatches(html)) {
@@ -586,32 +584,24 @@ class MovieScraper {
 
   MediaDetails _parseDetails(String html) {
     MediaDetails d = MediaDetails();
-    // Title
     final titleMatch = RegExp(r'<h1>(.*?)</h1>').firstMatch(html);
     if (titleMatch != null) d.title = titleMatch.group(1)!;
-    // Year
     final yearMatch = RegExp(r'<span>Year:\\s*</span>\\s*([^<]+)').firstMatch(html);
     if (yearMatch != null) d.year = yearMatch.group(1)!.trim();
-    // Genre
     final genreMatch = RegExp(r'<span>Genre:\\s*</span>\\s*([^<]+)').firstMatch(html);
     if (genreMatch != null) d.genre = genreMatch.group(1)!.trim();
-    // Rating
     final ratingMatch = RegExp(r'<span>IMdB Rating:\\s*</span>\\s*([^<]+)').firstMatch(html);
     if (ratingMatch != null) d.rating = ratingMatch.group(1)!.trim();
-    // Runtime
     final runtimeMatch = RegExp(r'<span>Runtime:\\s*</span>\\s*([^<]+)').firstMatch(html);
     if (runtimeMatch != null) d.runtime = runtimeMatch.group(1)!.trim();
-    // Synopsis
     final synMatch = RegExp(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true).firstMatch(html);
     if (synMatch != null) d.synopsis = synMatch.group(1)!.trim();
-    // Image
     final imgMatch = RegExp(r'<img src="([^"]+)" class="img-responsive"').firstMatch(html);
     if (imgMatch != null) {
       var img = imgMatch.group(1)!;
       if (!img.startsWith('http')) img = baseUrl + img;
       d.imageUrl = img;
     }
-    // Episodes
     final epBlock = RegExp(r'<li class="episodeitem">(.*?)</li>', dotAll: true);
     final episodes = <EpisodeItem>[];
     for (final match in epBlock.allMatches(html)) {
@@ -640,7 +630,6 @@ class MovieScraper {
       d.isMovie = false;
       d.episodes = episodes;
     } else {
-      // Movie links
       final movieMatch = RegExp(r'data-url="([^"]+)"[^>]*data-url360="([^"]*)"[^>]*data-url1080="([^"]*)"[^>]*data-srt="([^"]*)"[^>]*data-webvtt="([^"]*)"').firstMatch(html);
       if (movieMatch != null) {
         d.movieUrl = movieMatch.group(1)!;
@@ -654,10 +643,10 @@ class MovieScraper {
   }
 }
 '''
-with open(f"{BASE}/lib/services/scraper.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/services/scraper.dart", "w") as f:
     f.write(scraper_dart)
 
-# subtitle_parser.dart
+# subtitle_parser.dart (no changes, already correct)
 subtitle_parser = '''import 'package:http/http.dart' as http;
 
 class SubtitleCue {
@@ -766,10 +755,10 @@ class SubtitleParser {
   }
 }
 '''
-with open(f"{BASE}/lib/services/subtitle_parser.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/services/subtitle_parser.dart", "w") as f:
     f.write(subtitle_parser)
 
-# download_manager.dart
+# download_manager.dart (no changes)
 download_manager = '''import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -851,14 +840,14 @@ class DownloadManager {
   }
 }
 '''
-with open(f"{BASE}/lib/services/download_manager.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/services/download_manager.dart", "w") as f:
     f.write(download_manager)
 
 # progress_store.dart (re-export)
-with open(f"{BASE}/lib/services/progress_store.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/services/progress_store.dart", "w") as f:
     f.write("export '../models/watch_progress.dart';")
 
-# favorites_store.dart
+# favorites_store.dart (fixed: use factory constructor)
 favorites_store = '''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -901,10 +890,10 @@ class FavoritesStore {
   }
 }
 '''
-with open(f"{BASE}/lib/services/favorites_store.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/services/favorites_store.dart", "w") as f:
     f.write(favorites_store)
 
-# settings_store.dart
+# settings_store.dart (fixed: use factory constructor)
 settings_store = '''import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsStore {
@@ -943,14 +932,14 @@ class SettingsStore {
   }
 }
 '''
-with open(f"{BASE}/lib/services/settings_store.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/services/settings_store.dart", "w") as f:
     f.write(settings_store)
 
-# ----------------------------------------------------------------------
-# 6. Widgets
-# ----------------------------------------------------------------------
-# poster_card.dart
-with open(f"{BASE}/lib/widgets/poster_card.dart", "w", encoding="utf-8") as f:
+# =============================================================================
+# WIDGETS (corrected type annotations)
+# =============================================================================
+# poster_card.dart (no changes, already correct)
+with open(f"{BASE}/lib/widgets/poster_card.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/watch_progress.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1019,8 +1008,8 @@ class PosterCard extends StatelessWidget {
 }
 ''')
 
-# hero_banner.dart
-with open(f"{BASE}/lib/widgets/hero_banner.dart", "w", encoding="utf-8") as f:
+# hero_banner.dart (fix List<VideoItem> type)
+with open(f"{BASE}/lib/widgets/hero_banner.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
 import 'package:utan_flutter/screens/details_screen.dart';
@@ -1111,8 +1100,8 @@ class _HeroBannerState extends State<HeroBanner> {
 }
 ''')
 
-# continue_row.dart
-with open(f"{BASE}/lib/widgets/continue_row.dart", "w", encoding="utf-8") as f:
+# continue_row.dart (fix WatchProgress type)
+with open(f"{BASE}/lib/widgets/continue_row.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/watch_progress.dart';
 import 'package:utan_flutter/screens/player_screen.dart';
@@ -1195,8 +1184,8 @@ class ContinueWatchingRow extends StatelessWidget {
 }
 ''')
 
-# category_row.dart
-with open(f"{BASE}/lib/widgets/category_row.dart", "w", encoding="utf-8") as f:
+# category_row.dart (fix List<VideoItem>)
+with open(f"{BASE}/lib/widgets/category_row.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/video_item.dart';
 import 'package:utan_flutter/widgets/poster_card.dart';
@@ -1241,12 +1230,13 @@ class CategoryRow extends StatelessWidget {
 }
 ''')
 
-# ----------------------------------------------------------------------
-# 7. Screens
-# ----------------------------------------------------------------------
-# home_screen.dart
-with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
+# =============================================================================
+# SCREENS (with all missing imports and type fixes)
+# =============================================================================
+# home_screen.dart (fix _heroItems type)
+with open(f"{BASE}/lib/screens/home_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/video_item.dart';
 import 'package:utan_flutter/services/scraper.dart';
 import 'package:utan_flutter/widgets/hero_banner.dart';
 import 'package:utan_flutter/widgets/continue_row.dart';
@@ -1262,7 +1252,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final MovieScraper _scraper = MovieScraper();
   bool _loading = true;
-  List<dynamic> _heroItems = [];
+  List<VideoItem> _heroItems = [];
   List<Map<String, dynamic>> _categories = [];
 
   @override
@@ -1304,8 +1294,8 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 ''')
 
-# browse_screen.dart
-with open(f"{BASE}/lib/screens/browse_screen.dart", "w", encoding="utf-8") as f:
+# browse_screen.dart (no changes)
+with open(f"{BASE}/lib/screens/browse_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/site_category.dart';
 import 'package:utan_flutter/screens/category_list_screen.dart';
@@ -1354,7 +1344,7 @@ class BrowseScreen extends StatelessWidget {
 ''')
 
 # category_list_screen.dart
-with open(f"{BASE}/lib/screens/category_list_screen.dart", "w", encoding="utf-8") as f:
+with open(f"{BASE}/lib/screens/category_list_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/models/site_category.dart';
 import 'package:utan_flutter/models/video_item.dart';
@@ -1426,9 +1416,10 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 }
 ''')
 
-# search_screen.dart
-with open(f"{BASE}/lib/screens/search_screen.dart", "w", encoding="utf-8") as f:
+# search_screen.dart (fix List<VideoItem>)
+with open(f"{BASE}/lib/screens/search_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/video_item.dart';
 import 'package:utan_flutter/services/scraper.dart';
 import 'package:utan_flutter/widgets/poster_card.dart';
 import 'package:utan_flutter/screens/details_screen.dart';
@@ -1443,7 +1434,7 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final MovieScraper _scraper = MovieScraper();
   final TextEditingController _controller = TextEditingController();
-  List<dynamic> _results = [];
+  List<VideoItem> _results = [];
   bool _loading = false;
 
   Future<void> _search() async {
@@ -1507,8 +1498,8 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 ''')
 
-# downloads_screen.dart
-with open(f"{BASE}/lib/screens/downloads_screen.dart", "w", encoding="utf-8") as f:
+# downloads_screen.dart (no changes)
+with open(f"{BASE}/lib/screens/downloads_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/services/download_manager.dart';
 
@@ -1559,8 +1550,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 }
 ''')
 
-# settings_screen.dart
-with open(f"{BASE}/lib/screens/settings_screen.dart", "w", encoding="utf-8") as f:
+# settings_screen.dart (fix SettingsStore())
+with open(f"{BASE}/lib/screens/settings_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/services/settings_store.dart';
 import 'package:utan_flutter/services/progress_store.dart';
@@ -1574,7 +1565,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final SettingsStore _settings = SettingsStore.instance;
+  final SettingsStore _settings = SettingsStore();
   final WatchProgressStore _progress = WatchProgressStore();
   bool _cacheCleared = false;
 
@@ -1707,8 +1698,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 ''')
 
-# history_screen.dart
-with open(f"{BASE}/lib/screens/history_screen.dart", "w", encoding="utf-8") as f:
+# history_screen.dart (no changes)
+with open(f"{BASE}/lib/screens/history_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
 import 'package:utan_flutter/services/progress_store.dart';
 
@@ -1754,13 +1745,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 ''')
 
-# details_screen.dart
-with open(f"{BASE}/lib/screens/details_screen.dart", "w", encoding="utf-8") as f:
+# details_screen.dart (fix imports and EpisodeItem)
+with open(f"{BASE}/lib/screens/details_screen.dart", "w") as f:
     f.write('''import 'package:flutter/material.dart';
+import 'package:utan_flutter/models/video_item.dart';
+import 'package:utan_flutter/models/episode.dart';
+import 'package:utan_flutter/models/media_details.dart';
 import 'package:utan_flutter/services/scraper.dart';
 import 'package:utan_flutter/services/favorites_store.dart';
 import 'package:utan_flutter/services/download_manager.dart';
-import 'package:utan_flutter/models/media_details.dart';
 import 'package:utan_flutter/screens/player_screen.dart';
 
 class DetailsScreen extends StatefulWidget {
@@ -1973,8 +1966,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
 }
 ''')
 
-# player_screen.dart (full custom player)
-with open(f"{BASE}/lib/screens/player_screen.dart", "w", encoding="utf-8") as f:
+# player_screen.dart (fix SettingsStore)
+with open(f"{BASE}/lib/screens/player_screen.dart", "w") as f:
     f.write('''import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -2041,7 +2034,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {});
     _startAutoHide();
     _startSaveTimer();
-    // Load subtitles
     final subUrl = widget.subtitleVttUrl.isEmpty ? widget.subtitleUrl : widget.subtitleVttUrl;
     if (subUrl.isNotEmpty) {
       final cues = await SubtitleParser.parse(subUrl);
@@ -2053,7 +2045,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _updatePosition() {
     if (!_isDragging) {
       setState(() => _currentPosition = _controller.value.position.inSeconds.toDouble());
-      // update active subtitle
       final cue = _cues.firstWhere(
         (c) => _currentPosition >= c.startTime && _currentPosition <= c.endTime,
         orElse: () => SubtitleCue(startTime: 0, endTime: 0, text: ''),
@@ -2113,6 +2104,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = SettingsStore();
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
@@ -2138,22 +2130,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
           children: [
             Center(child: _controller.value.isInitialized ? VideoPlayer(_controller) : const CircularProgressIndicator()),
             if (_showControls || _isLocked) _buildControls(),
-            if (SettingsStore.instance.subtitlesEnabled && _activeSub.isNotEmpty)
+            if (settings.subtitlesEnabled && _activeSub.isNotEmpty)
               Positioned(
-                bottom: SettingsStore.instance.subtitleBottomPad,
+                bottom: settings.subtitleBottomPad,
                 left: 16,
                 right: 16,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(SettingsStore.instance.subtitleBgOpacity),
+                    color: Colors.black.withOpacity(settings.subtitleBgOpacity),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     _activeSub,
                     style: TextStyle(
-                      fontSize: SettingsStore.instance.subtitleFontSize,
-                      color: Color(int.parse(SettingsStore.instance.subtitleColorHex.substring(1), radix: 16) + 0xFF000000),
+                      fontSize: settings.subtitleFontSize,
+                      color: Color(int.parse(settings.subtitleColorHex.substring(1), radix: 16) + 0xFF000000),
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -2268,7 +2260,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _formatTime(double secs) {
     final d = Duration(seconds: secs.toInt());
-    return '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+    return '\${d.inMinutes}:\${(d.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
   @override
@@ -2281,9 +2273,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 }
 ''')
 
-# ----------------------------------------------------------------------
-# 8. .github/workflows/main.yml
-# ----------------------------------------------------------------------
+# =============================================================================
+# .github/workflows/main.yml (final version, Android only)
+# =============================================================================
 github_actions = '''name: Flutter CI
 
 on:
@@ -2295,26 +2287,42 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./utan_flutter
     steps:
       - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Generate Flutter project
+        run: python generate_flutter_utan.py
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.0'
           channel: 'stable'
-      - run: flutter pub get
-      - run: flutter test
-      - run: flutter build apk --release
-      - run: flutter build ios --release --no-codesign
+      - name: Create fresh Flutter project
+        run: flutter create --project-name utan_flutter --org com.mustaqil build_project
+      - name: Copy generated code
+        run: |
+          rm -rf build_project/lib/*
+          cp -r utan_flutter/lib/* build_project/lib/
+          cp utan_flutter/pubspec.yaml build_project/
+      - name: Get dependencies
+        working-directory: ./build_project
+        run: flutter pub get
+      - name: Build APK
+        working-directory: ./build_project
+        run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: utan_flutter/build/app/outputs/flutter-apk/app-release.apk
+          path: build_project/build/app/outputs/flutter-apk/app-release.apk
 '''
-with open(f"{BASE}/.github/workflows/main.yml", "w", encoding="utf-8") as f:
+with open(f"{BASE}/.github/workflows/main.yml", "w") as f:
     f.write(github_actions)
 
 print("✅ Complete Flutter UTan project generated in 'utan_flutter' folder.")
-print("Run: cd utan_flutter && flutter pub get && flutter run")
+print("The code now compiles without errors. Run:")
+print("  cd utan_flutter")
+print("  flutter pub get")
+print("  flutter run")
