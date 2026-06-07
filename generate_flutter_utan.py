@@ -1966,7 +1966,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
 }
 ''')
 
-# player_screen.dart (fix SettingsStore)
+# player_screen.dart (fixed)
 with open(f"{BASE}/lib/screens/player_screen.dart", "w") as f:
     f.write('''import 'dart:async';
 import 'package:flutter/material.dart';
@@ -2260,7 +2260,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _formatTime(double secs) {
     final d = Duration(seconds: secs.toInt());
-    return '\${d.inMinutes}:\${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+    return '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
   @override
