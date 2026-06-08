@@ -27,16 +27,17 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  http: ^0.13.3
   shared_preferences: ^2.2.2
+  http: ^1.2.1  # Updated version
   video_player: ^2.8.1
   path_provider: ^2.1.1
   dio: ^5.3.3
-  permission_handler: ^11.0.1
   gallery_saver: ^2.3.2
   google_fonts: ^6.1.0
   cached_network_image: ^3.3.0
-  dependencies:
+
+dependency_overrides:
+  http: ^1.2.1  # Added override to solve version conflict
 
 dev_dependencies:
   flutter_test:
