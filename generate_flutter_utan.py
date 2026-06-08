@@ -27,7 +27,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  http: ^1.2.1
+  http: ^0.13.3
   shared_preferences: ^2.2.2
   video_player: ^2.8.1
   path_provider: ^2.1.1
@@ -36,6 +36,7 @@ dependencies:
   gallery_saver: ^2.3.2
   google_fonts: ^6.1.0
   cached_network_image: ^3.3.0
+  dependencies:
 
 dev_dependencies:
   flutter_test:
