@@ -21,26 +21,26 @@ publish_to: 'none'
 version: 3.0.3+8
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  http: ^1.2.0
-  shared_preferences: ^2.2.3
-  video_player: ^2.9.1
-  path_provider: ^2.1.4
-  dio: ^5.5.0
-  permission_handler: ^11.3.1
+  http: ^1.1.0
+  shared_preferences: ^2.2.2
+  video_player: ^2.8.1
+  path_provider: ^2.1.1
+  dio: ^5.3.3
+  permission_handler: ^11.0.1
   gallery_saver: ^2.3.2
-  google_fonts: ^6.2.1
-  cached_network_image: ^3.3.1
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.0
   cronet_http: ^1.0.0
-  cupertino_http: ^1.3.0
+  cupertino_http: ^1.2.0
 
 dependency_overrides:
-  http: ^1.2.0   # يفرض الإصدار 1.2.0 رغم تبعية gallery_saver
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
