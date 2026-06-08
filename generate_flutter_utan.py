@@ -2,7 +2,7 @@ import os
 
 BASE = "utan_flutter"
 
-# إنشاء كل المجلدات
+# Create all directories
 dirs = [
     f"{BASE}/lib/models",
     f"{BASE}/lib/services",
@@ -14,53 +14,47 @@ dirs = [
 for d in dirs:
     os.makedirs(d, exist_ok=True)
 
-# ========== 1. pubspec.yaml (إضافة الحزم الجديدة فقط، دون ترقية الإصدارات القديمة) ==========
-pubspec = '''name: utan_flutter
-description: UTan – Full Android replica of iOS version (Native HTTP clients fix)
+# ==================== 1. pubspec.yaml ====================
+pubspec_content = '''name: utan_flutter
+description: UTan – Complete Android replica of iOS version (SSL bypass, retry, full features)
 publish_to: 'none'
-version: 3.0.3+8
+version: 3.2.0+14
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
-  http: ^1.1.0
+  cupertino_icons: ^1.0.6
+  http: ^0.13.6
   shared_preferences: ^2.2.2
   video_player: ^2.8.1
   path_provider: ^2.1.1
   dio: ^5.3.3
   permission_handler: ^11.0.1
   gallery_saver: ^2.3.2
-  google_fonts: ^6.1.0
+  google_fonts: ^4.0.4
   cached_network_image: ^3.3.0
-  cronet_http: ^1.0.0
-  cupertino_http: ^1.2.0
-
-dependency_overrides:
-  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
-  
+  flutter_lints: ^3.0.0
+
 flutter:
   uses-material-design: true
 '''
 with open(f"{BASE}/pubspec.yaml", "w", encoding="utf-8") as f:
-    f.write(pubspec)
+    f.write(pubspec_content)
 
-# ========== 2. network_security_config.xml (مع trust-anchors إضافي) ==========
-network_security = '''<?xml version="1.0" encoding="utf-8"?>
+# ==================== 2. network_security_config.xml ====================
+network_security_content = '''<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
-            <certificates src="raw" />   <!-- يثق بجميع الشهادات (حل لمشكلة ExoPlayer) -->
         </trust-anchors>
     </base-config>
     <domain-config cleartextTrafficPermitted="true">
@@ -69,16 +63,15 @@ network_security = '''<?xml version="1.0" encoding="utf-8"?>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
-            <certificates src="raw" />
         </trust-anchors>
     </domain-config>
 </network-security-config>
 '''
 with open(f"{BASE}/android/app/src/main/res/xml/network_security_config.xml", "w", encoding="utf-8") as f:
-    f.write(network_security)
+    f.write(network_security_content)
 
-# ========== 3. AndroidManifest.xml (نفس الأصل مع صلاحيات إضافية) ==========
-android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+# ==================== 3. AndroidManifest.xml ====================
+android_manifest_content = '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
@@ -101,9 +94,9 @@ android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/re
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"
+                />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -114,10 +107,10 @@ android_manifest = '''<manifest xmlns:android="http://schemas.android.com/apk/re
 </manifest>
 '''
 with open(f"{BASE}/android/app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
-    f.write(android_manifest)
+    f.write(android_manifest_content)
 
-# ========== 4. main.dart (نفس الأصل مع الاحتفاظ بـ HttpOverrides احتياطياً) ==========
-main_dart = '''import 'dart:io';
+# ==================== 4. main.dart ====================
+main_dart_content = '''import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -141,7 +134,7 @@ class InsecureHttpOverrides extends HttpOverrides {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = InsecureHttpOverrides(); // احتياطي لبعض الطلبات القديمة
+  HttpOverrides.global = InsecureHttpOverrides();
   await SettingsStore().init();
   await WatchProgressStore().init();
   await FavoritesStore().init();
@@ -221,9 +214,9 @@ class _MainTabViewState extends State<MainTabView> {
 }
 '''
 with open(f"{BASE}/lib/main.dart", "w", encoding="utf-8") as f:
-    f.write(main_dart)
+    f.write(main_dart_content)
 
-# ========== 5. Models (نفس الأصل، لا تغيير) ==========
+# ==================== 5. Models ====================
 models = {
     "video_item.dart": '''class VideoItem {
   final String id;
@@ -316,7 +309,8 @@ class MediaDetails {
   factory WatchProgress.fromJson(Map<String, dynamic> json) => WatchProgress(
         itemId: json['itemId'], title: json['title'], imageUrl: json['imageUrl'],
         episodeId: json['episodeId'], episodeTitle: json['episodeTitle'],
-        progressSeconds: json['progressSeconds'], durationSeconds: json['durationSeconds'],
+        progressSeconds: (json['progressSeconds'] as num).toDouble(),
+        durationSeconds: (json['durationSeconds'] as num).toDouble(),
         updatedAt: DateTime.parse(json['updatedAt']), videoUrl: json['videoUrl'],
         videoUrl1080: json['videoUrl1080'], videoUrl360: json['videoUrl360'],
         subtitleUrl: json['subtitleUrl'], subtitleVttUrl: json['subtitleVttUrl'],
@@ -340,7 +334,8 @@ class MediaDetails {
   factory DownloadTaskItem.fromJson(Map<String, dynamic> json) => DownloadTaskItem(
         id: json['id'], title: json['title'], imageUrl: json['imageUrl'],
         isMovie: json['isMovie'], videoUrl: json['videoUrl'], subtitleUrl: json['subtitleUrl'],
-        progress: json['progress'], isCompleted: json['isCompleted'], localVideoPath: json['localVideoPath'],
+        progress: (json['progress'] as num).toDouble(),
+        isCompleted: json['isCompleted'], localVideoPath: json['localVideoPath'],
       );
 }
 ''',
@@ -379,13 +374,12 @@ for fname, content in models.items():
     with open(f"{BASE}/lib/models/{fname}", "w", encoding="utf-8") as f:
         f.write(content)
 
-# ========== 6. Services (المعدلة لاستخدام Cronet/Cupertino) ==========
-# 6.1 scraper.dart (مع createNativeClient)
+# ==================== 6. Services ====================
+# scraper.dart (full)
 scraper_dart = '''import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:cronet_http/cronet_http.dart';
-import 'package:cupertino_http/cupertino_http.dart';
+import 'package:http/io_client.dart';
 import '../models/video_item.dart';
 import '../models/episode.dart';
 import '../models/media_details.dart';
@@ -394,22 +388,16 @@ class MovieScraper {
   static const String baseUrl = 'https://movie.vodu.me';
   static const String userAgent = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
-  // 🔥 الحل السحري: استخدام عميل HTTP أصلي للنظام (Cronet على Android, Cupertino على iOS)
-  static http.Client _createNativeClient() {
-    if (Platform.isAndroid) {
-      // يستخدم محرك Cronet (مكتبة Google الأصلية) – يخفي بصمة Dart تماماً
-      return CronetClient.defaultExecutionContext();
-    } else if (Platform.isIOS) {
-      // يستخدم URLSession الأصلي لنظام iOS – مطابق لنسخة Swift التي تعمل
-      return CupertinoClient.defaultSessionConfiguration();
-    }
-    // احتياطي: العميل العادي
-    return http.Client();
+  static http.Client _createClient() {
+    final client = HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true
+      ..connectionTimeout = const Duration(seconds: 30);
+    return IOClient(client);
   }
 
   static Future<http.Response> _getWithRetry(String url, {int retries = 3}) async {
     for (int attempt = 1; attempt <= retries; attempt++) {
-      final client = _createNativeClient();
+      final client = _createClient();
       try {
         final response = await client.get(
           Uri.parse(url),
@@ -592,11 +580,10 @@ class MovieScraper {
 with open(f"{BASE}/lib/services/scraper.dart", "w", encoding="utf-8") as f:
     f.write(scraper_dart)
 
-# 6.2 subtitle_parser.dart (نفس التعديل لاستخدام Native Client)
-subtitle_parser = '''import 'dart:io';
+# subtitle_parser.dart
+subtitle_parser_content = '''import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:cronet_http/cronet_http.dart';
-import 'package:cupertino_http/cupertino_http.dart';
+import 'package:http/io_client.dart';
 
 class SubtitleCue {
   final double startTime; final double endTime; final String text;
@@ -604,20 +591,18 @@ class SubtitleCue {
 }
 
 class SubtitleParser {
-  static http.Client _buildNativeClient() {
-    if (Platform.isAndroid) {
-      return CronetClient.defaultExecutionContext();
-    } else if (Platform.isIOS) {
-      return CupertinoClient.defaultSessionConfiguration();
-    }
-    return http.Client();
+  static http.Client _buildClient() {
+    final client = HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true
+      ..connectionTimeout = const Duration(seconds: 20);
+    return IOClient(client);
   }
 
   static Future<List<SubtitleCue>> parse(String url) async {
     if (url.isEmpty) return [];
     String clean = url;
     if (!clean.startsWith('http')) clean = 'https://movie.vodu.me/$clean';
-    final client = _buildNativeClient();
+    final client = _buildClient();
     try {
       final response = await client.get(
         Uri.parse(clean),
@@ -703,10 +688,10 @@ class SubtitleParser {
 }
 '''
 with open(f"{BASE}/lib/services/subtitle_parser.dart", "w", encoding="utf-8") as f:
-    f.write(subtitle_parser)
+    f.write(subtitle_parser_content)
 
-# 6.3 progress_store.dart (نفس الأصل)
-progress_store = '''import 'dart:convert';
+# progress_store.dart (unchanged)
+progress_store_content = '''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/watch_progress.dart';
 class WatchProgressStore {
@@ -748,10 +733,10 @@ class WatchProgressStore {
 }
 '''
 with open(f"{BASE}/lib/services/progress_store.dart", "w", encoding="utf-8") as f:
-    f.write(progress_store)
+    f.write(progress_store_content)
 
-# 6.4 download_manager.dart (نفس الأصل، لا تغيير ضروري)
-download_manager = '''import 'dart:convert';
+# download_manager.dart (with Dio SSL bypass)
+download_manager_content = '''import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -827,10 +812,10 @@ class DownloadManager {
 }
 '''
 with open(f"{BASE}/lib/services/download_manager.dart", "w", encoding="utf-8") as f:
-    f.write(download_manager)
+    f.write(download_manager_content)
 
-# 6.5 favorites_store.dart (نفس الأصل)
-favorites_store = '''import 'dart:convert';
+# favorites_store.dart (unchanged)
+favorites_store_content = '''import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/video_item.dart';
 class FavoritesStore {
@@ -862,10 +847,10 @@ class FavoritesStore {
 }
 '''
 with open(f"{BASE}/lib/services/favorites_store.dart", "w", encoding="utf-8") as f:
-    f.write(favorites_store)
+    f.write(favorites_store_content)
 
-# 6.6 settings_store.dart (نفس الأصل)
-settings_store = '''import 'package:shared_preferences/shared_preferences.dart';
+# settings_store.dart (unchanged)
+settings_store_content = '''import 'package:shared_preferences/shared_preferences.dart';
 class SettingsStore {
   static final SettingsStore _instance = SettingsStore._internal();
   factory SettingsStore() => _instance;
@@ -891,11 +876,11 @@ class SettingsStore {
 }
 '''
 with open(f"{BASE}/lib/services/settings_store.dart", "w", encoding="utf-8") as f:
-    f.write(settings_store)
+    f.write(settings_store_content)
 
-# ========== 7. Widgets (نفس الأصل تماماً، بدون تغيير) ==========
-widgets = {
-    "poster_card.dart": '''import 'package:flutter/material.dart';
+# ==================== 7. Widgets ====================
+# poster_card.dart
+poster_card_content = '''import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/watch_progress.dart';
 import '../models/video_item.dart';
@@ -952,8 +937,12 @@ class PosterCard extends StatelessWidget {
     );
   }
 }
-''',
-    "hero_banner.dart": '''import 'package:flutter/material.dart';
+'''
+with open(f"{BASE}/lib/widgets/poster_card.dart", "w", encoding="utf-8") as f:
+    f.write(poster_card_content)
+
+# hero_banner.dart
+hero_banner_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/video_item.dart';
@@ -1045,8 +1034,12 @@ class _HeroBannerState extends State<HeroBanner> {
     );
   }
 }
-''',
-    "continue_row.dart": '''import 'package:flutter/material.dart';
+'''
+with open(f"{BASE}/lib/widgets/hero_banner.dart", "w", encoding="utf-8") as f:
+    f.write(hero_banner_content)
+
+# continue_row.dart
+continue_row_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/progress_store.dart';
@@ -1115,8 +1108,12 @@ class ContinueWatchingRow extends StatelessWidget {
     );
   }
 }
-''',
-    "category_row.dart": '''import 'package:flutter/material.dart';
+'''
+with open(f"{BASE}/lib/widgets/continue_row.dart", "w", encoding="utf-8") as f:
+    f.write(continue_row_content)
+
+# category_row.dart
+category_row_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
 import 'poster_card.dart';
@@ -1160,14 +1157,12 @@ class CategoryRow extends StatelessWidget {
   }
 }
 '''
-}
-for fname, content in widgets.items():
-    with open(f"{BASE}/lib/widgets/{fname}", "w", encoding="utf-8") as f:
-        f.write(content)
+with open(f"{BASE}/lib/widgets/category_row.dart", "w", encoding="utf-8") as f:
+    f.write(category_row_content)
 
-# ========== 8. Screens (جميعها من الأصل، دون تغيير) ==========
-# 8.1 home_screen.dart (نفس الأصل)
-home_screen = '''import 'package:flutter/material.dart';
+# ==================== 8. Screens ====================
+# home_screen.dart
+home_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
 import '../services/scraper.dart';
@@ -1232,10 +1227,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/home_screen.dart", "w", encoding="utf-8") as f:
-    f.write(home_screen)
+    f.write(home_screen_content)
 
-# 8.2 browse_screen.dart (نفس الأصل)
-browse_screen = '''import 'package:flutter/material.dart';
+# browse_screen.dart
+browse_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/site_category.dart';
 import 'category_list_screen.dart';
@@ -1275,10 +1270,10 @@ class BrowseScreen extends StatelessWidget {
 }
 '''
 with open(f"{BASE}/lib/screens/browse_screen.dart", "w", encoding="utf-8") as f:
-    f.write(browse_screen)
+    f.write(browse_screen_content)
 
-# 8.3 category_list_screen.dart (نفس الأصل)
-category_list = '''import 'package:flutter/material.dart';
+# category_list_screen.dart
+category_list_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/site_category.dart';
 import '../models/video_item.dart';
@@ -1331,10 +1326,10 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/category_list_screen.dart", "w", encoding="utf-8") as f:
-    f.write(category_list)
+    f.write(category_list_screen_content)
 
-# 8.4 search_screen.dart (نفس الأصل)
-search_screen = '''import 'package:flutter/material.dart';
+# search_screen.dart
+search_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/video_item.dart';
 import '../services/scraper.dart';
@@ -1394,10 +1389,10 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/search_screen.dart", "w", encoding="utf-8") as f:
-    f.write(search_screen)
+    f.write(search_screen_content)
 
-# 8.5 downloads_screen.dart (نفس الأصل)
-downloads_screen = '''import 'package:flutter/material.dart';
+# downloads_screen.dart
+downloads_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/download_manager.dart';
@@ -1438,10 +1433,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/downloads_screen.dart", "w", encoding="utf-8") as f:
-    f.write(downloads_screen)
+    f.write(downloads_screen_content)
 
-# 8.6 settings_screen.dart (نفس الأصل)
-settings_screen = '''import 'package:flutter/material.dart';
+# settings_screen.dart
+settings_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../services/settings_store.dart';
 import '../services/progress_store.dart';
@@ -1498,10 +1493,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/settings_screen.dart", "w", encoding="utf-8") as f:
-    f.write(settings_screen)
+    f.write(settings_screen_content)
 
-# 8.7 history_screen.dart (نفس الأصل)
-history_screen = '''import 'package:flutter/material.dart';
+# history_screen.dart
+history_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/progress_store.dart';
@@ -1538,10 +1533,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/history_screen.dart", "w", encoding="utf-8") as f:
-    f.write(history_screen)
+    f.write(history_screen_content)
 
-# 8.8 details_screen.dart (نفس الأصل)
-details_screen = '''import 'package:flutter/material.dart';
+# details_screen.dart
+details_screen_content = '''import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/video_item.dart';
@@ -1685,10 +1680,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/details_screen.dart", "w", encoding="utf-8") as f:
-    f.write(details_screen)
+    f.write(details_screen_content)
 
-# 8.9 player_screen.dart (نفس الأصل، التعديلات السابقة للـ headers غير ضرورية الآن لأن Native Client يحل المشكلة)
-player_screen = '''import 'dart:async';
+# player_screen.dart
+player_screen_content = '''import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -1862,13 +1857,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 }
 '''
 with open(f"{BASE}/lib/screens/player_screen.dart", "w", encoding="utf-8") as f:
-    f.write(player_screen)
+    f.write(player_screen_content)
 
-print("✅ تم إنشاء المشروع المُعدَّل حسب التحليل الدقيق في المجلد: " + BASE)
-print("📌 الإصلاحات المطبقة:")
-print("   1. إضافة cronet_http و cupertino_http في pubspec.yaml")
-print("   2. تعديل scraper.dart و subtitle_parser.dart لاستخدام Native Clients (Cronet على Android, Cupertino على iOS)")
-print("   3. تحديث network_security_config.xml بإضافة <certificates src='raw' /> لحل مشكلة ExoPlayer")
-print("   4. إضافة صلاحيات WiFi وقراءة الوسائط في AndroidManifest.xml")
-print("   5. الاحتفاظ بـ HttpOverrides احتياطياً")
-print("🚀 الآن نفذ: cd " + BASE + " && flutter clean && flutter pub get && flutter run")
+print("✅ Full project generated at: " + BASE)
+print("Run the following commands:")
+print(f"  cd {BASE}")
+print("  flutter clean")
+print("  flutter pub get")
+print("  flutter build apk --release")
