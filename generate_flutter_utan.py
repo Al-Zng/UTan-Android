@@ -33,7 +33,7 @@ dependencies:
   path_provider: ^2.1.1
   dio: ^5.3.3
   gallery_saver: ^2.3.2
-  google_fonts: ^6.1.0
+  google_fonts: ^4.0.4
   cached_network_image: ^3.3.0
 
 dev_dependencies:
