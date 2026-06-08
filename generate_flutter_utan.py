@@ -26,19 +26,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.6
-  http: ^0.13.6
-  shared_preferences: ^2.2.2
-  video_player: ^2.8.1
-  path_provider: ^2.1.1
-  dio: ^5.3.3
-  permission_handler: ^11.0.1
+  cupertino_icons: ^1.0.8
+  http: ^1.2.0
+  shared_preferences: ^2.2.3
+  video_player: ^2.9.1
+  path_provider: ^2.1.4
+  dio: ^5.5.0
+  permission_handler: ^11.3.1
   gallery_saver: ^2.3.2
-  google_fonts: ^4.0.4
-  cached_network_image: ^3.3.0
-  cronet_http: ^1.0.0      # عميل Android الأصلي (Cronet) لإخفاء بصمة Dart
-  cupertino_http: ^1.3.0   # عميل iOS الأصلي (مطابق لـ URLSession)
-
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.3.1
+  cronet_http: ^1.0.0       # Native Android client (bypasses Dart fingerprint)
+  cupertino_http: ^1.3.0    # Native iOS client (matches URLSession)
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
