@@ -21,7 +21,7 @@ publish_to: 'none'
 version: 3.0.3+8
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -36,14 +36,17 @@ dependencies:
   gallery_saver: ^2.3.2
   google_fonts: ^6.2.1
   cached_network_image: ^3.3.1
-  cronet_http: ^1.0.0       # Native Android client (bypasses Dart fingerprint)
-  cupertino_http: ^1.3.0    # Native iOS client (matches URLSession)
-  
+  cronet_http: ^1.0.0
+  cupertino_http: ^1.3.0
+
+dependency_overrides:
+  http: ^1.2.0   # يفرض الإصدار 1.2.0 رغم تبعية gallery_saver
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-
+  flutter_lints: ^4.0.0
+  
 flutter:
   uses-material-design: true
 '''
