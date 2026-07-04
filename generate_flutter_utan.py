@@ -796,8 +796,13 @@ class ConnectivityService extends ChangeNotifier {
     });
   }
 
-  void _updateStatus(List<ConnectivityResult> result) {
-    final isWifi = result.contains(ConnectivityResult.wifi);
+  void _updateStatus(dynamic result) {
+    bool isWifi;
+    if (result is List) {
+      isWifi = result.contains(ConnectivityResult.wifi);
+    } else {
+      isWifi = result == ConnectivityResult.wifi;
+    }
     if (_isOnWifi != isWifi) {
       _isOnWifi = isWifi;
       notifyListeners();
@@ -884,6 +889,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import '../stores/watch_progress_store.dart';
 import '../stores/favorites_store.dart';
@@ -1558,13 +1564,13 @@ class SubtitleParser {
 
   static List<SubtitleCue> _parseSRT(String content) {
     List<SubtitleCue> cues = [];
-    String normalized = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    List<String> blocks = normalized.split('\n\n');
+    String normalized = content.replaceAll('\\r\\n', '\\n').replaceAll('\\r', '\\n');
+    List<String> blocks = normalized.split('\\n\\n');
     for (String block in blocks) {
-      List<String> lines = block.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      List<String> lines = block.split('\\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
       if (lines.length < 3) continue;
       String timeLine = lines[1];
-      String text = lines.sublist(2).join('\n').replaceAll(RegExp(r'<[^>]+>'), "").trim();
+      String text = lines.sublist(2).join('\\n').replaceAll(RegExp(r'<[^>]+>'), "").trim();
       if (text.isEmpty) continue;
       List<String> times = timeLine.split(" --> ");
       if (times.length == 2) {
@@ -1593,7 +1599,7 @@ class SubtitleParser {
 
   static List<SubtitleCue> _parseWebVTT(String content) {
     List<SubtitleCue> cues = [];
-    List<String> lines = content.split('\n');
+    List<String> lines = content.split('\\n');
     int i = 0;
     while (i < lines.length) {
       String line = lines[i].trim();
@@ -1610,7 +1616,7 @@ class SubtitleParser {
               textLines.add(lines[i].trim());
               i++;
             }
-            String text = textLines.join('\n').replaceAll(RegExp(r'<[^>]+>'), "").trim();
+            String text = textLines.join('\\n').replaceAll(RegExp(r'<[^>]+>'), "").trim();
             if (text.isNotEmpty) cues.add(SubtitleCue(start, end, text));
             continue;
           }
@@ -1657,6 +1663,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import '../models/models.dart';
+import '../stores/app_settings.dart';
 import 'connectivity_service.dart';
 import 'proxy_client.dart';
 
@@ -2922,6 +2929,7 @@ browse_search_settings_dart = """import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import '../models/models.dart';
 import '../services/scraper.dart';
 import '../stores/app_settings.dart';
 import '../stores/favorites_store.dart';
@@ -4315,7 +4323,7 @@ class _AccountViewState extends State<AccountView> {
             TextButton(
               onPressed: () => setState(() => _isSignUp = !_isSignUp),
               child: Text(
-                _isSignUp ? L('لديك حساب؟ سجّل دخول', 'Already have an account? Sign in') : L('ليس لديك حساب؟ أنشئ حساباً', 'Don\'t have an account? Create one'),
+                _isSignUp ? L('لديك حساب؟ سجّل دخول', 'Already have an account? Sign in') : L('ليس لديك حساب؟ أنشئ حساباً', "Don't have an account? Create one"),
                 style: TextStyle(color: Colors.grey),
               ),
             ),
