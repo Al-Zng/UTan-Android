@@ -460,7 +460,7 @@ class WatchProgressStore extends ChangeNotifier {
 with open("UTan_Flutter/lib/stores/watch_progress_store.dart", "w", encoding="utf-8") as f:
     f.write(watch_progress_store_dart)
 
-# 6. lib/stores/favorites_store.dart (only FavoritesStore)
+# 6. lib/stores/favorites_store.dart
 favorites_store_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -522,7 +522,7 @@ class FavoritesStore extends ChangeNotifier {
 with open("UTan_Flutter/lib/stores/favorites_store.dart", "w", encoding="utf-8") as f:
     f.write(favorites_store_dart)
 
-# 7. lib/stores/watchlist_store.dart (WatchList, WatchListItem, WatchListStore)
+# 7. lib/stores/watchlist_store.dart
 watchlist_store_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -693,7 +693,25 @@ class DownloadManager extends ChangeNotifier {
 with open("UTan_Flutter/lib/services/download_manager.dart", "w", encoding="utf-8") as f:
     f.write(download_manager_dart)
 
-# 9. lib/services/supabase_manager.dart
+# 9. lib/services/proxy_client.dart (NEW)
+proxy_client_dart = """import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
+import 'dart:io';
+
+http.Client getClient() {
+  final client = HttpClient();
+  client.findProxy = (uri) {
+    return "PROXY 212.237.125.216:6969";
+  };
+  // Disable bad certificate handling if needed (for testing only)
+  client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  return IOClient(client);
+}
+"""
+with open("UTan_Flutter/lib/services/proxy_client.dart", "w", encoding="utf-8") as f:
+    f.write(proxy_client_dart)
+
+# 10. lib/services/supabase_manager.dart (modified to use proxy)
 supabase_manager_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -702,6 +720,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../stores/watch_progress_store.dart';
 import '../stores/favorites_store.dart';
+import 'proxy_client.dart';
 
 class SupabaseConfig {
   static const url = "https://foygwdvggwmmzfbeoone.supabase.co";
@@ -787,7 +806,8 @@ class SupabaseManager {
   }
 
   Future<String?> signUp(String email, String password, String displayName) async {
-    final res = await http.post(
+    final client = getClient();
+    final res = await client.post(
       Uri.parse('${SupabaseConfig.url}/auth/v1/signup'),
       headers: _baseHeaders(null),
       body: jsonEncode({'email': email, 'password': password, 'data': {'display_name': displayName}})
@@ -801,7 +821,8 @@ class SupabaseManager {
   }
 
   Future<String?> signIn(String email, String password) async {
-    final res = await http.post(
+    final client = getClient();
+    final res = await client.post(
       Uri.parse('${SupabaseConfig.url}/auth/v1/token?grant_type=password'),
       headers: _baseHeaders(null),
       body: jsonEncode({'email': email, 'password': password})
@@ -815,12 +836,14 @@ class SupabaseManager {
   }
 
   Future<void> logout(String token) async {
-    await http.post(Uri.parse('${SupabaseConfig.url}/auth/v1/logout'), headers: _baseHeaders(token));
+    final client = getClient();
+    await client.post(Uri.parse('${SupabaseConfig.url}/auth/v1/logout'), headers: _baseHeaders(token));
   }
 
   Future<bool> fetchIsAdmin() async {
     if (AuthSession.shared.user == null) return false;
-    final res = await http.get(
+    final client = getClient();
+    final res = await client.get(
       Uri.parse('${SupabaseConfig.url}/rest/v1/profiles?id=eq.${AuthSession.shared.user!.id}&select=is_admin'),
       headers: _baseHeaders(AuthSession.shared.accessToken)
     );
@@ -833,9 +856,10 @@ class SupabaseManager {
 
   Future<void> upsertProgress(WatchProgress p) async {
     if (!AuthSession.shared.isLoggedIn) return;
+    final client = getClient();
     var h = _baseHeaders(AuthSession.shared.accessToken);
     h['Prefer'] = 'resolution=merge-duplicates';
-    await http.post(
+    await client.post(
       Uri.parse('${SupabaseConfig.url}/rest/v1/user_progress'),
       headers: h,
       body: jsonEncode({
@@ -851,7 +875,8 @@ class SupabaseManager {
 
   Future<void> deleteProgress(String itemId) async {
     if (!AuthSession.shared.isLoggedIn) return;
-    await http.delete(
+    final client = getClient();
+    await client.delete(
       Uri.parse('${SupabaseConfig.url}/rest/v1/user_progress?user_id=eq.${AuthSession.shared.user!.id}&item_id=eq.$itemId'),
       headers: _baseHeaders(AuthSession.shared.accessToken)
     );
@@ -859,9 +884,10 @@ class SupabaseManager {
 
   Future<void> upsertFavorite(VideoItem item) async {
     if (!AuthSession.shared.isLoggedIn) return;
+    final client = getClient();
     var h = _baseHeaders(AuthSession.shared.accessToken);
     h['Prefer'] = 'resolution=merge-duplicates';
-    await http.post(
+    await client.post(
       Uri.parse('${SupabaseConfig.url}/rest/v1/user_favorites'),
       headers: h,
       body: jsonEncode({
@@ -873,14 +899,16 @@ class SupabaseManager {
 
   Future<void> deleteFavorite(String itemId) async {
     if (!AuthSession.shared.isLoggedIn) return;
-    await http.delete(
+    final client = getClient();
+    await client.delete(
       Uri.parse('${SupabaseConfig.url}/rest/v1/user_favorites?user_id=eq.${AuthSession.shared.user!.id}&item_id=eq.$itemId'),
       headers: _baseHeaders(AuthSession.shared.accessToken)
     );
   }
 
   Future<List<Map<String,dynamic>>> fetchComments(String itemId) async {
-    final res = await http.get(
+    final client = getClient();
+    final res = await client.get(
       Uri.parse('${SupabaseConfig.url}/rest/v1/comments?item_id=eq.$itemId&select=*&order=created_at.desc'),
       headers: _baseHeaders(AuthSession.shared.accessToken ?? SupabaseConfig.anonKey)
     );
@@ -890,7 +918,8 @@ class SupabaseManager {
 
   Future<bool> postComment(String itemId, String text) async {
     if (!AuthSession.shared.isLoggedIn) return false;
-    final res = await http.post(
+    final client = getClient();
+    final res = await client.post(
       Uri.parse('${SupabaseConfig.url}/rest/v1/comments'),
       headers: _baseHeaders(AuthSession.shared.accessToken),
       body: jsonEncode({
@@ -914,12 +943,13 @@ class CloudSyncManager {
 with open("UTan_Flutter/lib/services/supabase_manager.dart", "w", encoding="utf-8") as f:
     f.write(supabase_manager_dart)
 
-# 10. lib/services/scraper.dart
+# 11. lib/services/scraper.dart (modified to use proxy)
 scraper_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../stores/app_settings.dart';
+import 'proxy_client.dart';
 
 class SiteCategory {
   final int id;
@@ -986,8 +1016,9 @@ class MovieScraper extends ChangeNotifier {
   Future<void> fetchHome() async {
     isLoading = true;
     notifyListeners();
+    final client = getClient();
     try {
-      final res = await http.get(Uri.parse('${baseUrl}index.php'), headers: {'User-Agent': UT_USER_AGENT});
+      final res = await client.get(Uri.parse('${baseUrl}index.php'), headers: {'User-Agent': UT_USER_AGENT});
       if (res.statusCode == 200) {
         final html = utf8.decode(res.bodyBytes);
         final parsed = _parseHomePage(html);
@@ -1009,8 +1040,9 @@ class MovieScraper extends ChangeNotifier {
     String urlStr = useTag ? "${baseUrl}index.php?do=list&tag=$typeId$pageParam" : "${baseUrl}index.php?do=list&type=$typeId$pageParam";
     if (sort != null && sort.isNotEmpty) urlStr += "&sort=$sort";
     if (genre != null && genre.isNotEmpty) urlStr += "&genre=$genre";
+    final client = getClient();
     try {
-      final res = await http.get(Uri.parse(urlStr), headers: {'User-Agent': UT_USER_AGENT});
+      final res = await client.get(Uri.parse(urlStr), headers: {'User-Agent': UT_USER_AGENT});
       if (res.statusCode == 200) {
         final html = utf8.decode(res.bodyBytes);
         final items = _parseListPage(html);
@@ -1037,8 +1069,9 @@ class MovieScraper extends ChangeNotifier {
     if (language != null && language.isNotEmpty) urlStr += "&language=$language";
     if (featured == true) urlStr += "&featured=1";
 
+    final client = getClient();
     try {
-      final res = await http.get(Uri.parse(urlStr), headers: {'User-Agent': UT_USER_AGENT});
+      final res = await client.get(Uri.parse(urlStr), headers: {'User-Agent': UT_USER_AGENT});
       if (res.statusCode == 200) {
         final html = utf8.decode(res.bodyBytes);
         return _parseListPage(html);
@@ -1049,8 +1082,9 @@ class MovieScraper extends ChangeNotifier {
 
   Future<MediaDetails> fetchDetails(String id) async {
     MediaDetails d = MediaDetails();
+    final client = getClient();
     try {
-      final res = await http.get(Uri.parse('${baseUrl}index.php?do=view&type=post&id=$id'), headers: {'User-Agent': UT_USER_AGENT});
+      final res = await client.get(Uri.parse('${baseUrl}index.php?do=view&type=post&id=$id'), headers: {'User-Agent': UT_USER_AGENT});
       if (res.statusCode == 200) {
         final html = utf8.decode(res.bodyBytes);
         d = _parseDetails(html);
@@ -1196,9 +1230,10 @@ class _Tuple<T1, T2> {
 with open("UTan_Flutter/lib/services/scraper.dart", "w", encoding="utf-8") as f:
     f.write(scraper_dart)
 
-# 11. lib/services/subtitle_parser.dart - CORRECTED STRING LITERALS
+# 12. lib/services/subtitle_parser.dart (modified to use proxy)
 subtitle_parser_dart = """import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'proxy_client.dart';
 
 class SubtitleCue {
   final double startTime;
@@ -1211,8 +1246,9 @@ class SubtitleParser {
   static Future<List<SubtitleCue>> parse(String url) async {
     if (url.isEmpty) return [];
     String cleanUrl = url.startsWith("http") ? url : "https://movie.vodu.me/" + url;
+    final client = getClient();
     try {
-      final res = await http.get(Uri.parse(cleanUrl));
+      final res = await client.get(Uri.parse(cleanUrl));
       if (res.statusCode == 200) {
         String text = utf8.decode(res.bodyBytes, allowMalformed: true);
         if (text.contains("WEBVTT")) return _parseWebVTT(text);
@@ -1312,7 +1348,7 @@ class SubtitleParser {
 with open("UTan_Flutter/lib/services/subtitle_parser.dart", "w", encoding="utf-8") as f:
     f.write(subtitle_parser_dart)
 
-# 12. lib/views/player_view.dart (with CircularProgressIndicator fix)
+# 13. lib/views/player_view.dart (unchanged, but using proxy for subtitles via subtitle_parser)
 player_view_dart = """import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -1772,7 +1808,7 @@ class PlayerData {
 with open("UTan_Flutter/lib/views/player_view.dart", "w", encoding="utf-8") as f:
     f.write(player_view_dart)
 
-# 13. lib/views/main_tab_view.dart with fixed List<Widget>
+# 14. lib/views/main_tab_view.dart
 main_tab_view_dart = """import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../stores/app_settings.dart';
@@ -1844,7 +1880,7 @@ class _MainTabViewState extends State<MainTabView> {
 with open("UTan_Flutter/lib/views/main_tab_view.dart", "w", encoding="utf-8") as f:
     f.write(main_tab_view_dart)
 
-# 14. lib/views/home_view.dart
+# 15. lib/views/home_view.dart
 home_view_dart = """import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/scraper.dart';
@@ -2049,7 +2085,7 @@ class HomeView extends StatelessWidget {
 with open("UTan_Flutter/lib/views/home_view.dart", "w", encoding="utf-8") as f:
     f.write(home_view_dart)
 
-# 15. lib/views/details_view.dart
+# 16. lib/views/details_view.dart
 details_view_dart = """import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -2234,7 +2270,7 @@ class _DetailsViewState extends State<DetailsView> {
 with open("UTan_Flutter/lib/views/details_view.dart", "w", encoding="utf-8") as f:
     f.write(details_view_dart)
 
-# 16. lib/views/browse_search_settings.dart – unified file containing Browse, Search, Downloads, Settings
+# 17. lib/views/browse_search_settings.dart
 browse_search_settings_dart = """import 'package:flutter/material.dart';
 import '../services/scraper.dart';
 import '../stores/app_settings.dart';
@@ -2332,5 +2368,5 @@ with open("UTan_Flutter/lib/views/browse_search_settings.dart", "w", encoding="u
     f.write(browse_search_settings_dart)
 
 print("✅ Flutter project generated successfully at 'UTan_Flutter/'.")
-print("✅ All syntax errors resolved: subtitle_parser.dart corrected, imports fixed, and watchlist_store.dart created.")
+print("✅ All network requests now go through the proxy: 212.237.125.216:6969")
 print("✅ Run 'flutter pub get' and then 'flutter run' to launch the app.")
