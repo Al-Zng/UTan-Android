@@ -1,6 +1,8 @@
 import os
 
+# ============================================================
 # إنشاء هيكل المجلدات
+# ============================================================
 os.makedirs("UTan_Flutter/lib", exist_ok=True)
 os.makedirs("UTan_Flutter/lib/models", exist_ok=True)
 os.makedirs("UTan_Flutter/lib/services", exist_ok=True)
@@ -39,6 +41,8 @@ dependencies:
   intl: ^0.18.1
   image_picker: ^1.0.4
   share_plus: ^7.2.1
+  flutter_downloader: ^1.11.6
+  permission_handler: ^11.0.1
 
 flutter:
   uses-material-design: true
@@ -254,7 +258,7 @@ with open("UTan_Flutter/lib/stores/app_settings.dart", "w", encoding="utf-8") as
     f.write(app_settings_dart)
 
 # ============================================================
-# 4. lib/models/models.dart
+# 4. lib/models/models.dart (جميع النماذج)
 # ============================================================
 models_dart = """import 'dart:convert';
 import 'package:intl/intl.dart';
@@ -516,7 +520,7 @@ with open("UTan_Flutter/lib/models/models.dart", "w", encoding="utf-8") as f:
     f.write(models_dart)
 
 # ============================================================
-# 5. lib/stores/watch_progress_store.dart
+# 5. lib/stores/watch_progress_store.dart (مع دمج السحابة)
 # ============================================================
 watch_progress_store_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -784,13 +788,18 @@ with open("UTan_Flutter/lib/stores/watchlist_store.dart", "w", encoding="utf-8")
     f.write(watchlist_store_dart)
 
 # ============================================================
-# 8. lib/services/download_manager.dart
+# 8. lib/services/download_manager.dart (حقيقي مع تنزيل فعلي)
 # ============================================================
 download_manager_dart = """import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
 import '../models/models.dart';
 import 'connectivity_service.dart';
+import 'proxy_client.dart';
 
 class DownloadTaskItem {
   final String id;
@@ -802,15 +811,27 @@ class DownloadTaskItem {
   double progress;
   bool isCompleted;
   String? localVideoPath;
+  bool isDownloading;
 
-  DownloadTaskItem({required this.id, required this.title, required this.imageUrl, required this.isMovie, required this.videoUrl, required this.subtitleUrl, this.progress = 0.0, this.isCompleted = false, this.localVideoPath});
+  DownloadTaskItem({
+    required this.id, required this.title, required this.imageUrl, required this.isMovie,
+    required this.videoUrl, required this.subtitleUrl,
+    this.progress = 0.0, this.isCompleted = false, this.localVideoPath,
+    this.isDownloading = false
+  });
 
   factory DownloadTaskItem.fromJson(Map<String, dynamic> json) => DownloadTaskItem(
     id: json['id'], title: json['title'], imageUrl: json['imageUrl'], isMovie: json['isMovie'],
     videoUrl: json['videoUrl'], subtitleUrl: json['subtitleUrl'], progress: json['progress'].toDouble(),
-    isCompleted: json['isCompleted'], localVideoPath: json['localVideoPath']
+    isCompleted: json['isCompleted'], localVideoPath: json['localVideoPath'],
+    isDownloading: json['isDownloading'] ?? false
   );
-  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'imageUrl': imageUrl, 'isMovie': isMovie, 'videoUrl': videoUrl, 'subtitleUrl': subtitleUrl, 'progress': progress, 'isCompleted': isCompleted, 'localVideoPath': localVideoPath};
+  Map<String, dynamic> toJson() => {
+    'id': id, 'title': title, 'imageUrl': imageUrl, 'isMovie': isMovie,
+    'videoUrl': videoUrl, 'subtitleUrl': subtitleUrl, 'progress': progress,
+    'isCompleted': isCompleted, 'localVideoPath': localVideoPath,
+    'isDownloading': isDownloading
+  };
 }
 
 class DownloadManager extends ChangeNotifier {
@@ -820,6 +841,7 @@ class DownloadManager extends ChangeNotifier {
   final String key = "UTanDownloads_v1";
   List<DownloadTaskItem> activeDownloads = [];
   String? lastError;
+  Map<String, http.StreamedResponse> _activeStreams = {};
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -830,37 +852,84 @@ class DownloadManager extends ChangeNotifier {
         activeDownloads = decoded.map((v) => DownloadTaskItem.fromJson(v)).toList();
       } catch (_) {}
     }
+    // طلب صلاحية التخزين
+    await Permission.storage.request();
   }
 
-  void startDownload({required VideoItem item, required bool isMovie, required String vUrl, required String sUrl}) {
-    if (activeDownloads.any((e) => e.id == item.id)) return;
+  void startDownload({required VideoItem item, required bool isMovie, required String vUrl, required String sUrl}) async {
+    if (activeDownloads.any((e) => e.id == item.id && !e.isCompleted)) return;
     if (AppSettings.shared.downloadOverWifiOnly && !ConnectivityService.shared.isOnWifi) {
       lastError = "التنزيل عبر الواي فاي فقط مفعّل، اتصل بشبكة واي فاي للمتابعة";
       notifyListeners();
       return;
     }
-    activeDownloads.add(DownloadTaskItem(id: item.id, title: item.title, imageUrl: item.imageUrl, isMovie: isMovie, videoUrl: vUrl, subtitleUrl: sUrl, progress: 0.5, isCompleted: false));
+    // إزالة المهمة السابقة إن وجدت
+    activeDownloads.removeWhere((e) => e.id == item.id);
+    final task = DownloadTaskItem(
+      id: item.id, title: item.title, imageUrl: item.imageUrl,
+      isMovie: isMovie, videoUrl: vUrl, subtitleUrl: sUrl,
+      progress: 0.0, isCompleted: false, isDownloading: true
+    );
+    activeDownloads.insert(0, task);
     persist();
-    // محاكاة التنزيل
-    Future.delayed(const Duration(seconds: 5), () {
-      int idx = activeDownloads.indexWhere((e) => e.id == item.id);
-      if (idx != -1) {
-        activeDownloads[idx].isCompleted = true;
-        activeDownloads[idx].progress = 1.0;
-        persist();
+    notifyListeners();
+
+    try {
+      // تنزيل الفيديو
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/${item.id}.mp4');
+      final client = getClient();
+      final response = await client.send(http.Request('GET', Uri.parse(vUrl)));
+      if (response.statusCode == 200) {
+        final total = response.contentLength ?? 0;
+        int received = 0;
+        final sink = file.openWrite();
+        await for (var chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (total > 0) {
+            final p = received / total;
+            final idx = activeDownloads.indexWhere((e) => e.id == item.id);
+            if (idx != -1) {
+              activeDownloads[idx].progress = p.clamp(0.0, 1.0);
+              persist();
+              notifyListeners();
+            }
+          }
+        }
+        await sink.flush();
+        await sink.close();
+        // تحديث المهمة كمكتملة
+        final idx = activeDownloads.indexWhere((e) => e.id == item.id);
+        if (idx != -1) {
+          activeDownloads[idx].isCompleted = true;
+          activeDownloads[idx].progress = 1.0;
+          activeDownloads[idx].localVideoPath = file.path;
+          activeDownloads[idx].isDownloading = false;
+          persist();
+          notifyListeners();
+        }
+      } else {
+        throw Exception('فشل التنزيل: ${response.statusCode}');
       }
-    });
+    } catch (e) {
+      // فشل التنزيل: إزالة المهمة
+      activeDownloads.removeWhere((e) => e.id == item.id);
+      persist();
+      notifyListeners();
+      lastError = 'حدث خطأ أثناء التنزيل: $e';
+    }
   }
 
   void cancel(String id) {
     activeDownloads.removeWhere((e) => e.id == id);
     persist();
+    notifyListeners();
   }
 
   Future<void> persist() async {
     final prefs = await SharedPreferences.getInstance();
     prefs.setString(key, jsonEncode(activeDownloads.map((e) => e.toJson()).toList()));
-    notifyListeners();
   }
 }
 """
@@ -901,7 +970,7 @@ with open("UTan_Flutter/lib/services/connectivity_service.dart", "w", encoding="
     f.write(connectivity_service_dart)
 
 # ============================================================
-# 10. lib/services/proxy_client.dart (مع fallback)
+# 10. lib/services/proxy_client.dart (fallback)
 # ============================================================
 proxy_client_dart = """import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -910,8 +979,6 @@ import 'dart:io';
 const String PROXY_HOST = "212.237.125.216";
 const int PROXY_PORT = 6969;
 
-/// يحاول الاتصال مباشرة أولاً، وفي حال فشل (استثناء) يستخدم البروكسي.
-/// يعيد http.Client مع آلية إعادة المحاولة التلقائية.
 http.Client getClient({int retries = 2}) {
   return _ProxyFallbackClient(retries: retries);
 }
@@ -971,13 +1038,14 @@ with open("UTan_Flutter/lib/services/proxy_client.dart", "w", encoding="utf-8") 
     f.write(proxy_client_dart)
 
 # ============================================================
-# 11. lib/services/supabase_manager.dart
+# 11. lib/services/supabase_manager.dart (مع Google OAuth وكل شيء)
 # ============================================================
 supabase_manager_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import '../stores/watch_progress_store.dart';
 import '../stores/favorites_store.dart';
@@ -1046,6 +1114,7 @@ class SupabaseManager {
     return h;
   }
 
+  // --- المصادقة ---
   Future<String?> signUp(String email, String password, String displayName) async {
     final client = getClient();
     final res = await client.post(
@@ -1081,6 +1150,52 @@ class SupabaseManager {
     await client.post(Uri.parse('${SupabaseConfig.url}/auth/v1/logout'), headers: _baseHeaders(token));
   }
 
+  // --- Google OAuth (باستخدام url_launcher) ---
+  Future<void> signInWithGoogle() async {
+    final redirectUri = 'utan://auth-callback';
+    final authUrl = Uri.https(
+      SupabaseConfig.url.replaceFirst('https://', ''),
+      '/auth/v1/authorize',
+      {
+        'provider': 'google',
+        'redirect_to': redirectUri,
+      }
+    );
+    if (await canLaunchUrl(authUrl)) {
+      await launchUrl(authUrl, mode: LaunchMode.externalApplication);
+    } else {
+      throw Exception('تعذّر فتح رابط Google');
+    }
+  }
+
+  // يجب استدعاء هذه الدالة من معالج الـ deep link في MainActivity
+  Future<void> handleOAuthCallback(Uri uri) async {
+    final fragment = uri.fragment;
+    if (fragment.isEmpty) return;
+    final params = Uri.splitQueryString(fragment);
+    final accessToken = params['access_token'];
+    final refreshToken = params['refresh_token'];
+    if (accessToken == null || refreshToken == null) return;
+    // جلب بيانات المستخدم
+    final user = await fetchUser(accessToken);
+    if (user != null) {
+      AuthSession.shared.save(accessToken, user);
+    }
+  }
+
+  Future<SupabaseUser?> fetchUser(String token) async {
+    final client = getClient();
+    final res = await client.get(
+      Uri.parse('${SupabaseConfig.url}/auth/v1/user'),
+      headers: {'apikey': SupabaseConfig.anonKey, 'Authorization': 'Bearer $token'}
+    );
+    if (res.statusCode == 200) {
+      return SupabaseUser.fromJson(jsonDecode(res.body));
+    }
+    return null;
+  }
+
+  // --- الإدارة ---
   Future<bool> fetchIsAdmin() async {
     if (AuthSession.shared.user == null) return false;
     final client = getClient();
@@ -1095,6 +1210,7 @@ class SupabaseManager {
     return false;
   }
 
+  // --- التقدم ---
   Future<void> upsertProgress(WatchProgress p) async {
     if (!AuthSession.shared.isLoggedIn) return;
     final client = getClient();
@@ -1123,6 +1239,7 @@ class SupabaseManager {
     );
   }
 
+  // --- المفضلة ---
   Future<bool> upsertFavorite(VideoItem item) async {
     if (!AuthSession.shared.isLoggedIn) return false;
     final client = getClient();
@@ -1163,6 +1280,7 @@ class SupabaseManager {
     return [];
   }
 
+  // --- التعليقات ---
   Future<List<CommentItem>> fetchComments(String itemId) async {
     final client = getClient();
     final res = await client.get(
@@ -1200,6 +1318,7 @@ class SupabaseManager {
     return res.statusCode >= 200 && res.statusCode < 300;
   }
 
+  // --- الشكاوى والاقتراحات ---
   Future<bool> submitFeedback(String type, String message) async {
     if (!AuthSession.shared.isLoggedIn) return false;
     final client = getClient();
@@ -1288,7 +1407,7 @@ with open("UTan_Flutter/lib/services/supabase_manager.dart", "w", encoding="utf-
     f.write(supabase_manager_dart)
 
 # ============================================================
-# 12. lib/services/scraper.dart
+# 12. lib/services/scraper.dart (كامل)
 # ============================================================
 scraper_dart = """import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -1399,7 +1518,11 @@ class MovieScraper extends ChangeNotifier {
     return {'items': <VideoItem>[], 'hasMore': false};
   }
 
-  Future<List<VideoItem>> advancedSearch({String? title, String? genre, String? type, String? imdb, String? director, String? writer, String? cast, String? year, String? mpr, String? imdbrate, String? production, String? language, bool? featured}) async {
+  Future<List<VideoItem>> advancedSearch({
+    String? title, String? genre, String? type, String? imdb, String? director,
+    String? writer, String? cast, String? year, String? mpr, String? imdbrate,
+    String? production, String? language, bool? featured
+  }) async {
     String urlStr = "${baseUrl}index.php?do=list";
     if (title != null && title.isNotEmpty) urlStr += "&title=$title";
     if (genre != null && genre.isNotEmpty) urlStr += "&genre=$genre";
@@ -1697,8 +1820,7 @@ with open("UTan_Flutter/lib/services/subtitle_parser.dart", "w", encoding="utf-8
     f.write(subtitle_parser_dart)
 
 # ============================================================
-# 14. lib/views/player_view.dart (كاملاً)
-# تم تضمينه بالكامل
+# 14. lib/views/player_view.dart (كامل مع قائمة الحلقات وإعدادات الترجمة)
 # ============================================================
 player_view_dart = """import 'dart:async';
 import 'package:flutter/material.dart';
@@ -1909,6 +2031,11 @@ class _CustomPlayerViewState extends State<CustomPlayerView> {
 
   void _switchToEpisode(EpisodeItem ep) {
     upNextTimer?.cancel(); saveTimer?.cancel();
+    // استعادة التأخير الافتراضي (إذا كان مؤقتاً)
+    final savedDefault = AppSettings.shared.defaultSubtitleDelay;
+    if (AppSettings.shared.subtitleDelay != savedDefault) {
+      AppSettings.shared.subtitleDelay = savedDefault;
+    }
     setState(() {
       currentData = PlayerData(
         itemId: currentData.itemId, itemTitle: currentData.itemTitle, itemImageUrl: currentData.itemImageUrl,
@@ -2030,7 +2157,10 @@ class _CustomPlayerViewState extends State<CustomPlayerView> {
                 ),
               ),
 
-            if ((showControls || isLocked) && !showUpNext) _buildControls(context),
+            // Episodes rail (يظهر فقط عند الضغط على زر الحلقات)
+            if (showEpisodesSheet) _buildEpisodesRail(),
+
+            if ((showControls || isLocked) && !showUpNext && !showEpisodesSheet) _buildControls(context),
           ],
         ),
       ),
@@ -2043,6 +2173,26 @@ class _CustomPlayerViewState extends State<CustomPlayerView> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       decoration: BoxDecoration(color: Colors.black.withOpacity(AppSettings.shared.subtitleBgOpacity), borderRadius: BorderRadius.circular(8)),
       child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: AppSettings.shared.subtitleColor, fontSize: AppSettings.shared.subtitleFontSize, fontWeight: FontWeight.bold, fontFamily: AppSettings.shared.subtitleFontName)),
+    );
+  }
+
+  Widget _buildEpisodesRail() {
+    final episodes = currentData.episodes;
+    final seasons = episodes.map((e) => e.season).toSet().toList()..sort();
+    String selectedSeason = seasons.isNotEmpty ? seasons.first : '';
+    if (selectedSeason.isEmpty && seasons.isNotEmpty) selectedSeason = seasons.first;
+    // نحتفظ بحالة الموسم المختار محلياً
+    return _EpisodesRail(
+      episodes: episodes,
+      currentEpisodeId: currentData.episodeId,
+      seasons: seasons,
+      initialSeason: selectedSeason,
+      posterUrl: currentData.itemImageUrl,
+      onSelect: (ep) {
+        setState(() => showEpisodesSheet = false);
+        _switchToEpisode(ep);
+      },
+      onClose: () => setState(() => showEpisodesSheet = false),
     );
   }
 
@@ -2193,6 +2343,8 @@ class _CustomPlayerViewState extends State<CustomPlayerView> {
                 if (!currentData.isMovie) Text(currentData.episodeTitle, style: const TextStyle(color: Colors.white54, fontSize: 12), maxLines: 1),
               ])),
               IconButton(icon: const Icon(Icons.closed_caption, color: Colors.white), onPressed: () => setState(() => showSubtitleSettings = !showSubtitleSettings)),
+              if (!currentData.isMovie && currentData.episodes.isNotEmpty)
+                IconButton(icon: const Icon(Icons.list_alt, color: Colors.white), onPressed: () => setState(() => showEpisodesSheet = !showEpisodesSheet)),
               IconButton(icon: const Icon(Icons.lock_open, color: Colors.white), onPressed: () => setState(() => isLocked = true)),
             ],
           ),
@@ -2291,6 +2443,151 @@ extension ColorExtension on Color {
     return '#${(r * 255).toInt().toRadixString(16).padLeft(2, '0')}${(g * 255).toInt().toRadixString(16).padLeft(2, '0')}${(b * 255).toInt().toRadixString(16).padLeft(2, '0')}';
   }
 }
+
+// ============================================================
+// Widget مستقل لقائمة الحلقات
+// ============================================================
+class _EpisodesRail extends StatefulWidget {
+  final List<EpisodeItem> episodes;
+  final String currentEpisodeId;
+  final List<String> seasons;
+  final String initialSeason;
+  final String posterUrl;
+  final Function(EpisodeItem) onSelect;
+  final VoidCallback onClose;
+
+  const _EpisodesRail({
+    required this.episodes,
+    required this.currentEpisodeId,
+    required this.seasons,
+    required this.initialSeason,
+    required this.posterUrl,
+    required this.onSelect,
+    required this.onClose,
+  });
+
+  @override
+  _EpisodesRailState createState() => _EpisodesRailState();
+}
+
+class _EpisodesRailState extends State<_EpisodesRail> {
+  late String selectedSeason;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedSeason = widget.initialSeason;
+  }
+
+  List<EpisodeItem> get filteredEpisodes {
+    return widget.episodes.where((e) => e.season == selectedSeason).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        height: 200,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.transparent, Colors.black87],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.close, color: Colors.white),
+                  onPressed: widget.onClose,
+                ),
+              ],
+            ),
+            if (widget.seasons.length > 1)
+              Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: widget.seasons.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (ctx, i) {
+                    final s = widget.seasons[i];
+                    return GestureDetector(
+                      onTap: () => setState(() => selectedSeason = s),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: selectedSeason == s ? AppSettings.shared.accentColor : Colors.white12,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(s, style: TextStyle(color: Colors.white)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            Expanded(
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filteredEpisodes.length,
+                itemBuilder: (ctx, i) {
+                  final ep = filteredEpisodes[i];
+                  final isCurrent = ep.id == widget.currentEpisodeId;
+                  return GestureDetector(
+                    onTap: () => widget.onSelect(ep),
+                    child: Container(
+                      width: 130,
+                      margin: const EdgeInsets.only(right: 10),
+                      child: Column(
+                        children: [
+                          Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.posterUrl,
+                                  width: 130,
+                                  height: 73,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              if (isCurrent)
+                                Container(
+                                  color: Colors.black54,
+                                  child: Center(
+                                    child: Icon(Icons.play_arrow, color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            ep.title,
+                            style: TextStyle(color: isCurrent ? AppSettings.shared.accentColor : Colors.white, fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 """
 with open("UTan_Flutter/lib/views/player_view.dart", "w", encoding="utf-8") as f:
     f.write(player_view_dart)
@@ -2372,7 +2669,7 @@ with open("UTan_Flutter/lib/views/main_tab_view.dart", "w", encoding="utf-8") as
     f.write(main_tab_view_dart)
 
 # ============================================================
-# 16. lib/views/home_view.dart (يحتوي Hero، ContinueWatching، Top10، Categories)
+# 16. lib/views/home_view.dart (مع NetworkCardsRow وعرض الكل)
 # ============================================================
 home_view_dart = """import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -2402,7 +2699,8 @@ class HomeView extends StatelessWidget {
                   _buildContinueWatching(context),
                 if (scraper.heroItems.length >= 5)
                   _buildTop10(context),
-                _buildCategories(context),
+                _buildNetworkCards(context),
+                ...scraper.categories.map((c) => _buildCategoryRow(context, c)),
                 const SizedBox(height: 40)
               ],
             ),
@@ -2538,43 +2836,114 @@ class HomeView extends StatelessWidget {
     );
   }
 
-  Widget _buildCategories(BuildContext context) {
+  Widget _buildNetworkCards(BuildContext context) {
     return Column(
-      children: scraper.categories.map((c) => Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(c.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white))),
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 220,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: c.items.length,
-                itemBuilder: (ctx, i) {
-                  final item = c.items[i];
-                  return GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                    child: Container(
-                      width: 120, margin: const EdgeInsets.only(right: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: 120, height: 176, fit: BoxFit.cover)),
-                          const SizedBox(height: 4),
-                          Text(item.title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 2)
-                        ],
-                      ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(L('تصفح حسب التصنيف', 'Browse by Genre'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white))),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 110,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: SITE_CATEGORIES.length > 6 ? 6 : SITE_CATEGORIES.length,
+            itemBuilder: (ctx, i) {
+              final cat = SITE_CATEGORIES[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryListView(category: cat, scraper: scraper))),
+                child: Container(
+                  width: 160,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [categoryColor(cat), categoryColor(cat).withOpacity(0.3)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  );
-                },
-              ),
-            )
-          ],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(
+                    child: Text(
+                      AppSettings.shared.appLanguage == 'ar' ? cat.nameAr : cat.nameEn,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
-      )).toList(),
+      ],
+    );
+  }
+
+  Color categoryColor(SiteCategory cat) {
+    final n = cat.nameEn.toLowerCase();
+    if (n.contains('anime')) return Colors.purple;
+    if (n.contains('movie')) return Colors.blue;
+    if (n.contains('kids')) return Colors.orange;
+    if (n.contains('action')) return Colors.red;
+    if (n.contains('netflix')) return Colors.red;
+    if (n.contains('disney')) return Colors.cyan;
+    if (n.contains('hbo')) return Colors.indigo;
+    return AppSettings.shared.accentColor;
+  }
+
+  Widget _buildCategoryRow(BuildContext context, CategoryData c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Text(c.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  // الانتقال إلى عرض جميع العناصر لهذه الفئة
+                  final cat = SITE_CATEGORIES.firstWhere(
+                    (e) => e.remoteId == c.tagId,
+                    orElse: () => SiteCategory(id: c.tagId, remoteId: c.tagId, isTag: true, nameAr: c.name, nameEn: c.name),
+                  );
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryListView(category: cat, scraper: scraper)));
+                },
+                child: Text(
+                  L('عرض الكل', 'See All'),
+                  style: TextStyle(color: AppSettings.shared.accentColor, fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: c.items.length,
+            itemBuilder: (ctx, i) {
+              final item = c.items[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
+                child: Container(
+                  width: 120, margin: const EdgeInsets.only(right: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: 120, height: 176, fit: BoxFit.cover)),
+                      const SizedBox(height: 4),
+                      Text(item.title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 2)
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        )
+      ],
     );
   }
 }
@@ -2583,7 +2952,7 @@ with open("UTan_Flutter/lib/views/home_view.dart", "w", encoding="utf-8") as f:
     f.write(home_view_dart)
 
 # ============================================================
-# 17. lib/views/browse_search_settings.dart (Browse, Search, Downloads, Settings + Account, Comments, Feedback, Admin)
+# 17. lib/views/browse_search_settings.dart (Browse, Search, Downloads, Settings, Favorites, Lists, History)
 # ============================================================
 browse_search_settings_dart = """import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -2683,7 +3052,7 @@ class _CategoryListViewState extends State<CategoryListView> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: selectedSort,
-                    items: ['date', 'year', 'views', 'rating'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    items: ['date', 'year', 'views', 'rating'].map((s) => DropdownMenuItem(value: s, child: Text(L(s, s)))).toList(),
                     onChanged: (v) {
                       setState(() {
                         selectedSort = v!;
@@ -2749,7 +3118,7 @@ class _CategoryListViewState extends State<CategoryListView> {
   }
 }
 
-// ── Search View ──
+// ── Search View مع الفلاتر المتقدمة والترتيب ──
 class SearchView extends StatefulWidget {
   final MovieScraper scraper;
   const SearchView({Key? key, required this.scraper}) : super(key: key);
@@ -2761,6 +3130,18 @@ class _SearchViewState extends State<SearchView> {
   String title = "";
   List<VideoItem> results = [];
   bool searching = false;
+  bool showFilters = false;
+  String genre = "";
+  String type = "";
+  String year = "";
+  String imdbrate = "";
+  String language = "";
+  String director = "";
+  String cast = "";
+  String sortBy = 'title';
+  bool ascending = true;
+  Timer? _debounce;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2769,36 +3150,151 @@ class _SearchViewState extends State<SearchView> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: InputDecoration(hintText: L('بحث...', 'Search...'), filled: true, fillColor: Colors.white12, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), prefixIcon: const Icon(Icons.search, color: Colors.grey)),
-              style: const TextStyle(color: Colors.white),
-              onChanged: (v) {
-                setState(() => title = v);
-                _performSearch();
-              },
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: L('بحث...', 'Search...'),
+                      filled: true,
+                      fillColor: Colors.white12,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      suffixIcon: title.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () => setState(() { title = ""; results = []; }),
+                            )
+                          : null,
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    onChanged: (v) {
+                      setState(() => title = v);
+                      _debounce?.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 500), () => _performSearch());
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.filter_list, color: showFilters ? AppSettings.shared.accentColor : Colors.grey),
+                  onPressed: () => setState(() => showFilters = !showFilters),
+                ),
+              ],
             ),
           ),
+          if (showFilters)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(hintText: L('نوع', 'Genre'), hintStyle: TextStyle(color: Colors.grey)),
+                          style: TextStyle(color: Colors.white),
+                          onChanged: (v) => genre = v,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(hintText: L('السنة', 'Year'), hintStyle: TextStyle(color: Colors.grey)),
+                          style: TextStyle(color: Colors.white),
+                          onChanged: (v) => year = v,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(hintText: L('التقييم', 'Rating'), hintStyle: TextStyle(color: Colors.grey)),
+                          style: TextStyle(color: Colors.white),
+                          onChanged: (v) => imdbrate = v,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(hintText: L('اللغة', 'Language'), hintStyle: TextStyle(color: Colors.grey)),
+                          style: TextStyle(color: Colors.white),
+                          onChanged: (v) => language = v,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(hintText: L('المخرج', 'Director'), hintStyle: TextStyle(color: Colors.grey)),
+                          style: TextStyle(color: Colors.white),
+                          onChanged: (v) => director = v,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(hintText: L('الممثلين', 'Cast'), hintStyle: TextStyle(color: Colors.grey)),
+                          style: TextStyle(color: Colors.white),
+                          onChanged: (v) => cast = v,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: sortBy,
+                          items: ['title', 'year', 'rating'].map((s) => DropdownMenuItem(value: s, child: Text(L(s, s)))).toList(),
+                          onChanged: (v) { setState(() => sortBy = v!); _performSearch(); },
+                          style: TextStyle(color: Colors.white),
+                          dropdownColor: Colors.black,
+                          decoration: InputDecoration(labelText: L('ترتيب', 'Sort'), labelStyle: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(ascending ? Icons.arrow_upward : Icons.arrow_downward, color: Colors.white),
+                        onPressed: () { setState(() => ascending = !ascending); _performSearch(); },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: _performSearch,
+                    style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
+                    child: Text(L('بحث', 'Search'), style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: searching
                 ? const Center(child: CircularProgressIndicator())
-                : GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.7),
-                    itemCount: results.length,
-                    itemBuilder: (ctx, i) {
-                      final item = results[i];
-                      return GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                        child: Column(
-                          children: [
-                            ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: double.infinity, height: 160, fit: BoxFit.cover)),
-                            const SizedBox(height: 6),
-                            Text(item.title, style: TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                : results.isEmpty
+                    ? Center(child: Text(L('ابحث عن فيلم أو مسلسل', 'Search for a movie or series'), style: TextStyle(color: Colors.grey)))
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(12),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.7),
+                        itemCount: results.length,
+                        itemBuilder: (ctx, i) {
+                          final item = results[i];
+                          return GestureDetector(
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
+                            child: Column(
+                              children: [
+                                ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: double.infinity, height: 160, fit: BoxFit.cover)),
+                                const SizedBox(height: 6),
+                                Text(item.title, style: TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -2808,9 +3304,29 @@ class _SearchViewState extends State<SearchView> {
   void _performSearch() async {
     if (title.isEmpty) { setState(() => results = []); return; }
     setState(() => searching = true);
-    final items = await widget.scraper.advancedSearch(title: title);
+    final items = await widget.scraper.advancedSearch(
+      title: title,
+      genre: genre.isNotEmpty ? genre : null,
+      type: type.isNotEmpty ? type : null,
+      year: year.isNotEmpty ? year : null,
+      imdbrate: imdbrate.isNotEmpty ? imdbrate : null,
+      language: language.isNotEmpty ? language : null,
+      director: director.isNotEmpty ? director : null,
+      cast: cast.isNotEmpty ? cast : null,
+    );
+    // تطبيق الترتيب
+    List<VideoItem> sorted = items;
+    if (sortBy == 'title') {
+      sorted.sort((a, b) => ascending ? a.title.compareTo(b.title) : b.title.compareTo(a.title));
+    } else if (sortBy == 'year') {
+      sorted.sort((a, b) {
+        final y1 = int.tryParse(a.title.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        final y2 = int.tryParse(b.title.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        return ascending ? y1.compareTo(y2) : y2.compareTo(y1);
+      });
+    }
     setState(() {
-      results = items;
+      results = sorted;
       searching = false;
     });
   }
@@ -2837,8 +3353,16 @@ class DownloadsView extends StatelessWidget {
                 return ListTile(
                   leading: CachedNetworkImage(imageUrl: dl.imageUrl, width: 50, height: 70, fit: BoxFit.cover),
                   title: Text(dl.title, style: TextStyle(color: Colors.white)),
-                  subtitle: Text(dl.isCompleted ? L('مكتمل', 'Completed') : '${(dl.progress * 100).toInt()}%', style: TextStyle(color: Colors.grey)),
-                  trailing: IconButton(icon: Icon(Icons.cancel, color: Colors.red), onPressed: () => DownloadManager.shared.cancel(dl.id)),
+                  subtitle: Text(
+                    dl.isCompleted ? L('مكتمل', 'Completed') : '${(dl.progress * 100).toInt()}%',
+                    style: TextStyle(color: dl.isCompleted ? Colors.green : Colors.grey),
+                  ),
+                  trailing: dl.isDownloading
+                      ? const CircularProgressIndicator()
+                      : IconButton(
+                          icon: Icon(Icons.cancel, color: Colors.red),
+                          onPressed: () => DownloadManager.shared.cancel(dl.id),
+                        ),
                 );
               },
             ),
@@ -2846,9 +3370,8 @@ class DownloadsView extends StatelessWidget {
   }
 }
 
-// ── Settings View ──
+// ── Settings View مع عرض مصغر للقوائم والمفضلة والسجل ──
 class SettingsView extends StatelessWidget {
-  const SettingsView({Key? key}) : super(key: key);
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2865,21 +3388,20 @@ class SettingsView extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          ListTile(
-            title: Text(L('المفضلة', 'Favorites'), style: TextStyle(color: Colors.white)),
-            trailing: Text('${FavoritesStore.shared.items.length}', style: TextStyle(color: Colors.grey)),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FavoritesListView())),
-          ),
-          ListTile(
-            title: Text(L('قوائمي', 'My Lists'), style: TextStyle(color: Colors.white)),
-            trailing: Text('${WatchListStore.shared.lists.length}', style: TextStyle(color: Colors.grey)),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WatchListsView())),
-          ),
-          ListTile(
-            title: Text(L('السجل', 'History'), style: TextStyle(color: Colors.white)),
-            trailing: Text('${WatchProgressStore.shared.allEpisodes.length}', style: TextStyle(color: Colors.grey)),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryView())),
-          ),
+          // معلومات المستخدم والإحصائيات
+          _buildProfileHeader(context),
+          const Divider(color: Colors.white24),
+          // قوائمي
+          _buildSectionHeader(L('قوائمي', 'My Lists'), context, () => Navigator.push(context, MaterialPageRoute(builder: (_) => WatchListsView()))),
+          _buildListMiniature(context),
+          // المفضلة
+          _buildSectionHeader(L('المفضلة', 'Favorites'), context, () => Navigator.push(context, MaterialPageRoute(builder: (_) => FavoritesListView()))),
+          _buildFavoritesMiniature(context),
+          // السجل
+          _buildSectionHeader(L('السجل', 'History'), context, () => Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryView()))),
+          _buildHistoryMiniature(context),
+          const Divider(color: Colors.white24),
+          // إعدادات إضافية
           ListTile(
             title: Text(L('الشكاوى والاقتراحات', 'Feedback'), style: TextStyle(color: Colors.white)),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FeedbackView())),
@@ -2889,7 +3411,6 @@ class SettingsView extends StatelessWidget {
               title: Text(L('لوحة الإدارة', 'Admin Panel'), style: TextStyle(color: Colors.orange)),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelView())),
             ),
-          const Divider(color: Colors.white24),
           SwitchListTile(
             title: Text(L('اللغة', 'Language'), style: TextStyle(color: Colors.white)),
             value: AppSettings.shared.appLanguage == 'en',
@@ -2951,6 +3472,179 @@ class SettingsView extends StatelessWidget {
               onTap: () => AuthSession.shared.signOut(),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProfileHeader(BuildContext context) {
+    final user = AuthSession.shared.user;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: AppSettings.shared.accentColor,
+            child: Text(user?.displayName[0] ?? 'U', style: TextStyle(fontSize: 24, color: Colors.white)),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user?.displayName ?? L('زائر', 'Guest'), style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(user?.email ?? '', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _statChip(FavoritesStore.shared.items.length, L('مفضلة', 'Favorites')),
+                    const SizedBox(width: 12),
+                    _statChip(WatchProgressStore.shared.allEpisodes.length, L('مشاهدات', 'Watched')),
+                    const SizedBox(width: 12),
+                    _statChip(DownloadManager.shared.activeDownloads.length, L('تنزيلات', 'Downloads')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(int count, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white12,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text('$count $label', style: TextStyle(color: Colors.white70, fontSize: 11)),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, BuildContext context, VoidCallback onTap) {
+    return ListTile(
+      title: Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      trailing: Text(L('عرض الكل', 'See All'), style: TextStyle(color: AppSettings.shared.accentColor)),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildListMiniature(BuildContext context) {
+    final lists = WatchListStore.shared.lists.take(3).toList();
+    return Container(
+      height: 120,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: lists.length,
+        itemBuilder: (ctx, i) {
+          final list = lists[i];
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WatchListDetailView(list: list))),
+            child: Container(
+              width: 100,
+              margin: const EdgeInsets.only(right: 10),
+              child: Column(
+                children: [
+                  Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white12,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Icon(Icons.list_alt, color: Colors.white54),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(list.name, style: TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFavoritesMiniature(BuildContext context) {
+    final items = FavoritesStore.shared.items.take(3).toList();
+    return Container(
+      height: 120,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        itemBuilder: (ctx, i) {
+          final item = items[i];
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
+            child: Container(
+              width: 80,
+              margin: const EdgeInsets.only(right: 10),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: item.imageUrl,
+                      width: 80,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(item.title, style: TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHistoryMiniature(BuildContext context) {
+    final episodes = WatchProgressStore.shared.recent.take(3).toList();
+    return Container(
+      height: 120,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: episodes.length,
+        itemBuilder: (ctx, i) {
+          final p = episodes[i];
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPlayerView(data: PlayerData(
+              itemId: p.itemId, itemTitle: p.title, itemImageUrl: p.imageUrl, isMovie: p.isMovie,
+              videoUrl: p.videoUrl, videoUrl720: p.videoUrl720, videoUrl1080: p.videoUrl1080,
+              videoUrl360: p.videoUrl360, videoUrl4k: p.videoUrl4k,
+              subtitleUrl: p.subtitleUrl, subtitleVttUrl: p.subtitleVttUrl,
+              episodeId: p.episodeId, episodeTitle: p.episodeTitle
+            )))),
+            child: Container(
+              width: 80,
+              margin: const EdgeInsets.only(right: 10),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: p.imageUrl,
+                      width: 80,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(p.title, style: TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -3149,16 +3843,18 @@ with open("UTan_Flutter/lib/views/browse_search_settings.dart", "w", encoding="u
     f.write(browse_search_settings_dart)
 
 # ============================================================
-# 18. lib/views/details_view.dart
+# 18. lib/views/details_view.dart (مع تعليقات حقيقية، مشاركة، متابعة المشاهدة)
 # ============================================================
 details_view_dart = """import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/scraper.dart';
 import '../models/models.dart';
 import '../stores/app_settings.dart';
 import '../stores/favorites_store.dart';
 import '../stores/watchlist_store.dart';
+import '../services/supabase_manager.dart';
 import 'player_view.dart';
 
 class DetailsView extends StatefulWidget {
@@ -3175,6 +3871,13 @@ class _DetailsViewState extends State<DetailsView> {
   bool loading = true;
   String selectedSeason = "";
   String? error;
+  bool synopsisExpanded = false;
+
+  // التعليقات
+  List<CommentItem> comments = [];
+  bool commentsLoading = true;
+  final TextEditingController _commentController = TextEditingController();
+  bool _isPosting = false;
 
   @override
   void initState() {
@@ -3193,8 +3896,41 @@ class _DetailsViewState extends State<DetailsView> {
           selectedSeason = d.sortedSeasons.isNotEmpty ? d.sortedSeasons.first : "";
           loading = false;
         });
+        _loadComments();
       }
     }
+  }
+
+  void _loadComments() async {
+    setState(() => commentsLoading = true);
+    final items = await SupabaseManager.shared.fetchComments(widget.itemId);
+    setState(() {
+      comments = items;
+      commentsLoading = false;
+    });
+  }
+
+  void _postComment() async {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+    if (!AuthSession.shared.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(L('يجب تسجيل الدخول لإضافة تعليق', 'Please login to comment'))),
+      );
+      return;
+    }
+    setState(() => _isPosting = true);
+    final success = await SupabaseManager.shared.postComment(widget.itemId, text);
+    setState(() => _isPosting = false);
+    if (success) {
+      _commentController.clear();
+      _loadComments();
+    }
+  }
+
+  void _deleteComment(String id) async {
+    final success = await SupabaseManager.shared.deleteComment(id);
+    if (success) _loadComments();
   }
 
   @override
@@ -3220,6 +3956,7 @@ class _DetailsViewState extends State<DetailsView> {
 
     final d = details!;
     final w = MediaQuery.of(context).size.width;
+    final latestProg = WatchProgressStore.shared.progressFor(widget.itemId);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -3254,6 +3991,22 @@ class _DetailsViewState extends State<DetailsView> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  // زر متابعة المشاهدة
+                  if (latestProg != null && latestProg.progressSeconds > 30)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        if (d.isMovie) {
+                          _playMovie(d);
+                        } else if (d.episodeWithId(latestProg.episodeId) != null) {
+                          _playEpisode(d, d.episodeWithId(latestProg.episodeId)!);
+                        }
+                      },
+                      icon: Icon(Icons.play_arrow, color: Colors.black),
+                      label: Text(L('متابعة المشاهدة', 'Continue Watching'), style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.white, minimumSize: const Size(double.infinity, 46)),
+                    ),
+                  const SizedBox(height: 10),
+                  // زر التشغيل الرئيسي
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.white, minimumSize: const Size(double.infinity, 46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                     onPressed: () {
@@ -3275,19 +4028,38 @@ class _DetailsViewState extends State<DetailsView> {
                         setState((){});
                       }),
                       _actionBtn(Icons.add_to_photos, L('قائمة', 'List'), () => _showAddToList(context, d)),
-                      if (d.isMovie) _actionBtn(Icons.download, L('تنزيل', 'Download'), () {}),
-                      _actionBtn(Icons.share, L('مشاركة', 'Share'), () {}),
+                      if (d.isMovie) _actionBtn(Icons.download, L('تنزيل', 'Download'), () {
+                        DownloadManager.shared.startDownload(
+                          item: VideoItem(id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: 'movies'),
+                          isMovie: true, vUrl: d.movieUrl, sUrl: d.movieSubtitleUrl
+                        );
+                      }),
+                      _actionBtn(Icons.share, L('مشاركة', 'Share'), () {
+                        Share.share('${d.title}\\nhttps://movie.vodu.me/index.php?do=view&type=post&id=${widget.itemId}');
+                      }),
                     ],
                   ),
                   const SizedBox(height: 20),
                   if (d.synopsis.isNotEmpty) ...[
                     Text(L('القصة', 'Synopsis'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                     const SizedBox(height: 8),
-                    Text(d.synopsis, style: const TextStyle(color: Colors.white70, height: 1.5)),
+                    Text(
+                      d.synopsis,
+                      style: const TextStyle(color: Colors.white70, height: 1.5),
+                      maxLines: synopsisExpanded ? null : 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => synopsisExpanded = !synopsisExpanded),
+                      child: Text(
+                        synopsisExpanded ? L('عرض أقل', 'Show less') : L('عرض المزيد', 'Read more'),
+                        style: TextStyle(color: AppSettings.shared.accentColor),
+                      ),
+                    ),
                     const SizedBox(height: 20),
                   ],
-                  // Comments section (مبسط)
-                  _buildComments(context),
+                  // التعليقات الحقيقية
+                  _buildCommentsSection(context),
                 ],
               ),
             ),
@@ -3321,13 +4093,31 @@ class _DetailsViewState extends State<DetailsView> {
                 ),
               ),
               const SizedBox(height: 12),
-              ...d.seasonsDict[selectedSeason]!.map((ep) => ListTile(
-                onTap: () => _playEpisode(d, ep),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: CachedNetworkImage(imageUrl: d.imageUrl, width: 100, height: 60, fit: BoxFit.cover)),
-                title: Text(ep.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                trailing: const Icon(Icons.download, color: Colors.grey),
-              )).toList(),
+              ...d.seasonsDict[selectedSeason]!.map((ep) {
+                final prog = WatchProgressStore.shared.progressFor(widget.itemId, ep.id);
+                return ListTile(
+                  onTap: () => _playEpisode(d, ep),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  leading: Stack(
+                    children: [
+                      ClipRRect(borderRadius: BorderRadius.circular(8), child: CachedNetworkImage(imageUrl: d.imageUrl, width: 100, height: 60, fit: BoxFit.cover)),
+                      if (prog != null)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: LinearProgressIndicator(
+                            value: prog.durationSeconds > 0 ? prog.progressSeconds / prog.durationSeconds : 0,
+                            color: AppSettings.shared.accentColor,
+                            backgroundColor: Colors.white30,
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Text(ep.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                  trailing: Icon(Icons.download, color: Colors.grey),
+                );
+              }).toList(),
               const SizedBox(height: 40),
             ]
           ],
@@ -3404,38 +4194,65 @@ class _DetailsViewState extends State<DetailsView> {
     );
   }
 
-  Widget _buildComments(BuildContext context) {
+  Widget _buildCommentsSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(L('التعليقات', 'Comments'), style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
-          child: Column(
-            children: [
-              TextField(
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _commentController,
                 decoration: InputDecoration(
                   hintText: L('أضف تعليقاً...', 'Add a comment...'),
                   hintStyle: TextStyle(color: Colors.grey),
-                  border: InputBorder.none,
+                  filled: true,
+                  fillColor: Colors.white10,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                 ),
                 style: TextStyle(color: Colors.white),
               ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  child: Text(L('نشر', 'Post')),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            _isPosting
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: _postComment,
+                    child: Text(L('نشر', 'Post')),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
+                  ),
+          ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        commentsLoading
+            ? const Center(child: CircularProgressIndicator())
+            : comments.isEmpty
+                ? Text(L('لا توجد تعليقات بعد', 'No comments yet'), style: TextStyle(color: Colors.grey))
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: comments.length,
+                    itemBuilder: (ctx, i) {
+                      final c = comments[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppSettings.shared.accentColor,
+                          child: Text(c.displayName[0], style: TextStyle(color: Colors.white)),
+                        ),
+                        title: Text(c.displayName, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        subtitle: Text('${c.text}\\n${c.formattedDate}', style: TextStyle(color: Colors.white70)),
+                        trailing: (AuthSession.shared.user?.id == c.userId)
+                            ? IconButton(
+                                icon: Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _deleteComment(c.id),
+                              )
+                            : null,
+                      );
+                    },
+                  ),
+        const SizedBox(height: 20),
       ],
     );
   }
@@ -3445,10 +4262,11 @@ with open("UTan_Flutter/lib/views/details_view.dart", "w", encoding="utf-8") as 
     f.write(details_view_dart)
 
 # ============================================================
-# 19. lib/views/account_view.dart (تسجيل الدخول، إنشاء حساب، الملف الشخصي، الشكاوى، الإدارة)
+# 19. lib/views/account_view.dart (مع Google OAuth)
 # ============================================================
 account_view_dart = """import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../stores/app_settings.dart';
 import '../services/supabase_manager.dart';
 import '../models/models.dart';
@@ -3522,10 +4340,21 @@ class _AccountViewState extends State<AccountView> {
             const SizedBox(height: 24),
             _loading
                 ? const CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _submit,
-                    style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: AppSettings.shared.accentColor),
-                    child: Text(_isSignUp ? L('إنشاء حساب', 'Create') : L('تسجيل الدخول', 'Sign In'), style: TextStyle(color: Colors.white)),
+                : Column(
+                    children: [
+                      ElevatedButton(
+                        onPressed: _submit,
+                        style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: AppSettings.shared.accentColor),
+                        child: Text(_isSignUp ? L('إنشاء حساب', 'Create') : L('تسجيل الدخول', 'Sign In'), style: TextStyle(color: Colors.white)),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _signInWithGoogle,
+                        style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: Colors.white),
+                        icon: Icon(Icons.g_mobiledata, color: Colors.black),
+                        label: Text(L('تسجيل الدخول عبر Google', 'Sign in with Google'), style: TextStyle(color: Colors.black)),
+                      ),
+                    ],
                   ),
             const SizedBox(height: 12),
             TextButton(
@@ -3603,9 +4432,19 @@ class _AccountViewState extends State<AccountView> {
       Navigator.pop(context);
     }
   }
+
+  void _signInWithGoogle() async {
+    try {
+      await SupabaseManager.shared.signInWithGoogle();
+      // بعد العودة من المتصفح، يجب التعامل مع الـ deep link في الـ main activity
+      // سيتم استدعاء handleOAuthCallback هناك
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
 }
 
-// ── Feedback View ──
+// ── Feedback View (نفسه السابق) ──
 class FeedbackView extends StatefulWidget {
   @override
   _FeedbackViewState createState() => _FeedbackViewState();
@@ -3728,7 +4567,7 @@ class AdminPanelView extends StatefulWidget {
 class _AdminPanelViewState extends State<AdminPanelView> {
   List<FeedbackItem> _allFeedback = [];
   bool _loading = true;
-  String _filter = 'all'; // all, open, resolved
+  String _filter = 'all';
 
   @override
   void initState() {
@@ -3809,4 +4648,5 @@ print("   - كل ميزات تطبيق iOS تم نقلها حرفياً.")
 print("   - آلية بروكسي تعمل كـ fallback عند فشل الاتصال المباشر.")
 print("   - إعدادات الترجمة، التشغيل التلقائي، المفضلة، القوائم، السجل، التعليقات، الشكاوى، لوحة الإدارة.")
 print("   - جميع الملفات كاملة وغير منقوصة.")
+print("   - التعليقات والتنزيلات والمشاركة حقيقية.")
 print("   - قم بتشغيل الأمر: flutter pub get && flutter run")
