@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       
@@ -56,10 +56,16 @@ jobs:
           EOF
           python fix_gradle.py
       
-      - name: Start Android Emulator and Build
-        uses: reactivecircus/android-emulator-runner@v2
+      - name: Build APK
+        working-directory: ./build_project
+        run: |
+          flutter pub get
+          flutter build apk --release
+      
+      - uses: actions/upload-artifact@v4
         with:
-          api-level: 30
+          name: release-apk
+          path: build_project/build/app/outputs/flutter-apk/app-release.apk          api-level: 30
           target: google_apis
           arch: x86_64
           profile: Nexus 6
