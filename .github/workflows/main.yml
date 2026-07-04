@@ -28,13 +28,13 @@ jobs:
 
       - name: Debug - List generated files
         run: |
-          echo "Checking for utan_flutter directory:"
+          echo "Checking for UTan_Flutter directory:"
           ls -la
-          if [ -d "utan_flutter" ]; then
-            echo "Contents of utan_flutter:"
-            find utan_flutter -type f
+          if [ -d "UTan_Flutter" ]; then
+            echo "Contents of UTan_Flutter:"
+            find UTan_Flutter -type f
           else
-            echo "utan_flutter directory not found!"
+            echo "UTan_Flutter directory not found!"
           fi
       
       - name: Set up Flutter
@@ -49,8 +49,8 @@ jobs:
       - name: Copy generated code
         run: |
           rm -rf build_project/lib/*
-          cp -r utan_flutter/lib/* build_project/lib/
-          cp utan_flutter/pubspec.yaml build_project/
+          cp -r UTan_Flutter/lib/* build_project/lib/
+          cp UTan_Flutter/pubspec.yaml build_project/
       
       - name: Fix Android build configuration
         run: |
