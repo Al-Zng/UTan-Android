@@ -67,11 +67,11 @@ jobs:
           EOF
           python fix_gradle.py
       
-      - name: Build APK (for x86 emulator)
+      - name: Build APK (fat APK)
         working-directory: ./build_project
         run: |
           flutter pub get
-          flutter build apk --release --target-platform android-x86
+          flutter build apk --release
       
       - uses: actions/upload-artifact@v4
         with:
