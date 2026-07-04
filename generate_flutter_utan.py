@@ -3823,6 +3823,8 @@ import '../stores/favorites_store.dart';
 import '../stores/watchlist_store.dart';
 import '../services/supabase_manager.dart';
 import 'player_view.dart';
+import '../stores/watch_progress_store.dart';
+import '../services/download_manager.dart';
 
 class DetailsView extends StatefulWidget {
   final String itemId;
