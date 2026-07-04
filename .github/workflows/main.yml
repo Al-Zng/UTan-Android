@@ -25,6 +25,17 @@ jobs:
       
       - name: Generate Flutter project
         run: python generate_flutter_utan.py
+
+      - name: Debug - List generated files
+        run: |
+          echo "Checking for utan_flutter directory:"
+          ls -la
+          if [ -d "utan_flutter" ]; then
+            echo "Contents of utan_flutter:"
+            find utan_flutter -type f
+          else
+            echo "utan_flutter directory not found!"
+          fi
       
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
