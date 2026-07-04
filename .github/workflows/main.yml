@@ -10,7 +10,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # ===== التعديل الأول: تمكين Git LFS =====
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
       
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -46,11 +50,13 @@ jobs:
       - name: Create fresh Flutter project
         run: flutter create --project-name utan_app build_project
       
+      # ===== التعديل الثاني: نسخ مجلد assets أيضاً =====
       - name: Copy generated code
         run: |
           rm -rf build_project/lib/*
           cp -r UTan_Flutter/lib/* build_project/lib/
           cp UTan_Flutter/pubspec.yaml build_project/
+          cp -r UTan_Flutter/assets build_project/
       
       - name: Fix Android build configuration
         run: |
