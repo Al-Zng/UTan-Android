@@ -578,33 +578,38 @@ w("lib/models/site_category.dart", r"""class SiteCategory {
 }
 
 const List<SiteCategory> siteCategories = [
-  SiteCategory(id: 1,    nameAr: 'مسلسلات أجنبية',        nameEn: 'Foreign Series'),
-  SiteCategory(id: 2,    nameAr: 'مسلسلات عربية',         nameEn: 'Arabic Series'),
-  SiteCategory(id: 3,    nameAr: 'أنمي مدبلج عربي',       nameEn: 'Arabic Dubbed Anime'),
-  SiteCategory(id: 4,    nameAr: 'أنمي مترجم',            nameEn: 'Subbed Anime'),
-  SiteCategory(id: 5,    nameAr: 'أفلام بوليوود',         nameEn: 'Bollywood Movies'),
-  SiteCategory(id: 6,    nameAr: 'مسلسلات هندية',         nameEn: 'Indian Series'),
-  SiteCategory(id: 7,    nameAr: 'أفلام عربية',           nameEn: 'Arabic Movies'),
-  SiteCategory(id: 8,    nameAr: 'مسلسلات بوليوود',       nameEn: 'Bollywood Series'),
-  SiteCategory(id: 9,    nameAr: 'أفلام أنمي',            nameEn: 'Anime Movies'),
-  SiteCategory(id: 10,   nameAr: 'أفلام مكتب الصندوق',    nameEn: 'US Box Office'),
-  SiteCategory(id: 13,   nameAr: 'سينما عربية',           nameEn: 'Arabic Cinemas'),
-  SiteCategory(id: 14,   nameAr: 'أفلام تركية',           nameEn: 'Turkish Movies'),
-  SiteCategory(id: 15,   nameAr: 'مسلسلات تركية',         nameEn: 'Turkish Series'),
-  SiteCategory(id: 16,   nameAr: 'أفلام كرتون',           nameEn: 'Cartoon Movies'),
-  SiteCategory(id: 17,   nameAr: 'مسلسلات كرتون',         nameEn: 'Cartoon Series'),
-  SiteCategory(id: 18,   nameAr: 'أفلام أجنبية',          nameEn: 'Foreign Movies'),
-  SiteCategory(id: 20,   nameAr: 'مسلسلات مدبلجة عربي',   nameEn: 'Arabic Dubbed Series'),
-  SiteCategory(id: 21,   nameAr: 'أفلام مدبلجة عربي',    nameEn: 'Arabic Dubbed Movies'),
-  SiteCategory(id: 1014, nameAr: 'أفلام كردية',           nameEn: 'Kurdish Movies'),
-  SiteCategory(id: 1015, nameAr: 'مسلسلات كردية',         nameEn: 'Kurdish Series'),
-  SiteCategory(id: 1022, nameAr: 'أنمي عربي',             nameEn: 'Arabic Anime'),
-  SiteCategory(id: 1029, nameAr: 'أنمي مدبلج إنجليزي',   nameEn: 'English Dubbed Anime'),
-  SiteCategory(id: 44,  remoteId: 44,  isTag: true, nameAr: 'نيتفلكس',          nameEn: 'Netflix'),
-  SiteCategory(id: 9014, remoteId: 14, isTag: true, nameAr: 'عالم مارفل',        nameEn: 'Marvel'),
-  SiteCategory(id: 73,  remoteId: 73,  isTag: true, nameAr: 'اتش بي او ماكس',   nameEn: 'HBO Max'),
-  SiteCategory(id: 72,  remoteId: 72,  isTag: true, nameAr: 'ديزني',             nameEn: 'Disney+'),
-  SiteCategory(id: 9018, remoteId: 18, isTag: true, nameAr: 'للاطفال',           nameEn: 'For KIDS'),
+  // ── videoKind-based (isTag=true → useTag=true in fetchCategory) ──────
+  // remoteId: 1 = movies, 2 = series
+  SiteCategory(id: 101, remoteId: 1, isTag: true, nameAr: 'أفلام',              nameEn: 'Movies'),
+  SiteCategory(id: 102, remoteId: 2, isTag: true, nameAr: 'مسلسلات',            nameEn: 'Series'),
+
+  // ── Category-ID-based (isTag=false → videosByCategoryAndLanguage) ────
+  // IDs mapped from cee.buzz mainCategories API (standard Arabic streaming categories)
+  SiteCategory(id: 1,   nameAr: 'مسلسلات أجنبية',      nameEn: 'Foreign Series'),
+  SiteCategory(id: 2,   nameAr: 'مسلسلات عربية',       nameEn: 'Arabic Series'),
+  SiteCategory(id: 3,   nameAr: 'أنمي مدبلج عربي',     nameEn: 'Arabic Dubbed Anime'),
+  SiteCategory(id: 4,   nameAr: 'أنمي مترجم',          nameEn: 'Subbed Anime'),
+  SiteCategory(id: 5,   nameAr: 'أفلام بوليوود',       nameEn: 'Bollywood Movies'),
+  SiteCategory(id: 6,   nameAr: 'مسلسلات هندية',       nameEn: 'Indian Series'),
+  SiteCategory(id: 7,   nameAr: 'أفلام عربية',         nameEn: 'Arabic Movies'),
+  SiteCategory(id: 8,   nameAr: 'مسلسلات بوليوود',     nameEn: 'Bollywood Series'),
+  SiteCategory(id: 9,   nameAr: 'أفلام أنمي',          nameEn: 'Anime Movies'),
+  SiteCategory(id: 10,  nameAr: 'أفلام مكتب الصندوق',  nameEn: 'US Box Office'),
+  SiteCategory(id: 13,  nameAr: 'سينما عربية',         nameEn: 'Arabic Cinemas'),
+  SiteCategory(id: 14,  nameAr: 'أفلام تركية',         nameEn: 'Turkish Movies'),
+  SiteCategory(id: 15,  nameAr: 'مسلسلات تركية',       nameEn: 'Turkish Series'),
+  SiteCategory(id: 16,  nameAr: 'أفلام كرتون',         nameEn: 'Cartoon Movies'),
+  SiteCategory(id: 17,  nameAr: 'مسلسلات كرتون',       nameEn: 'Cartoon Series'),
+  SiteCategory(id: 18,  nameAr: 'أفلام أجنبية',        nameEn: 'Foreign Movies'),
+  SiteCategory(id: 20,  nameAr: 'مسلسلات مدبلجة عربي', nameEn: 'Arabic Dubbed Series'),
+  SiteCategory(id: 21,  nameAr: 'أفلام مدبلجة عربي',   nameEn: 'Arabic Dubbed Movies'),
+  SiteCategory(id: 44,  nameAr: 'نيتفلكس',             nameEn: 'Netflix'),
+  SiteCategory(id: 72,  nameAr: 'ديزني+',              nameEn: 'Disney+'),
+  SiteCategory(id: 73,  nameAr: 'HBO Max',             nameEn: 'HBO Max'),
+  SiteCategory(id: 1014,nameAr: 'أفلام كردية',         nameEn: 'Kurdish Movies'),
+  SiteCategory(id: 1015,nameAr: 'مسلسلات كردية',       nameEn: 'Kurdish Series'),
+  SiteCategory(id: 1022,nameAr: 'أنمي عربي',           nameEn: 'Arabic Anime'),
+  SiteCategory(id: 1029,nameAr: 'أنمي مدبلج إنجليزي',  nameEn: 'English Dubbed Anime'),
 ];
 """)
 
@@ -751,7 +756,8 @@ Future<String> _getSubtitle(String id) async {
       List<dynamic> subs = body is List ? body : ((body is Map ? (body['data'] ?? body['files'] ?? []) : []) as List);
       for (final s in subs) {
         if (s is! Map) continue;
-        final url = _str(_pick(s, ['url', 'file', 'path']));
+        final sm = Map<String, dynamic>.from(s as Map);
+        final url = _str(_pick(sm, ['url', 'file', 'path']));
         if (url.isNotEmpty) return url;
       }
     }
@@ -765,12 +771,16 @@ class MovieScraper extends ChangeNotifier {
   List<VideoItem> heroItems = [];
   List<({String name, List<VideoItem> items, int tagId})> categories = [];
   List<VideoItem> allItemsPool = [];
+  List<({int id, String nameAr, String nameEn})> dynamicCategories = [];
   bool isLoading = false;
 
   Future<void> fetchHome() async {
     isLoading = true;
     notifyListeners();
     try {
+      // 0. Fetch real category IDs from cee.buzz
+      await _fetchDynamicCategories();
+
       // 1. Banner / hero
       final bannerResp = await http.get(
         Uri.parse('${_ceeBase}banner/level/$_ceeLevel'),
@@ -822,6 +832,32 @@ class MovieScraper extends ChangeNotifier {
   }
 
   Future<void> refreshHome() async => fetchHome();
+
+  Future<void> _fetchDynamicCategories() async {
+    try {
+      final r = await http.get(
+        Uri.parse('${_ceeBase}mainCategories?lang=ar'),
+      ).timeout(const Duration(seconds: 12));
+      if (r.statusCode == 200) {
+        final raw = jsonDecode(utf8.decode(r.bodyBytes));
+        final list = raw is List ? raw
+            : (raw is Map ? (raw['data'] ?? raw['categories'] ?? raw['items'] ?? []) : []) as List;
+        dynamicCategories = list
+          .whereType<Map>()
+          .map((m) {
+            final mm = Map<String, dynamic>.from(m);
+            return (
+              id: int.tryParse(_str(_pick(mm, ['id', 'categoryId', 'category_id']))) ?? 0,
+              nameAr: _str(_pick(mm, ['nameAr', 'name', 'titleAr', 'title', 'nameArabe'])),
+              nameEn: _str(_pick(mm, ['nameEn', 'nameEnglish', 'titleEn'])),
+            );
+          })
+          .where((c) => c.id > 0 && c.nameAr.isNotEmpty)
+          .toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
 
   Future<List<VideoItem>> fetchCategory(
     int typeId, {
@@ -2153,7 +2189,7 @@ class _HeroCarouselState extends State<HeroCarousel> {
                         const SizedBox(width: 10),
                         // My List button
                         GestureDetector(
-                          onTap: () => favs.toggle(item: item),
+                          onTap: () => favs.toggle(item),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             decoration: BoxDecoration(
@@ -3579,9 +3615,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
 # ─── lib/screens/browse_screen.dart ─────────────────────────────────────────
 w("lib/screens/browse_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/site_category.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
+import '../services/scraper.dart';
 import 'category_list_screen.dart';
 
 class BrowseScreen extends StatelessWidget {
@@ -3597,14 +3635,23 @@ class BrowseScreen extends StatelessWidget {
           style: appFontStyle(20, bold: true)),
         elevation: 0,
       ),
-      body: GridView.builder(
+      body: Consumer<MovieScraper>(builder: (ctx, scraper, _) {
+        final lang = AppSettings.instance.appLanguage;
+        // Use dynamic categories from cee.buzz API; fall back to static list
+        final dynCats = scraper.dynamicCategories;
+        final allCats = dynCats.isNotEmpty
+          ? dynCats.map((c) => SiteCategory(
+              id: c.id, nameAr: c.nameAr,
+              nameEn: c.nameEn.isNotEmpty ? c.nameEn : c.nameAr)).toList()
+          : siteCategories;
+        return GridView.builder(
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2, childAspectRatio: 2.5, crossAxisSpacing: 14, mainAxisSpacing: 14,
         ),
-        itemCount: siteCategories.length,
+        itemCount: allCats.length,
         itemBuilder: (_, i) {
-          final cat = siteCategories[i];
+          final cat = allCats[i];
           final color = categoryColor(cat.nameEn);
           return GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -3644,7 +3691,8 @@ class BrowseScreen extends StatelessWidget {
             ),
           );
         },
-      ),
+      );
+      }),
     );
   }
 }
