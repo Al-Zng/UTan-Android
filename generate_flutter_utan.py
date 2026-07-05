@@ -1,269 +1,386 @@
-import os
+import os, sys
 
-# إنشاء هيكل المجلدات
-os.makedirs("UTan_Flutter/lib", exist_ok=True)
-os.makedirs("UTan_Flutter/lib/models", exist_ok=True)
-os.makedirs("UTan_Flutter/lib/services", exist_ok=True)
-os.makedirs("UTan_Flutter/lib/stores", exist_ok=True)
-os.makedirs("UTan_Flutter/lib/views", exist_ok=True)
-os.makedirs("UTan_Flutter/lib/views/widgets", exist_ok=True)
-os.makedirs("UTan_Flutter/assets/fonts", exist_ok=True)
-os.makedirs("UTan_Flutter/assets/images", exist_ok=True)
+BASE = "UTan_Flutter"
+DIRS = [
+    f"{BASE}/lib/models",
+    f"{BASE}/lib/services",
+    f"{BASE}/lib/providers",
+    f"{BASE}/lib/screens",
+    f"{BASE}/lib/widgets",
+    f"{BASE}/lib/player",
+    f"{BASE}/assets/fonts",
+    f"{BASE}/assets/images",
+    ".github/workflows",
+]
+for d in DIRS:
+    os.makedirs(d, exist_ok=True)
 
-# ============================================================
-# 1. pubspec.yaml (تمت إزالة flutter_downloader)
-# ============================================================
-pubspec_yaml = """name: utan_flutter
-description: تطبيق UTan لمشاهدة الأفلام والمسلسلات.
+def w(rel_path, content):
+    full = os.path.join(BASE, rel_path) if not rel_path.startswith(".") else rel_path
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "w", encoding="utf-8") as f:
+        f.write(content)
+
+print("✅ Directories created")
+
+# ─── .github/workflows/main.yml ─────────────────────────────────────────────
+w(".github/workflows/main.yml", """name: Build UTan Flutter APK
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: UTan_Flutter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build apk --release --no-shrink
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: UTan_Flutter/build/app/outputs/flutter-apk/app-release.apk
+""")
+
+# ─── pubspec.yaml ───────────────────────────────────────────────────────────
+w("pubspec.yaml", """name: utan_flutter
+description: UTan Video Streaming App – Arabic/English
 publish_to: 'none'
 version: 5.0.0+5
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: '>=3.22.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.1.0
-  shared_preferences: ^2.2.1
-  flutter_secure_storage: ^9.0.0
-  cached_network_image: ^3.3.0
-  video_player: ^2.7.2
-  path_provider: ^2.1.1
-  volume_controller: ^2.0.7
-  screen_brightness: ^0.2.2
-  provider: ^6.0.5
-  url_launcher: ^6.1.14
-  connectivity_plus: ^5.0.1
-  flutter_svg: ^2.0.9
-  intl: ^0.18.1
-  image_picker: ^1.0.4
-  share_plus: ^7.2.1
-  permission_handler: ^11.0.1
+  provider: ^6.1.2
+  http: ^1.2.1
+  cached_network_image: ^3.3.1
+  shared_preferences: ^2.3.0
+  video_player: ^2.8.6
+  chewie: ^1.8.1
+  intl: ^0.19.0
+  wakelock_plus: ^1.2.8
+  url_launcher: ^6.3.0
+  path_provider: ^2.1.3
+  flutter_cache_manager: ^3.4.1
+  supabase_flutter: ^2.5.3
+  google_sign_in: ^6.2.1
+  rxdart: ^0.28.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/
+
   fonts:
-    - family: ExpoArabic
-      fonts:
-        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf
-          weight: 700
     - family: Cairo
       fonts:
         - asset: assets/fonts/Cairo.ttf
+          weight: 400
         - asset: assets/fonts/Cairo-Bold-1.ttf
           weight: 700
     - family: Rubik
       fonts:
         - asset: assets/fonts/Rubik.ttf
+          weight: 400
         - asset: assets/fonts/Rubik-Bold.ttf
           weight: 700
-    - family: Ibm
+    - family: IBMPlexArabic
       fonts:
         - asset: assets/fonts/Ibm.ttf
+          weight: 400
         - asset: assets/fonts/IBMPlexArabic-Bold.ttf
           weight: 700
-"""
-with open("UTan_Flutter/pubspec.yaml", "w", encoding="utf-8") as f:
-    f.write(pubspec_yaml)
+    - family: ExpoArabic
+      fonts:
+        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.ttf
+          weight: 700
+""")
 
-# ============================================================
-# 2. lib/main.dart
-# ============================================================
-main_dart = """import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'stores/app_settings.dart';
-import 'stores/watch_progress_store.dart';
-import 'stores/favorites_store.dart';
-import 'stores/watchlist_store.dart';
-import 'services/supabase_manager.dart';
-import 'services/download_manager.dart';
-import 'services/connectivity_service.dart';
-import 'views/main_tab_view.dart';
+print("✅ pubspec.yaml + workflow written")
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await AppSettings.shared.init();
-  await WatchProgressStore.shared.init();
-  await WatchListStore.shared.init();
-  await FavoritesStore.shared.init();
-  await DownloadManager.shared.init();
-  await AuthSession.shared.init();
-  await ConnectivityService.shared.init();
+# ─── lib/app_colors.dart ────────────────────────────────────────────────────
+w("lib/app_colors.dart", r"""import 'package:flutter/material.dart';
+import 'app_settings.dart';
 
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-  
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: AppSettings.shared),
-        ChangeNotifierProvider.value(value: WatchProgressStore.shared),
-        ChangeNotifierProvider.value(value: FavoritesStore.shared),
-        ChangeNotifierProvider.value(value: WatchListStore.shared),
-        ChangeNotifierProvider.value(value: DownloadManager.shared),
-        ChangeNotifierProvider.value(value: AuthSession.shared),
-        ChangeNotifierProvider.value(value: ConnectivityService.shared),
-      ],
-      child: const UTanApp(),
-    ),
+// ─── Dynamic background based on selected theme ──────────────────────────
+Color appBg() {
+  switch (AppSettings.instance.appTheme) {
+    case 'amoled':
+      return Colors.black;
+    case 'dark_blue':
+      return const Color.fromRGBO(5, 10, 31, 1);
+    case 'dark_purple':
+      return const Color.fromRGBO(13, 5, 28, 1);
+    default:
+      return Colors.black;
+  }
+}
+
+// ─── Dynamic accent color ─────────────────────────────────────────────────
+Color utRed() {
+  switch (AppSettings.instance.accentColorName) {
+    case 'blue':
+      return const Color.fromRGBO(26, 102, 230, 1);
+    case 'orange':
+      return const Color.fromRGBO(242, 115, 13, 1);
+    case 'green':
+      return const Color.fromRGBO(26, 199, 89, 1);
+    case 'pink':
+      return const Color.fromRGBO(230, 51, 140, 1);
+    default:
+      return const Color.fromRGBO(227, 10, 20, 1); // red (default)
+  }
+}
+
+const Color utWhite = Colors.white;
+const Color utSurface = Color(0x1FFFFFFF);
+
+// ─── L() localisation helper ─────────────────────────────────────────────
+String L(String ar, String en) =>
+    AppSettings.instance.appLanguage == 'en' ? en : ar;
+
+// ─── App Font helper ─────────────────────────────────────────────────────
+TextStyle appFontStyle(double size, {bool bold = false, Color? color}) {
+  return TextStyle(
+    fontFamily: 'ExpoArabic',
+    fontSize: size,
+    fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+    color: color ?? Colors.white,
   );
 }
 
-class UTanApp extends StatelessWidget {
-  const UTanApp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = Provider.of<AppSettings>(context);
-    return MaterialApp(
-      title: 'UTan',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: settings.appBgColor,
-        primaryColor: settings.accentColor,
-        fontFamily: settings.appLanguage == 'ar' ? 'ExpoArabic' : 'System',
-      ),
-      builder: (context, child) {
-        return Directionality(
-          textDirection: settings.appLanguage == 'en' ? TextDirection.ltr : TextDirection.rtl,
-          child: child!,
-        );
-      },
-      home: const MainTabView(),
-    );
+TextStyle subtitleFontStyle(String fontName, double size, {Color? color}) {
+  String family;
+  switch (fontName.toLowerCase()) {
+    case 'ibm':
+      family = 'IBMPlexArabic';
+      break;
+    case 'rubik':
+      family = 'Rubik';
+      break;
+    case 'cairo':
+      family = 'Cairo';
+      break;
+    case 'expo':
+      family = 'ExpoArabic';
+      break;
+    default:
+      family = 'Cairo';
   }
+  return TextStyle(
+    fontFamily: family,
+    fontSize: size,
+    fontWeight: FontWeight.w700,
+    color: color ?? Colors.white,
+  );
 }
-"""
-with open("UTan_Flutter/lib/main.dart", "w", encoding="utf-8") as f:
-    f.write(main_dart)
 
-# ============================================================
-# 3. lib/stores/app_settings.dart
-# ============================================================
-app_settings_dart = """import 'package:flutter/material.dart';
+// ─── Category color/icon helpers ─────────────────────────────────────────
+Color categoryColor(String nameEn) {
+  final n = nameEn.toLowerCase();
+  if (n.contains('anime')) return Colors.purple;
+  if (n.contains('movie')) return Colors.blue;
+  if (n.contains('kids') || n.contains('cartoon')) return Colors.orange;
+  if (n.contains('action')) return Colors.red;
+  if (n.contains('horror')) return const Color(0xFF800000);
+  if (n.contains('comedy')) return Colors.yellow;
+  if (n.contains('romance')) return Colors.pink;
+  if (n.contains('korean') || n.contains('asian')) return Colors.pink;
+  if (n.contains('netflix')) return Colors.red;
+  if (n.contains('disney')) return Colors.cyan;
+  if (n.contains('ramadan')) return const Color(0xFF997A00);
+  if (n.contains('turkish')) return Colors.teal;
+  if (n.contains('arabic')) return Colors.amber;
+  if (n.contains('marvel')) return Colors.red.shade800;
+  if (n.contains('hbo')) return Colors.purple.shade700;
+  return utRed();
+}
+
+IconData categoryIcon(String nameEn) {
+  final n = nameEn.toLowerCase();
+  if (n.contains('anime')) return Icons.auto_awesome;
+  if (n.contains('movie')) return Icons.movie_filter;
+  if (n.contains('series') || n.contains('tv')) return Icons.tv;
+  if (n.contains('kids') || n.contains('cartoon')) return Icons.child_care;
+  if (n.contains('action')) return Icons.bolt;
+  if (n.contains('korean') || n.contains('asian')) return Icons.language;
+  if (n.contains('netflix')) return Icons.n_mobiledata;
+  if (n.contains('disney')) return Icons.waving_hand;
+  if (n.contains('document')) return Icons.article;
+  if (n.contains('turkish')) return Icons.nightlight;
+  if (n.contains('ramadan')) return Icons.cruelty_free;
+  if (n.contains('horror')) return Icons.dark_mode;
+  if (n.contains('comedy')) return Icons.sentiment_very_satisfied;
+  if (n.contains('romance')) return Icons.favorite;
+  if (n.contains('arabic')) return Icons.translate;
+  if (n.contains('marvel')) return Icons.shield;
+  if (n.contains('hbo')) return Icons.hd;
+  return Icons.play_circle_fill;
+}
+
+// ─── Color from hex ────────────────────────────────────────────────────────
+Color colorFromHex(String hex) {
+  final cleaned = hex.replaceAll('#', '');
+  if (cleaned.length == 6) {
+    return Color(int.parse('FF$cleaned', radix: 16));
+  }
+  if (cleaned.length == 8) {
+    return Color(int.parse(cleaned, radix: 16));
+  }
+  return Colors.white;
+}
+
+String formatTime(double seconds) {
+  if (seconds.isNaN || seconds.isInfinite) return '00:00';
+  final h = seconds ~/ 3600;
+  final m = (seconds % 3600) ~/ 60;
+  final s = seconds % 60;
+  if (h > 0) {
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toInt().toString().padLeft(2, '0')}';
+  }
+  return '${m.toString().padLeft(2, '0')}:${s.toInt().toString().padLeft(2, '0')}';
+}
+""")
+
+print("✅ app_colors.dart written")
+
+# ─── lib/app_settings.dart ─────────────────────────────────────────────────
+w("lib/app_settings.dart", r"""import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettings extends ChangeNotifier {
-  static final AppSettings shared = AppSettings._internal();
-  AppSettings._internal();
-  
+  static final AppSettings instance = AppSettings._();
+  AppSettings._();
+
   late SharedPreferences _prefs;
-  
+
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
   }
 
+  // ── Subtitle settings ───────────────────────────────────────────
   double get subtitleFontSize => _prefs.getDouble('sub_fontSize') ?? 22.0;
-  set subtitleFontSize(double value) { _prefs.setDouble('sub_fontSize', value); notifyListeners(); }
+  set subtitleFontSize(double v) { _prefs.setDouble('sub_fontSize', v); notifyListeners(); }
 
   String get subtitleColorHex => _prefs.getString('sub_colorHex') ?? '#FFFFFF';
-  set subtitleColorHex(String value) { _prefs.setString('sub_colorHex', value); notifyListeners(); }
+  set subtitleColorHex(String v) { _prefs.setString('sub_colorHex', v); notifyListeners(); }
 
   double get subtitleBgOpacity => _prefs.getDouble('sub_bgOpacity') ?? 0.6;
-  set subtitleBgOpacity(double value) { _prefs.setDouble('sub_bgOpacity', value); notifyListeners(); }
+  set subtitleBgOpacity(double v) { _prefs.setDouble('sub_bgOpacity', v); notifyListeners(); }
 
   double get subtitleBottomPad => _prefs.getDouble('sub_bottomPad') ?? 60.0;
-  set subtitleBottomPad(double value) { _prefs.setDouble('sub_bottomPad', value); notifyListeners(); }
+  set subtitleBottomPad(double v) { _prefs.setDouble('sub_bottomPad', v); notifyListeners(); }
 
   bool get subtitlesEnabled => _prefs.getBool('sub_enabled') ?? true;
-  set subtitlesEnabled(bool value) { _prefs.setBool('sub_enabled', value); notifyListeners(); }
+  set subtitlesEnabled(bool v) { _prefs.setBool('sub_enabled', v); notifyListeners(); }
 
   String get subtitleFontName => _prefs.getString('sub_fontName') ?? 'Cairo';
-  set subtitleFontName(String value) { _prefs.setString('sub_fontName', value); notifyListeners(); }
+  set subtitleFontName(String v) { _prefs.setString('sub_fontName', v); notifyListeners(); }
 
   double get subtitleDelay => _prefs.getDouble('sub_delay') ?? 0.0;
-  set subtitleDelay(double value) { _prefs.setDouble('sub_delay', value); notifyListeners(); }
+  set subtitleDelay(double v) { _prefs.setDouble('sub_delay', v); notifyListeners(); }
 
+  // ── Autoplay settings ───────────────────────────────────────────
   bool get autoPlayNextEnabled => _prefs.getBool('autoplay_next') ?? true;
-  set autoPlayNextEnabled(bool value) { _prefs.setBool('autoplay_next', value); notifyListeners(); }
+  set autoPlayNextEnabled(bool v) { _prefs.setBool('autoplay_next', v); notifyListeners(); }
 
   int get autoPlayCountdownSeconds => _prefs.getInt('autoplay_countdown') ?? 10;
-  set autoPlayCountdownSeconds(int value) { _prefs.setInt('autoplay_countdown', value); notifyListeners(); }
+  set autoPlayCountdownSeconds(int v) { _prefs.setInt('autoplay_countdown', v); notifyListeners(); }
 
-  String get preferredQuality => _prefs.getString('pref_quality') ?? 'تلقائي';
-  set preferredQuality(String value) { _prefs.setString('pref_quality', value); notifyListeners(); }
+  // ── Quality preference ──────────────────────────────────────────
+  String get preferredQuality => _prefs.getString('pref_quality') ?? 'auto';
+  set preferredQuality(String v) { _prefs.setString('pref_quality', v); notifyListeners(); }
 
+  // ── WiFi-only downloads ─────────────────────────────────────────
   bool get downloadOverWifiOnly => _prefs.getBool('download_wifi_only') ?? false;
-  set downloadOverWifiOnly(bool value) { _prefs.setBool('download_wifi_only', value); notifyListeners(); }
+  set downloadOverWifiOnly(bool v) { _prefs.setBool('download_wifi_only', v); notifyListeners(); }
 
+  // ── Language ────────────────────────────────────────────────────
   String get appLanguage => _prefs.getString('app_language') ?? 'ar';
-  set appLanguage(String value) { _prefs.setString('app_language', value); notifyListeners(); }
+  set appLanguage(String v) { _prefs.setString('app_language', v); notifyListeners(); }
 
+  // ── Theme ────────────────────────────────────────────────────────
   String get appTheme => _prefs.getString('app_theme') ?? 'amoled';
-  set appTheme(String value) { _prefs.setString('app_theme', value); notifyListeners(); }
+  set appTheme(String v) { _prefs.setString('app_theme', v); notifyListeners(); }
 
+  // ── Accent color ─────────────────────────────────────────────────
   String get accentColorName => _prefs.getString('accent_color') ?? 'red';
-  set accentColorName(String value) { _prefs.setString('accent_color', value); notifyListeners(); }
+  set accentColorName(String v) { _prefs.setString('accent_color', v); notifyListeners(); }
 
+  // ── Grid size ────────────────────────────────────────────────────
   String get gridSizeStr => _prefs.getString('grid_size') ?? 'medium';
-  set gridSizeStr(String value) { _prefs.setString('grid_size', value); notifyListeners(); }
+  set gridSizeStr(String v) { _prefs.setString('grid_size', v); notifyListeners(); }
 
-  Color get appBgColor {
-    switch (appTheme) {
-      case 'dark': return const Color(0xFF121212);
-      case 'amoled': return const Color(0xFF000000);
-      case 'dark_blue': return const Color(0xFF020C24);
-      case 'dark_purple': return const Color(0xFF0D021C);
-      default: return const Color(0xFF000000);
+  double get posterMinWidth {
+    switch (gridSizeStr) {
+      case 'small': return 90;
+      case 'large': return 150;
+      default: return 110;
     }
-  }
-
-  Color get accentColor {
-    switch (accentColorName) {
-      case 'blue': return const Color.fromRGBO(25, 102, 229, 1);
-      case 'orange': return const Color.fromRGBO(242, 115, 13, 1);
-      case 'green': return const Color.fromRGBO(25, 199, 89, 1);
-      case 'pink': return const Color.fromRGBO(229, 51, 140, 1);
-      default: return const Color.fromRGBO(227, 10, 20, 1);
-    }
-  }
-
-  Color get subtitleColor {
-    String hex = subtitleColorHex.replaceAll('#', '');
-    if (hex.length == 6) hex = 'FF' + hex;
-    return Color(int.parse(hex, radix: 16));
   }
 
   void clearCache() {
     notifyListeners();
   }
-
-  double get defaultSubtitleDelay => _prefs.getDouble('sub_delay_saved_default') ?? 0.0;
-  set defaultSubtitleDelay(double value) { _prefs.setDouble('sub_delay_saved_default', value); notifyListeners(); }
 }
+""")
 
-String L(String ar, String en) {
-  return AppSettings.shared.appLanguage == 'en' ? en : ar;
-}
+print("✅ app_settings.dart written")
 
-const String UT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
-"""
-with open("UTan_Flutter/lib/stores/app_settings.dart", "w", encoding="utf-8") as f:
-    f.write(app_settings_dart)
-
-# ============================================================
-# 4. lib/models/models.dart (مع إصلاح episodeWithId)
-# ============================================================
-models_dart = """import 'dart:convert';
-import 'package:intl/intl.dart';
-
-class VideoItem {
+# ─── lib/models/video_item.dart ──────────────────────────────────────────────
+w("lib/models/video_item.dart", r"""class VideoItem {
   final String id;
   final String title;
   final String imageUrl;
   final String type;
 
-  VideoItem({required this.id, required this.title, required this.imageUrl, required this.type});
+  const VideoItem({
+    required this.id,
+    required this.title,
+    required this.imageUrl,
+    required this.type,
+  });
 
-  factory VideoItem.fromJson(Map<String, dynamic> json) => VideoItem(
-    id: json['id'], title: json['title'], imageUrl: json['imageUrl'], type: json['type']
+  factory VideoItem.fromJson(Map<String, dynamic> j) => VideoItem(
+    id: j['id'] as String? ?? '',
+    title: j['title'] as String? ?? '',
+    imageUrl: j['image_url'] as String? ?? '',
+    type: j['type'] as String? ?? 'post',
   );
-  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'imageUrl': imageUrl, 'type': type};
-}
 
-class EpisodeItem {
+  Map<String, dynamic> toJson() => {
+    'id': id, 'title': title, 'image_url': imageUrl, 'type': type,
+  };
+
+  @override bool operator ==(Object o) => o is VideoItem && o.id == id;
+  @override int get hashCode => id.hashCode;
+}
+""")
+
+# ─── lib/models/episode_item.dart ───────────────────────────────────────────
+w("lib/models/episode_item.dart", r"""class EpisodeItem {
   final String id;
   final String title;
   final String url;
@@ -274,84 +391,123 @@ class EpisodeItem {
   final String subtitleUrl;
   final String subtitleVttUrl;
 
-  EpisodeItem({
-    required this.id, required this.title, required this.url, required this.url720, 
-    required this.url1080, required this.url360, required this.url4k, 
-    required this.subtitleUrl, required this.subtitleVttUrl
+  const EpisodeItem({
+    required this.id,
+    required this.title,
+    required this.url,
+    this.url720 = '',
+    this.url1080 = '',
+    this.url360 = '',
+    this.url4k = '',
+    this.subtitleUrl = '',
+    this.subtitleVttUrl = '',
   });
 
   String get season {
-    final rx = RegExp(r'(?i)(S\d+|موسم \d+)');
-    final match = rx.firstMatch(title);
-    if (match != null) {
-      return match.group(1)!.replaceAll('s', 'S').replaceAll('S', 'الموسم ');
+    final rx = RegExp(r'(S\d+|\u0645\u0648\u0633\u0645 \d+)', caseSensitive: false);
+    final m = rx.firstMatch(title);
+    if (m != null) {
+      return m.group(0)!.replaceAll(RegExp(r'[Ss]'), '\u0627\u0644\u0645\u0648\u0633\u0645 ');
     }
-    return "الموسم 1";
+    return '\u0627\u0644\u0645\u0648\u0633\u0645 1';
   }
 
   int? get episodeNumber {
-    final rx = RegExp(r'(?i)E(\d+)');
-    final match = rx.firstMatch(title);
-    if (match != null && match.groupCount >= 1) {
-      return int.tryParse(match.group(1)!);
-    }
+    final rx = RegExp(r'E(\d+)', caseSensitive: false);
+    final m = rx.firstMatch(title);
+    if (m != null) return int.tryParse(m.group(1)!);
     return null;
   }
+
+  @override bool operator ==(Object o) => o is EpisodeItem && o.id == id;
+  @override int get hashCode => id.hashCode;
 }
+""")
+
+# ─── lib/models/media_details.dart ──────────────────────────────────────────
+w("lib/models/media_details.dart", r"""import 'episode_item.dart';
 
 class MediaDetails {
-  String title = "";
-  String imageUrl = "";
-  String year = "";
-  String genre = "";
-  String rating = "";
-  String runtime = "";
-  String synopsis = "";
-  bool isMovie = true;
-  String movieUrl = "";
-  String movieUrl720 = "";
-  String movieUrl1080 = "";
-  String movieUrl360 = "";
-  String movieUrl4k = "";
-  String movieSubtitleUrl = "";
-  String movieSubtitleVttUrl = "";
-  List<EpisodeItem> episodes = [];
+  String title;
+  String imageUrl;
+  String year;
+  String genre;
+  String rating;
+  String runtime;
+  String synopsis;
+  bool isMovie;
+  String movieUrl;
+  String movieUrl720;
+  String movieUrl1080;
+  String movieUrl360;
+  String movieUrl4k;
+  String movieSubtitleUrl;
+  String movieSubtitleVttUrl;
+  List<EpisodeItem> episodes;
+
+  MediaDetails({
+    this.title = '',
+    this.imageUrl = '',
+    this.year = '',
+    this.genre = '',
+    this.rating = '',
+    this.runtime = '',
+    this.synopsis = '',
+    this.isMovie = true,
+    this.movieUrl = '',
+    this.movieUrl720 = '',
+    this.movieUrl1080 = '',
+    this.movieUrl360 = '',
+    this.movieUrl4k = '',
+    this.movieSubtitleUrl = '',
+    this.movieSubtitleVttUrl = '',
+    this.episodes = const [],
+  });
 
   Map<String, List<EpisodeItem>> get seasonsDict {
-    Map<String, List<EpisodeItem>> dict = {};
-    for (var ep in episodes) {
-      if (!dict.containsKey(ep.season)) dict[ep.season] = [];
-      dict[ep.season]!.add(ep);
+    final map = <String, List<EpisodeItem>>{};
+    for (final ep in episodes) {
+      map.putIfAbsent(ep.season, () => []).add(ep);
     }
-    return dict;
+    return map;
   }
 
   List<String> get sortedSeasons {
-    var keys = seasonsDict.keys.toList();
-    keys.sort((s1, s2) {
-      int n1 = int.tryParse(s1.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-      int n2 = int.tryParse(s2.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-      return n1.compareTo(n2);
-    });
-    return keys;
+    return seasonsDict.keys.toList()
+      ..sort((a, b) {
+        final na = int.tryParse(a.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+        final nb = int.tryParse(b.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+        return na.compareTo(nb);
+      });
   }
 
   EpisodeItem? nextEpisode(String episodeId) {
-    int idx = episodes.indexWhere((e) => e.id == episodeId);
+    final idx = episodes.indexWhere((e) => e.id == episodeId);
     if (idx == -1 || idx + 1 >= episodes.length) return null;
     return episodes[idx + 1];
   }
 
-  EpisodeItem? episodeWithId(String id) {
-    try {
-      return episodes.firstWhere((e) => e.id == id);
-    } catch (_) {
-      return null;
-    }
-  }
+  EpisodeItem? episode(String id) =>
+      episodes.where((e) => e.id == id).firstOrNull;
 }
+""")
 
-class WatchProgress {
+# ─── lib/models/subtitle_cue.dart ───────────────────────────────────────────
+w("lib/models/subtitle_cue.dart", r"""class SubtitleCue {
+  final double startTime;
+  final double endTime;
+  final String text;
+
+  const SubtitleCue({
+    required this.startTime,
+    required this.endTime,
+    required this.text,
+  });
+}
+""")
+
+# ─── lib/models/watch_progress.dart ─────────────────────────────────────────
+w("lib/models/watch_progress.dart", r"""class WatchProgress {
   final String itemId;
   final String title;
   final String imageUrl;
@@ -369,32 +525,67 @@ class WatchProgress {
   final String subtitleVttUrl;
   final bool isMovie;
 
-  WatchProgress({
-    required this.itemId, required this.title, required this.imageUrl,
-    required this.episodeId, required this.episodeTitle,
-    required this.progressSeconds, required this.durationSeconds, required this.updatedAt,
-    this.videoUrl = "", this.videoUrl720 = "", this.videoUrl1080 = "",
-    this.videoUrl360 = "", this.videoUrl4k = "", this.subtitleUrl = "",
-    this.subtitleVttUrl = "", this.isMovie = true
+  const WatchProgress({
+    required this.itemId,
+    required this.title,
+    required this.imageUrl,
+    required this.episodeId,
+    required this.episodeTitle,
+    required this.progressSeconds,
+    required this.durationSeconds,
+    required this.updatedAt,
+    this.videoUrl = '',
+    this.videoUrl720 = '',
+    this.videoUrl1080 = '',
+    this.videoUrl360 = '',
+    this.videoUrl4k = '',
+    this.subtitleUrl = '',
+    this.subtitleVttUrl = '',
+    this.isMovie = true,
   });
 
-  factory WatchProgress.fromJson(Map<String, dynamic> json) => WatchProgress(
-    itemId: json['itemId'], title: json['title'], imageUrl: json['imageUrl'],
-    episodeId: json['episodeId'], episodeTitle: json['episodeTitle'],
-    progressSeconds: json['progressSeconds'].toDouble(), durationSeconds: json['durationSeconds'].toDouble(),
-    updatedAt: DateTime.parse(json['updatedAt']),
-    videoUrl: json['videoUrl'] ?? '', videoUrl720: json['videoUrl720'] ?? '', videoUrl1080: json['videoUrl1080'] ?? '',
-    videoUrl360: json['videoUrl360'] ?? '', videoUrl4k: json['videoUrl4k'] ?? '',
-    subtitleUrl: json['subtitleUrl'] ?? '', subtitleVttUrl: json['subtitleVttUrl'] ?? '', isMovie: json['isMovie'] ?? true
-  );
+  static String progressKey(String itemId, String episodeId) {
+    final eid = episodeId.trim();
+    if (eid.isEmpty || eid == itemId) return itemId;
+    return '${itemId}__$eid';
+  }
 
   Map<String, dynamic> toJson() => {
-    'itemId': itemId, 'title': title, 'imageUrl': imageUrl, 'episodeId': episodeId, 'episodeTitle': episodeTitle,
-    'progressSeconds': progressSeconds, 'durationSeconds': durationSeconds, 'updatedAt': updatedAt.toIso8601String(),
-    'videoUrl': videoUrl, 'videoUrl720': videoUrl720, 'videoUrl1080': videoUrl1080, 'videoUrl360': videoUrl360,
-    'videoUrl4k': videoUrl4k, 'subtitleUrl': subtitleUrl, 'subtitleVttUrl': subtitleVttUrl, 'isMovie': isMovie
+    'itemId': itemId, 'title': title, 'imageUrl': imageUrl,
+    'episodeId': episodeId, 'episodeTitle': episodeTitle,
+    'progressSeconds': progressSeconds, 'durationSeconds': durationSeconds,
+    'updatedAt': updatedAt.toIso8601String(),
+    'videoUrl': videoUrl, 'videoUrl720': videoUrl720,
+    'videoUrl1080': videoUrl1080, 'videoUrl360': videoUrl360,
+    'videoUrl4k': videoUrl4k,
+    'subtitleUrl': subtitleUrl, 'subtitleVttUrl': subtitleVttUrl,
+    'isMovie': isMovie,
   };
+
+  factory WatchProgress.fromJson(Map<String, dynamic> j) => WatchProgress(
+    itemId: j['itemId'] as String? ?? '',
+    title: j['title'] as String? ?? '',
+    imageUrl: j['imageUrl'] as String? ?? '',
+    episodeId: j['episodeId'] as String? ?? '',
+    episodeTitle: j['episodeTitle'] as String? ?? '',
+    progressSeconds: (j['progressSeconds'] as num?)?.toDouble() ?? 0,
+    durationSeconds: (j['durationSeconds'] as num?)?.toDouble() ?? 0,
+    updatedAt: DateTime.tryParse(j['updatedAt'] as String? ?? '') ?? DateTime.now(),
+    videoUrl: j['videoUrl'] as String? ?? '',
+    videoUrl720: j['videoUrl720'] as String? ?? '',
+    videoUrl1080: j['videoUrl1080'] as String? ?? '',
+    videoUrl360: j['videoUrl360'] as String? ?? '',
+    videoUrl4k: j['videoUrl4k'] as String? ?? '',
+    subtitleUrl: j['subtitleUrl'] as String? ?? '',
+    subtitleVttUrl: j['subtitleVttUrl'] as String? ?? '',
+    isMovie: j['isMovie'] as bool? ?? true,
+  );
 }
+""")
+
+# ─── lib/models/watch_list.dart ─────────────────────────────────────────────
+w("lib/models/watch_list.dart", r"""import 'dart:convert';
+import 'video_item.dart';
 
 class WatchListItem {
   final String id;
@@ -403,12 +594,32 @@ class WatchListItem {
   final String type;
   final DateTime addedAt;
 
-  WatchListItem({required this.id, required this.title, required this.imageUrl, required this.type, required this.addedAt});
-  
-  factory WatchListItem.fromJson(Map<String, dynamic> json) => WatchListItem(
-    id: json['id'], title: json['title'], imageUrl: json['imageUrl'], type: json['type'], addedAt: DateTime.parse(json['addedAt'])
+  WatchListItem.fromVideo(VideoItem v)
+      : id = v.id,
+        title = v.title,
+        imageUrl = v.imageUrl,
+        type = v.type,
+        addedAt = DateTime.now();
+
+  WatchListItem({
+    required this.id, required this.title,
+    required this.imageUrl, required this.type,
+    required this.addedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'title': title, 'imageUrl': imageUrl,
+    'type': type, 'addedAt': addedAt.toIso8601String(),
+  };
+
+  factory WatchListItem.fromJson(Map<String, dynamic> j) => WatchListItem(
+    id: j['id'] as String, title: j['title'] as String,
+    imageUrl: j['imageUrl'] as String, type: j['type'] as String,
+    addedAt: DateTime.tryParse(j['addedAt'] as String? ?? '') ?? DateTime.now(),
   );
-  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'imageUrl': imageUrl, 'type': type, 'addedAt': addedAt.toIso8601String()};
+
+  @override bool operator ==(Object o) => o is WatchListItem && o.id == id;
+  @override int get hashCode => id.hashCode;
 }
 
 class WatchList {
@@ -418,65 +629,84 @@ class WatchList {
   List<WatchListItem> items;
   DateTime createdAt;
 
-  WatchList({required this.id, required this.name, this.isPrivate = true, this.items = const [], required this.createdAt});
+  WatchList({
+    required this.id, required this.name,
+    this.isPrivate = true,
+    this.items = const [],
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 
-  factory WatchList.fromJson(Map<String, dynamic> json) => WatchList(
-    id: json['id'], name: json['name'], isPrivate: json['isPrivate'],
-    items: (json['items'] as List).map((i) => WatchListItem.fromJson(i)).toList(),
-    createdAt: DateTime.parse(json['createdAt'])
+  List<String> get posterUrls => items.take(4).map((i) => i.imageUrl).toList();
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'name': name, 'isPrivate': isPrivate,
+    'items': items.map((i) => i.toJson()).toList(),
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory WatchList.fromJson(Map<String, dynamic> j) => WatchList(
+    id: j['id'] as String, name: j['name'] as String,
+    isPrivate: j['isPrivate'] as bool? ?? true,
+    items: (j['items'] as List<dynamic>? ?? [])
+        .map((e) => WatchListItem.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ?? DateTime.now(),
   );
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'isPrivate': isPrivate, 'items': items.map((e) => e.toJson()).toList(), 'createdAt': createdAt.toIso8601String()};
-  
-  List<String> get posterUrls => items.take(4).map((e) => e.imageUrl).toList();
+}
+""")
+
+# ─── lib/models/site_category.dart ──────────────────────────────────────────
+w("lib/models/site_category.dart", r"""class SiteCategory {
+  final int id;
+  final int remoteId;
+  final bool isTag;
+  final String nameAr;
+  final String nameEn;
+
+  const SiteCategory({
+    required this.id,
+    int? remoteId,
+    this.isTag = false,
+    required this.nameAr,
+    required this.nameEn,
+  }) : remoteId = remoteId ?? id;
+
+  String localizedName(String lang) => lang == 'en' ? nameEn : nameAr;
 }
 
-class SupabaseUser {
-  final String id;
-  final String? email;
-  final Map<String, dynamic>? userMetadata;
+const List<SiteCategory> siteCategories = [
+  SiteCategory(id: 1,    nameAr: 'مسلسلات أجنبية',        nameEn: 'Foreign Series'),
+  SiteCategory(id: 2,    nameAr: 'مسلسلات عربية',         nameEn: 'Arabic Series'),
+  SiteCategory(id: 3,    nameAr: 'أنمي مدبلج عربي',       nameEn: 'Arabic Dubbed Anime'),
+  SiteCategory(id: 4,    nameAr: 'أنمي مترجم',            nameEn: 'Subbed Anime'),
+  SiteCategory(id: 5,    nameAr: 'أفلام بوليوود',         nameEn: 'Bollywood Movies'),
+  SiteCategory(id: 6,    nameAr: 'مسلسلات هندية',         nameEn: 'Indian Series'),
+  SiteCategory(id: 7,    nameAr: 'أفلام عربية',           nameEn: 'Arabic Movies'),
+  SiteCategory(id: 8,    nameAr: 'مسلسلات بوليوود',       nameEn: 'Bollywood Series'),
+  SiteCategory(id: 9,    nameAr: 'أفلام أنمي',            nameEn: 'Anime Movies'),
+  SiteCategory(id: 10,   nameAr: 'أفلام مكتب الصندوق',    nameEn: 'US Box Office'),
+  SiteCategory(id: 13,   nameAr: 'سينما عربية',           nameEn: 'Arabic Cinemas'),
+  SiteCategory(id: 14,   nameAr: 'أفلام تركية',           nameEn: 'Turkish Movies'),
+  SiteCategory(id: 15,   nameAr: 'مسلسلات تركية',         nameEn: 'Turkish Series'),
+  SiteCategory(id: 16,   nameAr: 'أفلام كرتون',           nameEn: 'Cartoon Movies'),
+  SiteCategory(id: 17,   nameAr: 'مسلسلات كرتون',         nameEn: 'Cartoon Series'),
+  SiteCategory(id: 18,   nameAr: 'أفلام أجنبية',          nameEn: 'Foreign Movies'),
+  SiteCategory(id: 20,   nameAr: 'مسلسلات مدبلجة عربي',   nameEn: 'Arabic Dubbed Series'),
+  SiteCategory(id: 21,   nameAr: 'أفلام مدبلجة عربي',    nameEn: 'Arabic Dubbed Movies'),
+  SiteCategory(id: 1014, nameAr: 'أفلام كردية',           nameEn: 'Kurdish Movies'),
+  SiteCategory(id: 1015, nameAr: 'مسلسلات كردية',         nameEn: 'Kurdish Series'),
+  SiteCategory(id: 1022, nameAr: 'أنمي عربي',             nameEn: 'Arabic Anime'),
+  SiteCategory(id: 1029, nameAr: 'أنمي مدبلج إنجليزي',   nameEn: 'English Dubbed Anime'),
+  SiteCategory(id: 44,  remoteId: 44,  isTag: true, nameAr: 'نيتفلكس',          nameEn: 'Netflix'),
+  SiteCategory(id: 9014, remoteId: 14, isTag: true, nameAr: 'عالم مارفل',        nameEn: 'Marvel'),
+  SiteCategory(id: 73,  remoteId: 73,  isTag: true, nameAr: 'اتش بي او ماكس',   nameEn: 'HBO Max'),
+  SiteCategory(id: 72,  remoteId: 72,  isTag: true, nameAr: 'ديزني',             nameEn: 'Disney+'),
+  SiteCategory(id: 9018, remoteId: 18, isTag: true, nameAr: 'للاطفال',           nameEn: 'For KIDS'),
+];
+""")
 
-  SupabaseUser({required this.id, this.email, this.userMetadata});
-  
-  String get displayName {
-    if (userMetadata != null && userMetadata!['display_name'] != null && userMetadata!['display_name'].toString().isNotEmpty) {
-      return userMetadata!['display_name'];
-    }
-    return email?.split('@').first ?? 'مستخدم';
-  }
-
-  factory SupabaseUser.fromJson(Map<String, dynamic> json) => SupabaseUser(
-    id: json['id'], email: json['email'], userMetadata: json['user_metadata']
-  );
-  Map<String, dynamic> toJson() => {'id': id, 'email': email, 'user_metadata': userMetadata};
-}
-
-class CommentItem {
-  final String id;
-  final String itemId;
-  final String userId;
-  final String displayName;
-  final String text;
-  final DateTime createdAt;
-
-  CommentItem({required this.id, required this.itemId, required this.userId, required this.displayName, required this.text, required this.createdAt});
-
-  factory CommentItem.fromJson(Map<String, dynamic> json) => CommentItem(
-    id: json['id'], itemId: json['item_id'], userId: json['user_id'],
-    displayName: json['display_name'], text: json['text'],
-    createdAt: DateTime.parse(json['created_at'])
-  );
-
-  String get formattedDate {
-    final now = DateTime.now();
-    final diff = now.difference(createdAt);
-    if (diff.inDays > 0) return '${diff.inDays} يوم';
-    if (diff.inHours > 0) return '${diff.inHours} ساعة';
-    if (diff.inMinutes > 0) return '${diff.inMinutes} دقيقة';
-    return 'الآن';
-  }
-}
-
-class FeedbackItem {
+# ─── lib/models/feedback_item.dart ──────────────────────────────────────────
+w("lib/models/feedback_item.dart", r"""class FeedbackItem {
   final String id;
   final String userId;
   final String displayName;
@@ -484,1140 +714,423 @@ class FeedbackItem {
   final String type;
   final String message;
   final String status;
-  final DateTime createdAt;
+  final String createdAt;
 
-  FeedbackItem({required this.id, required this.userId, required this.displayName, this.email, required this.type, required this.message, required this.status, required this.createdAt});
-
-  factory FeedbackItem.fromJson(Map<String, dynamic> json) => FeedbackItem(
-    id: json['id'], userId: json['user_id'], displayName: json['display_name'],
-    email: json['email'], type: json['type'], message: json['message'],
-    status: json['status'], createdAt: DateTime.parse(json['created_at'])
-  );
+  const FeedbackItem({
+    required this.id, required this.userId, required this.displayName,
+    this.email, required this.type, required this.message,
+    required this.status, required this.createdAt,
+  });
 
   bool get isComplaint => type == 'complaint';
 
-  String get formattedDate {
-    final now = DateTime.now();
-    final diff = now.difference(createdAt);
-    if (diff.inDays > 0) return '${diff.inDays} يوم';
-    if (diff.inHours > 0) return '${diff.inHours} ساعة';
-    if (diff.inMinutes > 0) return '${diff.inMinutes} دقيقة';
-    return 'الآن';
-  }
+  factory FeedbackItem.fromJson(Map<String, dynamic> j) => FeedbackItem(
+    id: j['id'] as String, userId: j['user_id'] as String,
+    displayName: j['display_name'] as String, email: j['email'] as String?,
+    type: j['type'] as String, message: j['message'] as String,
+    status: j['status'] as String? ?? 'open',
+    createdAt: j['created_at'] as String? ?? '',
+  );
 }
-"""
-with open("UTan_Flutter/lib/models/models.dart", "w", encoding="utf-8") as f:
-    f.write(models_dart)
+""")
 
-# ============================================================
-# 5. lib/stores/watch_progress_store.dart (مع إضافة import 'dart:async')
-# ============================================================
-watch_progress_store_dart = """import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/models.dart';
-import '../services/supabase_manager.dart';
+# ─── lib/models/comment_item.dart ───────────────────────────────────────────
+w("lib/models/comment_item.dart", r"""class CommentItem {
+  final String id;
+  final String itemId;
+  final String userId;
+  final String displayName;
+  final String text;
+  final String createdAt;
 
-class WatchProgressStore extends ChangeNotifier {
-  static final WatchProgressStore shared = WatchProgressStore._internal();
-  WatchProgressStore._internal();
-  
-  final String key = "UTanWatchProgress_v4";
-  Map<String, WatchProgress> allProgress = {};
-  Map<String, Timer> _debounceTimers = {};
+  const CommentItem({
+    required this.id, required this.itemId, required this.userId,
+    required this.displayName, required this.text, required this.createdAt,
+  });
 
-  Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(key);
-    if (data != null) {
-      try {
-        final decoded = jsonDecode(data) as Map<String, dynamic>;
-        allProgress = decoded.map((k, v) => MapEntry(k, WatchProgress.fromJson(v)));
-      } catch (_) {}
-    }
-  }
-
-  static String progressKey(String itemId, String episodeId) {
-    String eid = episodeId.trim();
-    if (eid.isNotEmpty && eid != itemId) return "${itemId}__${eid}";
-    return itemId;
-  }
-
-  void save({
-    required String itemId, required String title, required String imageUrl,
-    required String episodeId, required String episodeTitle,
-    required double progress, required double duration,
-    required String videoUrl, required String videoUrl720, required String videoUrl1080,
-    required String videoUrl360, String videoUrl4k = "", required String subUrl,
-    required String subVttUrl, bool isMovie = true
-  }) {
-    final record = WatchProgress(
-      itemId: itemId, title: title, imageUrl: imageUrl, episodeId: episodeId, episodeTitle: episodeTitle,
-      progressSeconds: progress, durationSeconds: duration, updatedAt: DateTime.now(),
-      videoUrl: videoUrl, videoUrl720: videoUrl720, videoUrl1080: videoUrl1080,
-      videoUrl360: videoUrl360, videoUrl4k: videoUrl4k, subtitleUrl: subUrl, subtitleVttUrl: subVttUrl, isMovie: isMovie
-    );
-    final pKey = progressKey(itemId, episodeId);
-    allProgress[pKey] = record;
-    persist();
-    if (AuthSession.shared.isLoggedIn) {
-      _debounceTimers[pKey]?.cancel();
-      _debounceTimers[pKey] = Timer(const Duration(seconds: 3), () {
-        _debounceTimers.remove(pKey);
-        SupabaseManager.shared.upsertProgress(record);
-      });
-    }
-  }
-
-  void remove(String itemId) {
-    allProgress.removeWhere((k, v) => k == itemId || k.startsWith("${itemId}__"));
-    persist();
-    if (AuthSession.shared.isLoggedIn) {
-      SupabaseManager.shared.deleteProgress(itemId);
-    }
-  }
-
-  void clearAll() {
-    allProgress.clear();
-    persist();
-  }
-
-  void mergeFromCloud(List<WatchProgress> remote) {
-    for (var r in remote) {
-      final pKey = progressKey(r.itemId, r.episodeId);
-      if (allProgress.containsKey(pKey)) {
-        if (r.updatedAt.isAfter(allProgress[pKey]!.updatedAt)) allProgress[pKey] = r;
-      } else {
-        allProgress[pKey] = r;
-      }
-    }
-    persist();
-  }
-
-  WatchProgress? progressFor(String itemId, [String episodeId = ""]) {
-    return allProgress[progressKey(itemId, episodeId)];
-  }
-
-  List<WatchProgress> get recent {
-    Map<String, WatchProgress> latestPerItem = {};
-    for (var prog in allProgress.values) {
-      if (latestPerItem.containsKey(prog.itemId)) {
-        if (prog.updatedAt.isAfter(latestPerItem[prog.itemId]!.updatedAt)) {
-          latestPerItem[prog.itemId] = prog;
-        }
-      } else {
-        latestPerItem[prog.itemId] = prog;
-      }
-    }
-    var list = latestPerItem.values.toList();
-    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return list;
-  }
-
-  List<WatchProgress> get allEpisodes {
-    var list = allProgress.values.toList();
-    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return list;
-  }
-
-  Future<void> persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = jsonEncode(allProgress.map((k, v) => MapEntry(k, v.toJson())));
-    prefs.setString(key, data);
-    notifyListeners();
-  }
+  factory CommentItem.fromJson(Map<String, dynamic> j) => CommentItem(
+    id: j['id'] as String, itemId: j['item_id'] as String,
+    userId: j['user_id'] as String, displayName: j['display_name'] as String,
+    text: j['text'] as String, createdAt: j['created_at'] as String? ?? '',
+  );
 }
-"""
-with open("UTan_Flutter/lib/stores/watch_progress_store.dart", "w", encoding="utf-8") as f:
-    f.write(watch_progress_store_dart)
+""")
 
-# ============================================================
-# 6. lib/stores/favorites_store.dart
-# ============================================================
-favorites_store_dart = """import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/models.dart';
-import '../services/supabase_manager.dart';
+print("✅ All model files written")
 
-class FavoritesStore extends ChangeNotifier {
-  static final FavoritesStore shared = FavoritesStore._internal();
-  FavoritesStore._internal();
-  
-  final String key = "UTanFavorites_v1";
-  List<VideoItem> items = [];
-
-  Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(key);
-    if (data != null) {
-      try {
-        final decoded = jsonDecode(data) as List;
-        items = decoded.map((v) => VideoItem.fromJson(v)).toList();
-      } catch (_) {}
-    }
-  }
-
-  void toggle(VideoItem item) {
-    bool wasPresent = items.any((e) => e.id == item.id);
-    if (wasPresent) {
-      items.removeWhere((e) => e.id == item.id);
-    } else {
-      items.insert(0, item);
-    }
-    persist();
-    if (AuthSession.shared.isLoggedIn) {
-      if (wasPresent) {
-        SupabaseManager.shared.deleteFavorite(item.id).then((success) {
-          if (!success) {
-            if (!items.contains(item)) {
-              items.insert(0, item);
-              persist();
-            }
-          }
-        });
-      } else {
-        SupabaseManager.shared.upsertFavorite(item).then((success) {
-          if (!success) {
-            items.removeWhere((e) => e.id == item.id);
-            persist();
-          }
-        });
-      }
-    }
-  }
-
-  bool isFavorite(String id) => items.any((e) => e.id == id);
-
-  void mergeFromCloud(List<VideoItem> remote) {
-    Set<String> localIds = items.map((e) => e.id).toSet();
-    for (var item in remote) {
-      if (!localIds.contains(item.id)) items.add(item);
-    }
-    persist();
-  }
-
-  Future<void> persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString(key, jsonEncode(items.map((e) => e.toJson()).toList()));
-    notifyListeners();
-  }
-}
-"""
-with open("UTan_Flutter/lib/stores/favorites_store.dart", "w", encoding="utf-8") as f:
-    f.write(favorites_store_dart)
-
-# ============================================================
-# 7. lib/stores/watchlist_store.dart
-# ============================================================
-watchlist_store_dart = """import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/models.dart';
-
-class WatchListStore extends ChangeNotifier {
-  static final WatchListStore shared = WatchListStore._internal();
-  WatchListStore._internal();
-  
-  final String key = "UTanWatchLists_v1";
-  List<WatchList> lists = [];
-
-  Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(key);
-    if (data != null) {
-      try {
-        final decoded = jsonDecode(data) as List;
-        lists = decoded.map((v) => WatchList.fromJson(v)).toList();
-      } catch (_) {}
-    }
-  }
-
-  void createList(String name, [bool isPrivate = true]) {
-    lists.insert(0, WatchList(id: DateTime.now().millisecondsSinceEpoch.toString(), name: name, isPrivate: isPrivate, createdAt: DateTime.now(), items: []));
-    persist();
-  }
-
-  void deleteList(String id) { lists.removeWhere((e) => e.id == id); persist(); }
-  
-  void renameList(String id, String name) {
-    int idx = lists.indexWhere((e) => e.id == id);
-    if (idx != -1) { lists[idx].name = name; persist(); }
-  }
-
-  void addItem(VideoItem item, String listId) {
-    int idx = lists.indexWhere((e) => e.id == listId);
-    if (idx != -1 && !lists[idx].items.any((e) => e.id == item.id)) {
-      lists[idx].items.insert(0, WatchListItem(id: item.id, title: item.title, imageUrl: item.imageUrl, type: item.type, addedAt: DateTime.now()));
-      persist();
-    }
-  }
-
-  void removeItem(String itemId, String listId) {
-    int idx = lists.indexWhere((e) => e.id == listId);
-    if (idx != -1) { lists[idx].items.removeWhere((e) => e.id == itemId); persist(); }
-  }
-
-  bool isInAnyList(String itemId) => lists.any((l) => l.items.any((i) => i.id == itemId));
-
-  List<String> listsContaining(String itemId) {
-    return lists.where((l) => l.items.any((i) => i.id == itemId)).map((l) => l.id).toList();
-  }
-
-  Future<void> persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString(key, jsonEncode(lists.map((e) => e.toJson()).toList()));
-    notifyListeners();
-  }
-}
-"""
-with open("UTan_Flutter/lib/stores/watchlist_store.dart", "w", encoding="utf-8") as f:
-    f.write(watchlist_store_dart)
-
-# ============================================================
-# 8. lib/services/connectivity_service.dart (إصلاح نوع المعامل)
-# ============================================================
-connectivity_service_dart = """import 'package:flutter/material.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-
-class ConnectivityService extends ChangeNotifier {
-  static final ConnectivityService shared = ConnectivityService._internal();
-  ConnectivityService._internal();
-
-  bool _isOnWifi = true;
-  bool get isOnWifi => _isOnWifi;
-
-  Future<void> init() async {
-    final result = await Connectivity().checkConnectivity();
-    _updateStatus(result);
-    Connectivity().onConnectivityChanged.listen((result) {
-      _updateStatus(result);
-    });
-  }
-
-  void _updateStatus(dynamic result) {
-    bool isWifi;
-    if (result is List) {
-      isWifi = result.contains(ConnectivityResult.wifi);
-    } else {
-      isWifi = result == ConnectivityResult.wifi;
-    }
-    if (_isOnWifi != isWifi) {
-      _isOnWifi = isWifi;
-      notifyListeners();
-    }
-  }
-}
-"""
-with open("UTan_Flutter/lib/services/connectivity_service.dart", "w", encoding="utf-8") as f:
-    f.write(connectivity_service_dart)
-
-# ============================================================
-# 9. lib/services/proxy_client.dart (بدون تغيير)
-# ============================================================
-proxy_client_dart = """import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
-import 'dart:io';
-
-const String PROXY_HOST = "212.237.125.216";
-const int PROXY_PORT = 6969;
-
-http.Client getClient({int retries = 2}) {
-  return _ProxyFallbackClient(retries: retries);
-}
-
-class _ProxyFallbackClient extends http.BaseClient {
-  final int retries;
-  http.Client? _directClient;
-  http.Client? _proxyClient;
-
-  _ProxyFallbackClient({this.retries = 2});
-
-  http.Client _getDirectClient() {
-    _directClient ??= http.Client();
-    return _directClient!;
-  }
-
-  http.Client _getProxyClient() {
-    if (_proxyClient == null) {
-      final client = HttpClient();
-      client.findProxy = (uri) => "PROXY $PROXY_HOST:$PROXY_PORT";
-      client.badCertificateCallback = (cert, host, port) => true;
-      _proxyClient = IOClient(client);
-    }
-    return _proxyClient!;
-  }
-
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    int attempts = 0;
-    while (attempts < retries) {
-      try {
-        final client = _getDirectClient();
-        return await client.send(request);
-      } catch (e) {
-        attempts++;
-        if (attempts >= retries) {
-          try {
-            final proxyClient = _getProxyClient();
-            return await proxyClient.send(request);
-          } catch (e) {
-            rethrow;
-          }
-        }
-        await Future.delayed(Duration(milliseconds: 300 * attempts));
-      }
-    }
-    throw Exception('تعذّر الاتصال بالخادم بعد $retries محاولات');
-  }
-
-  void dispose() {
-    _directClient?.close();
-    _proxyClient?.close();
-  }
-}
-"""
-with open("UTan_Flutter/lib/services/proxy_client.dart", "w", encoding="utf-8") as f:
-    f.write(proxy_client_dart)
-
-# ============================================================
-# 10. lib/services/supabase_manager.dart (مع إضافة fetchIsAdmin)
-# ============================================================
-supabase_manager_dart = """import 'dart:convert';
-import 'package:flutter/material.dart';
+# ─── lib/services/scraper.dart ───────────────────────────────────────────────
+w("lib/services/scraper.dart", r"""import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../models/models.dart';
-import '../stores/watch_progress_store.dart';
-import '../stores/favorites_store.dart';
-import 'proxy_client.dart';
+import '../models/video_item.dart';
+import '../models/media_details.dart';
+import '../models/episode_item.dart';
 
-class SupabaseConfig {
-  static const url = "https://foygwdvggwmmzfbeoone.supabase.co";
-  static const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZveWd3ZHZnZ3dtbXpmYmVvb25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NjUzMjksImV4cCI6MjA5NzU0MTMyOX0.C8yY99ZUU841rTTQz-yyC1Hvz-hHu4sNKEFSsFTdgS0";
+const String _baseUrl = 'https://movie.vodu.me/';
+const String _userAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
+String _optimizeImageUrl(String url, {int w = 400, int h = 600}) {
+  if (url.contains('w=750') || url.contains('h=388')) return url;
+  final sep = url.contains('?') ? '&' : '?';
+  return '$url${sep}w=$w&h=$h&crop-to-fit';
 }
 
-class AuthSession extends ChangeNotifier {
-  static final AuthSession shared = AuthSession._internal();
-  AuthSession._internal();
-
-  SupabaseUser? user;
-  String? accessToken;
-  bool isAdmin = false;
-  final _storage = const FlutterSecureStorage();
-
-  bool get isLoggedIn => user != null && accessToken != null;
-
-  Future<void> init() async {
-    accessToken = await _storage.read(key: "ut_access_token");
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString("ut_user");
-    if (data != null) {
-      try { user = SupabaseUser.fromJson(jsonDecode(data)); } catch (_) {}
-    }
-    if (isLoggedIn) {
-      CloudSyncManager.shared.syncAfterLogin();
-      SupabaseManager.shared.fetchIsAdmin().then((val) { isAdmin = val; notifyListeners(); });
-    }
-  }
-
-  Future<void> save(String token, SupabaseUser u) async {
-    accessToken = token;
-    user = u;
-    await _storage.write(key: "ut_access_token", value: token);
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString("ut_user", jsonEncode(u.toJson()));
-    CloudSyncManager.shared.syncAfterLogin();
-    SupabaseManager.shared.fetchIsAdmin().then((val) { isAdmin = val; notifyListeners(); });
-    notifyListeners();
-  }
-
-  Future<void> signOut() async {
-    if (accessToken != null) SupabaseManager.shared.logout(accessToken!);
-    user = null; accessToken = null; isAdmin = false;
-    await _storage.delete(key: "ut_access_token");
-    final prefs = await SharedPreferences.getInstance();
-    prefs.remove("ut_user");
-    notifyListeners();
-  }
-}
-
-class SupabaseManager {
-  static final SupabaseManager shared = SupabaseManager._internal();
-  SupabaseManager._internal();
-
-  Map<String, String> _baseHeaders(String? token) {
-    var h = {
-      'apikey': SupabaseConfig.anonKey,
-      'Content-Type': 'application/json'
-    };
-    if (token != null) h['Authorization'] = 'Bearer $token';
-    return h;
-  }
-
-  Future<String?> signUp(String email, String password, String displayName) async {
-    final client = getClient();
-    final res = await client.post(
-      Uri.parse('${SupabaseConfig.url}/auth/v1/signup'),
-      headers: _baseHeaders(null),
-      body: jsonEncode({'email': email, 'password': password, 'data': {'display_name': displayName}})
-    );
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      await AuthSession.shared.save(data['access_token'], SupabaseUser.fromJson(data['user']));
-      return null;
-    }
-    return jsonDecode(res.body)['msg'] ?? 'فشلت العملية';
-  }
-
-  Future<String?> signIn(String email, String password) async {
-    final client = getClient();
-    final res = await client.post(
-      Uri.parse('${SupabaseConfig.url}/auth/v1/token?grant_type=password'),
-      headers: _baseHeaders(null),
-      body: jsonEncode({'email': email, 'password': password})
-    );
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body);
-      await AuthSession.shared.save(data['access_token'], SupabaseUser.fromJson(data['user']));
-      return null;
-    }
-    return jsonDecode(res.body)['error_description'] ?? 'فشلت العملية';
-  }
-
-  Future<void> logout(String token) async {
-    final client = getClient();
-    await client.post(Uri.parse('${SupabaseConfig.url}/auth/v1/logout'), headers: _baseHeaders(token));
-  }
-
-  Future<void> signInWithGoogle() async {
-    final redirectUri = 'utan://auth-callback';
-    final authUrl = Uri.https(
-      SupabaseConfig.url.replaceFirst('https://', ''),
-      '/auth/v1/authorize',
-      {
-        'provider': 'google',
-        'redirect_to': redirectUri,
-      }
-    );
-    if (await canLaunchUrl(authUrl)) {
-      await launchUrl(authUrl, mode: LaunchMode.externalApplication);
-    } else {
-      throw Exception('تعذّر فتح رابط Google');
-    }
-  }
-
-  Future<void> handleOAuthCallback(Uri uri) async {
-    final fragment = uri.fragment;
-    if (fragment.isEmpty) return;
-    final params = Uri.splitQueryString(fragment);
-    final accessToken = params['access_token'];
-    final refreshToken = params['refresh_token'];
-    if (accessToken == null || refreshToken == null) return;
-    final user = await fetchUser(accessToken);
-    if (user != null) {
-      AuthSession.shared.save(accessToken, user);
-    }
-  }
-
-  Future<SupabaseUser?> fetchUser(String token) async {
-    final client = getClient();
-    final res = await client.get(
-      Uri.parse('${SupabaseConfig.url}/auth/v1/user'),
-      headers: {'apikey': SupabaseConfig.anonKey, 'Authorization': 'Bearer $token'}
-    );
-    if (res.statusCode == 200) {
-      return SupabaseUser.fromJson(jsonDecode(res.body));
-    }
-    return null;
-  }
-
-  Future<bool> fetchIsAdmin() async {
-    if (AuthSession.shared.user == null) return false;
-    final client = getClient();
-    final res = await client.get(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/profiles?id=eq.${AuthSession.shared.user!.id}&select=is_admin'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as List;
-      if (data.isNotEmpty) return data[0]['is_admin'] == true;
-    }
-    return false;
-  }
-
-  Future<void> upsertProgress(WatchProgress p) async {
-    if (!AuthSession.shared.isLoggedIn) return;
-    final client = getClient();
-    var h = _baseHeaders(AuthSession.shared.accessToken);
-    h['Prefer'] = 'resolution=merge-duplicates';
-    await client.post(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/user_progress'),
-      headers: h,
-      body: jsonEncode({
-        'user_id': AuthSession.shared.user!.id, 'item_id': p.itemId, 'title': p.title, 'image_url': p.imageUrl,
-        'episode_id': p.episodeId, 'episode_title': p.episodeTitle, 'progress_seconds': p.progressSeconds,
-        'duration_seconds': p.durationSeconds, 'video_url': p.videoUrl, 'video_url_720': p.videoUrl720,
-        'video_url_1080': p.videoUrl1080, 'video_url_360': p.videoUrl360, 'video_url_4k': p.videoUrl4k,
-        'subtitle_url': p.subtitleUrl, 'subtitle_vtt_url': p.subtitleVttUrl, 'is_movie': p.isMovie,
-        'updated_at': p.updatedAt.toIso8601String()
-      })
-    );
-  }
-
-  Future<void> deleteProgress(String itemId) async {
-    if (!AuthSession.shared.isLoggedIn) return;
-    final client = getClient();
-    await client.delete(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/user_progress?user_id=eq.${AuthSession.shared.user!.id}&item_id=eq.$itemId'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-  }
-
-  Future<bool> upsertFavorite(VideoItem item) async {
-    if (!AuthSession.shared.isLoggedIn) return false;
-    final client = getClient();
-    var h = _baseHeaders(AuthSession.shared.accessToken);
-    h['Prefer'] = 'resolution=merge-duplicates';
-    final res = await client.post(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/user_favorites'),
-      headers: h,
-      body: jsonEncode({
-        'user_id': AuthSession.shared.user!.id, 'item_id': item.id, 'title': item.title,
-        'image_url': item.imageUrl, 'type': item.type
-      })
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-
-  Future<bool> deleteFavorite(String itemId) async {
-    if (!AuthSession.shared.isLoggedIn) return false;
-    final client = getClient();
-    final res = await client.delete(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/user_favorites?user_id=eq.${AuthSession.shared.user!.id}&item_id=eq.$itemId'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-
-  Future<List<VideoItem>> fetchFavorites() async {
-    if (!AuthSession.shared.isLoggedIn) return [];
-    final client = getClient();
-    final res = await client.get(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/user_favorites?user_id=eq.${AuthSession.shared.user!.id}&select=*'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as List;
-      return data.map((e) => VideoItem(id: e['item_id'], title: e['title'], imageUrl: e['image_url'], type: e['type'])).toList();
-    }
-    return [];
-  }
-
-  Future<List<CommentItem>> fetchComments(String itemId) async {
-    final client = getClient();
-    final res = await client.get(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/comments?item_id=eq.$itemId&select=*&order=created_at.desc'),
-      headers: _baseHeaders(AuthSession.shared.accessToken ?? SupabaseConfig.anonKey)
-    );
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as List;
-      return data.map((e) => CommentItem.fromJson(e)).toList();
-    }
-    return [];
-  }
-
-  Future<bool> postComment(String itemId, String text) async {
-    if (!AuthSession.shared.isLoggedIn) return false;
-    final client = getClient();
-    final res = await client.post(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/comments'),
-      headers: _baseHeaders(AuthSession.shared.accessToken),
-      body: jsonEncode({
-        'item_id': itemId, 'user_id': AuthSession.shared.user!.id,
-        'display_name': AuthSession.shared.user!.displayName, 'text': text
-      })
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-
-  Future<bool> deleteComment(String id) async {
-    if (!AuthSession.shared.isLoggedIn) return false;
-    final client = getClient();
-    final res = await client.delete(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/comments?id=eq.$id'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-
-  Future<bool> submitFeedback(String type, String message) async {
-    if (!AuthSession.shared.isLoggedIn) return false;
-    final client = getClient();
-    final res = await client.post(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/feedback'),
-      headers: _baseHeaders(AuthSession.shared.accessToken),
-      body: jsonEncode({
-        'user_id': AuthSession.shared.user!.id,
-        'display_name': AuthSession.shared.user!.displayName,
-        'email': AuthSession.shared.user!.email ?? '',
-        'type': type,
-        'message': message
-      })
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-
-  Future<List<FeedbackItem>> fetchMyFeedback() async {
-    if (!AuthSession.shared.isLoggedIn) return [];
-    final client = getClient();
-    final res = await client.get(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/feedback?user_id=eq.${AuthSession.shared.user!.id}&select=*&order=created_at.desc'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as List;
-      return data.map((e) => FeedbackItem.fromJson(e)).toList();
-    }
-    return [];
-  }
-
-  Future<List<FeedbackItem>> fetchAllFeedback() async {
-    if (!AuthSession.shared.isLoggedIn) return [];
-    final client = getClient();
-    final res = await client.get(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/feedback?select=*&order=created_at.desc'),
-      headers: _baseHeaders(AuthSession.shared.accessToken)
-    );
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body) as List;
-      return data.map((e) => FeedbackItem.fromJson(e)).toList();
-    }
-    return [];
-  }
-
-  Future<bool> updateFeedbackStatus(String id, String status) async {
-    if (!AuthSession.shared.isLoggedIn) return false;
-    final client = getClient();
-    final res = await client.patch(
-      Uri.parse('${SupabaseConfig.url}/rest/v1/feedback?id=eq.$id'),
-      headers: _baseHeaders(AuthSession.shared.accessToken),
-      body: jsonEncode({'status': status})
-    );
-    return res.statusCode >= 200 && res.statusCode < 300;
-  }
-}
-
-class CloudSyncManager {
-  static final CloudSyncManager shared = CloudSyncManager._internal();
-  CloudSyncManager._internal();
-
-  void syncAfterLogin() {
-    _mergeFavorites();
-    _mergeProgress();
-  }
-
-  void _mergeFavorites() async {
-    final remote = await SupabaseManager.shared.fetchFavorites();
-    final local = FavoritesStore.shared.items;
-    final remoteIds = remote.map((e) => e.id).toSet();
-    for (var item in local) {
-      if (!remoteIds.contains(item.id)) {
-        await SupabaseManager.shared.upsertFavorite(item);
-      }
-    }
-    FavoritesStore.shared.mergeFromCloud(remote);
-  }
-
-  void _mergeProgress() async {
-    // سيتم جلب التقدم من السحابة ودمجه مع المحلي
-  }
-}
-"""
-with open("UTan_Flutter/lib/services/supabase_manager.dart", "w", encoding="utf-8") as f:
-    f.write(supabase_manager_dart)
-
-# ============================================================
-# 11. lib/services/scraper.dart (بدون تغيير)
-# ============================================================
-scraper_dart = """import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../models/models.dart';
-import '../stores/app_settings.dart';
-import 'proxy_client.dart';
-
-class SiteCategory {
-  final int id;
-  final int remoteId;
-  final bool isTag;
-  final String nameAr;
-  final String nameEn;
-
-  SiteCategory({required this.id, int? remoteId, this.isTag = false, required this.nameAr, required this.nameEn}) 
-      : remoteId = remoteId ?? id;
-}
-
-final List<SiteCategory> SITE_CATEGORIES = [
-    SiteCategory(id: 0,    nameAr: "أفلام إنجليزية",       nameEn: "English Movies"),
-    SiteCategory(id: 1,    nameAr: "مسلسلات أجنبية",       nameEn: "TV Series"),
-    SiteCategory(id: 2,    nameAr: "أنمي",                  nameEn: "Anime Series"),
-    SiteCategory(id: 3,    nameAr: "بوليوود",               nameEn: "Bollywood Movies"),
-    SiteCategory(id: 4,    nameAr: "مسلسلات عربية",        nameEn: "Arabic Series"),
-    SiteCategory(id: 5,    nameAr: "مسلسلات آسيوية",       nameEn: "Asian Series"),
-    SiteCategory(id: 6,    nameAr: "أفلام آسيوية",         nameEn: "Asian Movies"),
-    SiteCategory(id: 7,    nameAr: "أفلام عربية",          nameEn: "Arabic Movies"),
-    SiteCategory(id: 8,    nameAr: "مسلسلات بوليوود",      nameEn: "Bollywood Series"),
-    SiteCategory(id: 9,    nameAr: "أفلام أنمي",           nameEn: "Anime Movies"),
-    SiteCategory(id: 10,   nameAr: "أفلام مكتب الصندوق",   nameEn: "US Box Office"),
-    SiteCategory(id: 13,   nameAr: "سينما عربية",          nameEn: "Arabic Cinemas"),
-    SiteCategory(id: 14,   nameAr: "أفلام تركية",          nameEn: "Turkish Movies"),
-    SiteCategory(id: 15,   nameAr: "مسلسلات تركية",        nameEn: "Turkish Series"),
-    SiteCategory(id: 16,   nameAr: "أفلام كرتون",          nameEn: "Cartoon Movies"),
-    SiteCategory(id: 17,   nameAr: "مسلسلات كرتون",        nameEn: "Cartoon Series"),
-    SiteCategory(id: 18,   nameAr: "أفلام أجنبية",         nameEn: "Foreign Movies"),
-    SiteCategory(id: 20,   nameAr: "مسلسلات مدبلجة عربي",  nameEn: "Arabic Dubbed Series"),
-    SiteCategory(id: 21,   nameAr: "أفلام مدبلجة عربي",   nameEn: "Arabic Dubbed Movies"),
-    SiteCategory(id: 1014, nameAr: "أفلام كردية",          nameEn: "Kurdish Movies"),
-    SiteCategory(id: 1015, nameAr: "مسلسلات كردية",        nameEn: "Kurdish Series"),
-    SiteCategory(id: 1022, nameAr: "أنمي عربي",            nameEn: "Arabic Anime"),
-    SiteCategory(id: 1029, nameAr: "أنمي مدبلج إنجليزي",  nameEn: "English Dubbed Anime"),
-    SiteCategory(id: 44, remoteId: 44, isTag: true, nameAr: "نيتفلكس",  nameEn: "Netflix"),
-    SiteCategory(id: 9014, remoteId: 14, isTag: true, nameAr: "عالم مارفل",  nameEn: "Marvel"),
-    SiteCategory(id: 73, remoteId: 73, isTag: true, nameAr: "اتش بي او ماكس",  nameEn: "HBO Max"),
-    SiteCategory(id: 72, remoteId: 72, isTag: true, nameAr: "ديزني",  nameEn: "Disney+"),
-    SiteCategory(id: 9018, remoteId: 18, isTag: true, nameAr: "للاطفال",  nameEn: "For KIDS")
-];
-
-String optimizeImageUrl(String url, {int width = 400, int height = 600}) {
-  if (url.contains("w=750") || url.contains("h=388")) return url;
-  String separator = url.contains("?") ? "&" : "?";
-  return "$url${separator}w=$width&h=$height&crop-to-fit";
-}
-
-class CategoryData {
-  final String name;
-  final List<VideoItem> items;
-  final int tagId;
-  CategoryData(this.name, this.items, this.tagId);
+String _fixUrl(String u) {
+  if (u.isEmpty) return '';
+  if (u.startsWith('http')) return u;
+  return '${_baseUrl}$u';
 }
 
 class MovieScraper extends ChangeNotifier {
   List<VideoItem> heroItems = [];
-  List<CategoryData> categories = [];
+  List<({String name, List<VideoItem> items, int tagId})> categories = [];
   List<VideoItem> allItemsPool = [];
   bool isLoading = false;
-  final String baseUrl = "https://movie.vodu.me/";
 
   Future<void> fetchHome() async {
     isLoading = true;
     notifyListeners();
-    final client = getClient();
     try {
-      final res = await client.get(Uri.parse('${baseUrl}index.php'), headers: {'User-Agent': UT_USER_AGENT});
-      if (res.statusCode == 200) {
-        final html = utf8.decode(res.bodyBytes);
-        final parsed = _parseHomePage(html);
-        heroItems = parsed.item1;
-        categories = parsed.item2.where((c) => c.name.toLowerCase() != 'featured').toList();
-        allItemsPool = [for (var c in categories) ...c.items];
+      final resp = await http.get(
+        Uri.parse('${_baseUrl}index.php'),
+        headers: {'User-Agent': _userAgent},
+      ).timeout(const Duration(seconds: 20));
+      if (resp.statusCode == 200) {
+        final html = resp.body;
+        final result = await compute(_parseHomePage, html);
+        heroItems = result.$1;
+        final filtered = result.$2.where((s) => s.name.toLowerCase() != 'featured').toList();
+        categories = filtered;
+        allItemsPool = filtered.expand((s) => s.items).toList();
       }
     } catch (_) {}
     isLoading = false;
     notifyListeners();
   }
 
-  Future<void> refreshHome() async {
-    await fetchHome();
-  }
+  Future<void> refreshHome() async => fetchHome();
 
-  Future<Map<String, dynamic>> fetchCategory(int typeId, int page, bool useTag, String? sort, String? genre) async {
-    String pageParam = page > 1 ? "&page=$page" : "";
-    String urlStr = useTag ? "${baseUrl}index.php?do=list&tag=$typeId$pageParam" : "${baseUrl}index.php?do=list&type=$typeId$pageParam";
-    if (sort != null && sort.isNotEmpty) urlStr += "&sort=$sort";
-    if (genre != null && genre.isNotEmpty) urlStr += "&genre=$genre";
-    final client = getClient();
+  Future<List<VideoItem>> fetchCategory(
+    int typeId, {
+    int page = 1,
+    bool useTag = false,
+    String sort = 'date',
+    String? genre,
+  }) async {
+    final pageParam = page > 1 ? '&page=$page' : '';
+    var urlStr = useTag
+        ? '${_baseUrl}index.php?do=list&tag=$typeId$pageParam'
+        : '${_baseUrl}index.php?do=list&type=$typeId$pageParam';
+    if (sort.isNotEmpty) urlStr += '&sort=$sort';
+    if (genre != null && genre.isNotEmpty) urlStr += '&genre=$genre';
     try {
-      final res = await client.get(Uri.parse(urlStr), headers: {'User-Agent': UT_USER_AGENT});
-      if (res.statusCode == 200) {
-        final html = utf8.decode(res.bodyBytes);
-        final items = _parseListPage(html);
-        final hasMore = _detectHasMorePages(html, page);
-        return {'items': items, 'hasMore': hasMore};
+      final resp = await http.get(
+        Uri.parse(urlStr),
+        headers: {'User-Agent': _userAgent},
+      ).timeout(const Duration(seconds: 20));
+      if (resp.statusCode == 200) {
+        return await compute(_parseListPage, resp.body);
       }
     } catch (_) {}
-    return {'items': <VideoItem>[], 'hasMore': false};
+    return [];
+  }
+
+  Future<bool> hasMorePages(String html, int currentPage) async {
+    return compute(_detectHasMore, (html, currentPage));
   }
 
   Future<List<VideoItem>> advancedSearch({
-    String? title, String? genre, String? type, String? imdb, String? director,
-    String? writer, String? cast, String? year, String? mpr, String? imdbrate,
-    String? production, String? language, bool? featured
+    String? title,
+    String? genre,
+    String? type,
+    String? year,
+    String? language,
+    String? director,
+    String? imdbrate,
   }) async {
-    String urlStr = "${baseUrl}index.php?do=list";
-    if (title != null && title.isNotEmpty) urlStr += "&title=$title";
-    if (genre != null && genre.isNotEmpty) urlStr += "&genre=$genre";
-    if (type != null && type.isNotEmpty) urlStr += "&type=$type";
-    if (imdb != null && imdb.isNotEmpty) urlStr += "&imdb=$imdb";
-    if (director != null && director.isNotEmpty) urlStr += "&director=$director";
-    if (writer != null && writer.isNotEmpty) urlStr += "&writer=$writer";
-    if (cast != null && cast.isNotEmpty) urlStr += "&cast=$cast";
-    if (year != null && year.isNotEmpty) urlStr += "&year=$year";
-    if (mpr != null && mpr.isNotEmpty) urlStr += "&mpr=$mpr";
-    if (imdbrate != null && imdbrate.isNotEmpty) urlStr += "&imdbrate=$imdbrate";
-    if (production != null && production.isNotEmpty) urlStr += "&production=$production";
-    if (language != null && language.isNotEmpty) urlStr += "&language=$language";
-    if (featured == true) urlStr += "&featured=1";
-
-    final client = getClient();
+    final params = <String, String>{'do': 'list'};
+    if (title != null && title.isNotEmpty) params['title'] = title;
+    if (genre != null && genre.isNotEmpty) params['genre'] = genre;
+    if (type != null && type.isNotEmpty) params['type'] = type;
+    if (year != null && year.isNotEmpty) params['year'] = year;
+    if (language != null && language.isNotEmpty) params['language'] = language;
+    if (director != null && director.isNotEmpty) params['director'] = director;
+    if (imdbrate != null && imdbrate.isNotEmpty) params['imdbrate'] = imdbrate;
+    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
     try {
-      final res = await client.get(Uri.parse(urlStr), headers: {'User-Agent': UT_USER_AGENT});
-      if (res.statusCode == 200) {
-        final html = utf8.decode(res.bodyBytes);
-        return _parseListPage(html);
+      final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode == 200) {
+        return await compute(_parseListPage, resp.body);
       }
     } catch (_) {}
     return [];
   }
 
   Future<MediaDetails> fetchDetails(String id) async {
-    MediaDetails d = MediaDetails();
-    final client = getClient();
     try {
-      final res = await client.get(Uri.parse('${baseUrl}index.php?do=view&type=post&id=$id'), headers: {'User-Agent': UT_USER_AGENT});
-      if (res.statusCode == 200) {
-        final html = utf8.decode(res.bodyBytes);
-        d = _parseDetails(html);
+      final resp = await http.get(
+        Uri.parse('${_baseUrl}index.php?do=view&type=post&id=$id'),
+        headers: {'User-Agent': _userAgent},
+      ).timeout(const Duration(seconds: 25));
+      if (resp.statusCode == 200) {
+        return await compute(_parseDetails, resp.body);
       }
     } catch (_) {}
-    return d;
-  }
-
-  _Tuple<List<VideoItem>, List<CategoryData>> _parseHomePage(String html) {
-    List<VideoItem> carousel = [];
-    List<CategoryData> sections = [];
-    
-    final carRx = RegExp(r'<a href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">');
-    for (var match in carRx.allMatches(html)) {
-      String id = match.group(1)!;
-      String img = match.group(2)!;
-      String title = match.group(3)!;
-      if (!img.startsWith("http")) img = baseUrl + img;
-      if (!carousel.any((e) => e.id == id)) carousel.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
-    }
-
-    final headerRx = RegExp(r'<h2><a href="\?do=list&tag=(\d+)"[^>]*>([^<]+)</a></h2>');
-    final itemRx = RegExp(r'<a href="index\.php\?do=view&type=post&id=(\d+)">\s*<img src="([^"]+)"[^>]*>\s*<div class="mytitle">([^<]*)</div>', dotAll: true);
-    
-    final headerMatches = headerRx.allMatches(html).toList();
-    for (int i = 0; i < headerMatches.length; i++) {
-      int tagId = int.tryParse(headerMatches[i].group(1)!) ?? -1;
-      String title = headerMatches[i].group(2)!.trim();
-      int start = headerMatches[i].end;
-      int end = (i + 1 < headerMatches.length) ? headerMatches[i+1].start : html.length;
-      String block = html.substring(start, end);
-      
-      List<VideoItem> items = [];
-      for (var m in itemRx.allMatches(block)) {
-        String id = m.group(1)!;
-        String img = m.group(2)!;
-        String iTitle = m.group(3)!.trim();
-        if (!img.startsWith("http")) img = baseUrl + img;
-        img = optimizeImageUrl(img, width: 400, height: 600);
-        if (!items.any((e) => e.id == id)) items.add(VideoItem(id: id, title: iTitle, imageUrl: img, type: 'post'));
-      }
-      if (items.isNotEmpty) sections.add(CategoryData(title, items, tagId));
-    }
-    return _Tuple(carousel, sections);
-  }
-
-  List<VideoItem> _parseListPage(String html) {
-    List<VideoItem> items = [];
-    final rx = RegExp(r'href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*>\s*</a>\s*<div class="mytitle">\s*<a[^>]*>([^<]+)</a>', dotAll: true);
-    for (var m in rx.allMatches(html)) {
-      String id = m.group(1)!;
-      String img = m.group(2)!;
-      String title = m.group(3)!.trim();
-      if (!img.startsWith("http")) img = baseUrl + img;
-      img = optimizeImageUrl(img, width: 400, height: 600);
-      if (!items.any((e) => e.id == id)) items.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
-    }
-    return items;
-  }
-
-  bool _detectHasMorePages(String html, int currentPage) {
-    int start = html.indexOf('<ul class="pagination">');
-    if (start == -1) return false;
-    int end = html.indexOf('</ul>', start);
-    if (end == -1) return false;
-    String block = html.substring(start, end);
-    final rx = RegExp(r'page=(\d+)');
-    List<int> pages = rx.allMatches(block).map((m) => int.parse(m.group(1)!)).toList();
-    if (pages.isEmpty) return false;
-    return pages.reduce((a, b) => a > b ? a : b) > currentPage;
-  }
-
-  String? _firstMatch(String pattern, String text) {
-    final rx = RegExp(pattern, dotAll: true);
-    return rx.firstMatch(text)?.group(1)?.trim();
-  }
-
-  MediaDetails _parseDetails(String html) {
-    MediaDetails d = MediaDetails();
-    d.title = _firstMatch(r'<h1>(.*?)</h1>', html) ?? "";
-    d.year = _firstMatch(r'<span>Year:\s*</span>\s*([^<]+)', html) ?? "";
-    d.genre = _firstMatch(r'<span>Genre:\s*</span>\s*([^<]+)', html) ?? "";
-    d.rating = _firstMatch(r'<span>IMdB Rating:\s*</span>\s*([^<]+)', html) ?? "";
-    d.runtime = _firstMatch(r'<span>Runtime:\s*</span>\s*([^<]+)', html) ?? "";
-    d.synopsis = _firstMatch(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', html) ?? "";
-
-    String? img = _firstMatch(r'<img src="([^"]+)" class="img-responsive"', html);
-    if (img != null) {
-      d.imageUrl = img.startsWith("http") ? img : baseUrl + img;
-      d.imageUrl = optimizeImageUrl(d.imageUrl, width: 800, height: 1200);
-    }
-
-    final blockRx = RegExp(r'<li class="episodeitem">(.*?)</li>', dotAll: true);
-    for (var bMatch in blockRx.allMatches(html)) {
-      String block = bMatch.group(1)!;
-      String epId = _firstMatch(r'data-id="(\d+)"', block) ?? "";
-      if (epId.isEmpty) continue;
-      String epTitle = _firstMatch(r'data-title="([^"]*)"', block) ?? "";
-      String epUrl = _firstMatch(r'data-url="([^"]*)"', block) ?? "";
-      String epUrl720 = _firstMatch(r'data-url720="([^"]*)"', block) ?? "";
-      String epUrl360 = _firstMatch(r'data-url360="([^"]*)"', block) ?? "";
-      String epUrl1080 = _firstMatch(r'data-url1080="([^"]*)"', block) ?? "";
-      String epUrl4k = _firstMatch(r'data-url4k="([^"]*)"', block) ?? "";
-      String epSrt = _firstMatch(r'data-srt="([^"]*)"', block) ?? "";
-      String epWebvtt = _firstMatch(r'data-webvtt="([^"]*)"', block) ?? "";
-      
-      if (epUrl.isNotEmpty) {
-        d.episodes.add(EpisodeItem(
-          id: epId, title: epTitle.isEmpty ? "الحلقة ${d.episodes.length + 1}" : epTitle,
-          url: epUrl, url720: epUrl720, url1080: epUrl1080, url360: epUrl360, url4k: epUrl4k,
-          subtitleUrl: epSrt, subtitleVttUrl: epWebvtt
-        ));
-      }
-    }
-
-    if (d.episodes.isEmpty) {
-      d.isMovie = true;
-      final mRx = RegExp(r'data-url="([^"]+)"[^>]*data-url360="([^"]*)"[^>]*(?:data-url4k="([^"]*)"[^>]*)?(?:data-url720="([^"]*)"[^>]*)?data-url1080="([^"]*)"[^>]*data-srt="([^"]*)"[^>]*data-webvtt="([^"]*)"', dotAll: true);
-      final match = mRx.firstMatch(html);
-      if (match != null) {
-        d.movieUrl = match.group(1) ?? "";
-        d.movieUrl360 = match.group(2) ?? "";
-        d.movieUrl4k = match.groupCount >= 3 ? match.group(3) ?? "" : "";
-        d.movieUrl720 = match.groupCount >= 4 ? match.group(4) ?? "" : "";
-        d.movieUrl1080 = match.groupCount >= 5 ? match.group(5) ?? "" : "";
-        d.movieSubtitleUrl = match.groupCount >= 6 ? match.group(6) ?? "" : "";
-        d.movieSubtitleVttUrl = match.groupCount >= 7 ? match.group(7) ?? "" : "";
-      }
-    } else {
-      d.isMovie = false;
-    }
-    return d;
+    return MediaDetails();
   }
 }
 
-class _Tuple<T1, T2> {
-  final T1 item1;
-  final T2 item2;
-  _Tuple(this.item1, this.item2);
-}
-"""
-with open("UTan_Flutter/lib/services/scraper.dart", "w", encoding="utf-8") as f:
-    f.write(scraper_dart)
+// ─── Isolate-safe parsers ──────────────────────────────────────────────────
 
-# ============================================================
-# 12. lib/services/subtitle_parser.dart (تم إصلاح \\n إلى \n)
-# ============================================================
-subtitle_parser_dart = """import 'dart:convert';
+(List<VideoItem>, List<({String name, List<VideoItem> items, int tagId})>)
+    _parseHomePage(String html) {
+  final carouselItems = <VideoItem>[];
+  final carRx = RegExp(
+    r'<a href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">'
+  );
+  for (final m in carRx.allMatches(html)) {
+    final id = m.group(1)!;
+    var img = m.group(2)!;
+    final title = m.group(3)!;
+    if (!img.startsWith('http')) img = _baseUrl + img;
+    if (!carouselItems.any((e) => e.id == id)) {
+      carouselItems.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
+    }
+  }
+
+  final sections = <({String name, List<VideoItem> items, int tagId})>[];
+  final headerRx = RegExp(r'<h2><a href="\?do=list&tag=(\d+)"[^>]*>([^<]+)</a></h2>');
+  final itemRx = RegExp(
+    r'<a href="index\.php\?do=view&type=post&id=(\d+)">\s*<img src="([^"]+)"[^>]*>\s*<div class="mytitle">([^<]*)</div>',
+    dotAll: true,
+  );
+
+  final headerMatches = headerRx.allMatches(html).toList();
+  for (int i = 0; i < headerMatches.length; i++) {
+    final hm = headerMatches[i];
+    final tagId = int.tryParse(hm.group(1)!) ?? -1;
+    final sectionName = hm.group(2)!.trim();
+    final blockStart = hm.end;
+    final blockEnd = i + 1 < headerMatches.length ? headerMatches[i + 1].start : html.length;
+    final block = html.substring(blockStart, blockEnd);
+    final items = <VideoItem>[];
+    for (final m in itemRx.allMatches(block)) {
+      final id = m.group(1)!;
+      var img = m.group(2)!;
+      final t = m.group(3)!.trim();
+      if (!img.startsWith('http')) img = _baseUrl + img;
+      img = _optimizeImageUrl(img);
+      if (!items.any((e) => e.id == id)) {
+        items.add(VideoItem(id: id, title: t, imageUrl: img, type: 'post'));
+      }
+    }
+    if (items.isNotEmpty) {
+      sections.add((name: sectionName, items: items, tagId: tagId));
+    }
+  }
+  return (carouselItems, sections);
+}
+
+List<VideoItem> _parseListPage(String html) {
+  final items = <VideoItem>[];
+  final rx = RegExp(
+    r'href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*>\s*</a>\s*<div class="mytitle">\s*<a[^>]*>([^<]+)</a>',
+    dotAll: true,
+  );
+  for (final m in rx.allMatches(html)) {
+    final id = m.group(1)!;
+    var img = m.group(2)!;
+    final title = m.group(3)!.trim();
+    if (!img.startsWith('http')) img = _baseUrl + img;
+    if (!items.any((e) => e.id == id)) {
+      items.add(VideoItem(id: id, title: title, imageUrl: _optimizeImageUrl(img), type: 'post'));
+    }
+  }
+  return items;
+}
+
+bool _detectHasMore((String, int) args) {
+  final html = args.$1;
+  final currentPage = args.$2;
+  final paginationStart = html.indexOf('<ul class="pagination">');
+  if (paginationStart == -1) return false;
+  final paginationEnd = html.indexOf('</ul>', paginationStart);
+  if (paginationEnd == -1) return false;
+  final block = html.substring(paginationStart, paginationEnd);
+  final rx = RegExp(r'page=(\d+)');
+  final pages = rx.allMatches(block)
+      .map((m) => int.tryParse(m.group(1)!) ?? 0)
+      .toList();
+  final maxPage = pages.isEmpty ? 0 : pages.reduce((a, b) => a > b ? a : b);
+  return maxPage > currentPage;
+}
+
+MediaDetails _parseDetails(String html) {
+  final d = MediaDetails();
+
+  String? first(String pattern, {bool dotAll = false}) {
+    final rx = RegExp(pattern, dotAll: dotAll);
+    final m = rx.firstMatch(html);
+    if (m != null && m.groupCount >= 1) return m.group(1)?.trim();
+    return null;
+  }
+
+  d.title = first(r'<h1>(.*?)</h1>') ?? '';
+  d.year = first(r'<span>Year:\s*</span>\s*([^<]+)') ?? '';
+  d.genre = first(r'<span>Genre:\s*</span>\s*([^<]+)') ?? '';
+  d.rating = first(r'<span>IMdB Rating:\s*</span>\s*([^<]+)') ?? '';
+  d.runtime = first(r'<span>Runtime:\s*</span>\s*([^<]+)') ?? '';
+  d.synopsis = first(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true) ?? '';
+
+  final imgM = RegExp(r'<img src="([^"]+)" class="img-responsive"').firstMatch(html);
+  if (imgM != null) {
+    var img = imgM.group(1)!;
+    if (!img.startsWith('http')) img = _baseUrl + img;
+    d.imageUrl = _optimizeImageUrl(img, w: 800, h: 1200);
+  }
+
+  final episodes = <EpisodeItem>[];
+  final epBlockRx = RegExp(r'<li class="episodeitem">(.*?)</li>', dotAll: true);
+  String extract(String pattern, String text) {
+    final m = RegExp(pattern).firstMatch(text);
+    return m?.group(1)?.trim() ?? '';
+  }
+  for (final bm in epBlockRx.allMatches(html)) {
+    final block = bm.group(1)!;
+    final epId = extract(r'data-id="(\d+)"', block);
+    if (epId.isEmpty) continue;
+    final epTitle = extract(r'data-title="([^"]*)"', block);
+    final epUrl = extract(r'data-url="([^"]*)"', block);
+    if (epUrl.isEmpty) continue;
+    episodes.add(EpisodeItem(
+      id: epId,
+      title: epTitle.isEmpty ? 'الحلقة ${episodes.length + 1}' : epTitle,
+      url: epUrl,
+      url720: extract(r'data-url720="([^"]*)"', block),
+      url1080: extract(r'data-url1080="([^"]*)"', block),
+      url360: extract(r'data-url360="([^"]*)"', block),
+      url4k: extract(r'data-url4k="([^"]*)"', block),
+      subtitleUrl: extract(r'data-srt="([^"]*)"', block),
+      subtitleVttUrl: extract(r'data-webvtt="([^"]*)"', block),
+    ));
+  }
+
+  if (episodes.isEmpty) {
+    d.isMovie = true;
+    final movieRx = RegExp(
+      r'data-url="([^"]+)"[^>]*data-url360="([^"]*)"[^>]*(?:data-url4k="([^"]*)"[^>]*)?(?:data-url720="([^"]*)"[^>]*)?data-url1080="([^"]*)"[^>]*data-srt="([^"]*)"[^>]*data-webvtt="([^"]*)"',
+      dotAll: true,
+    );
+    final mm = movieRx.firstMatch(html);
+    if (mm != null) {
+      d.movieUrl = mm.group(1) ?? '';
+      d.movieUrl360 = mm.group(2) ?? '';
+      d.movieUrl4k = mm.group(3) ?? '';
+      d.movieUrl720 = mm.group(4) ?? '';
+      d.movieUrl1080 = mm.group(5) ?? '';
+      d.movieSubtitleUrl = mm.group(6) ?? '';
+      d.movieSubtitleVttUrl = mm.group(7) ?? '';
+    }
+  } else {
+    d.isMovie = false;
+    d.episodes = episodes;
+  }
+  return d;
+}
+""")
+
+print("✅ scraper.dart written")
+
+# ─── lib/services/subtitle_parser.dart ─────────────────────────────────────
+w("lib/services/subtitle_parser.dart", r"""import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'proxy_client.dart';
-
-class SubtitleCue {
-  final double startTime;
-  final double endTime;
-  final String text;
-  SubtitleCue(this.startTime, this.endTime, this.text);
-}
+import '../models/subtitle_cue.dart';
 
 class SubtitleParser {
   static Future<List<SubtitleCue>> parse(String url) async {
     if (url.isEmpty) return [];
-    String cleanUrl = url.startsWith("http") ? url : "https://movie.vodu.me/" + url;
-    final client = getClient();
+    var clean = url;
+    if (!clean.startsWith('http')) clean = 'https://movie.vodu.me/$clean';
     try {
-      final res = await client.get(Uri.parse(cleanUrl));
-      if (res.statusCode == 200) {
-        String text = utf8.decode(res.bodyBytes, allowMalformed: true);
-        if (text.contains("WEBVTT")) return _parseWebVTT(text);
-        return _parseSRT(text);
-      }
-    } catch (_) {}
-    return [];
+      final resp = await http.get(Uri.parse(clean))
+          .timeout(const Duration(seconds: 15));
+      if (resp.statusCode != 200) return [];
+      final text = resp.body;
+      if (text.contains('WEBVTT')) return _parseWebVTT(text);
+      return _parseSRT(text);
+    } catch (_) {
+      return [];
+    }
   }
 
   static List<SubtitleCue> _parseSRT(String content) {
-    List<SubtitleCue> cues = [];
-    String normalized = content.replaceAll('\\r\\n', '\\n').replaceAll('\\r', '\\n');
-    List<String> blocks = normalized.split('\\n\\n');
-    for (String block in blocks) {
-      List<String> lines = block.split('\\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final cues = <SubtitleCue>[];
+    final normalized = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final blocks = normalized.split('\n\n');
+    for (final block in blocks) {
+      final lines = block.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
       if (lines.length < 3) continue;
-      String timeLine = lines[1];
-      String text = lines.sublist(2).join('\\n').replaceAll(RegExp(r'<[^>]+>'), "").trim();
+      final timeLine = lines[1];
+      final textParts = lines.sublist(2);
+      final text = textParts.join('\n')
+          .replaceAll(RegExp(r'<[^>]+>'), '')
+          .trim();
       if (text.isEmpty) continue;
-      List<String> times = timeLine.split(" --> ");
-      if (times.length == 2) {
-        double? start = _parseSRTTime(times[0]);
-        double? end = _parseSRTTime(times[1]);
-        if (start != null && end != null) cues.add(SubtitleCue(start, end, text));
-      }
+      final times = timeLine.split(' --> ');
+      if (times.length != 2) continue;
+      final start = _parseSRTTime(times[0]);
+      final end = _parseSRTTime(times[1]);
+      if (start == null || end == null) continue;
+      cues.add(SubtitleCue(startTime: start, endTime: end, text: text));
     }
     return cues;
   }
 
-  static double? _parseSRTTime(String timeString) {
-    String clean = timeString.trim();
-    List<String> parts = clean.split(",");
+  static double? _parseSRTTime(String s) {
+    s = s.trim();
+    final parts = s.split(',');
     if (parts.length != 2) return null;
-    double ms = double.tryParse(parts[1]) ?? 0;
-    List<String> timeComponents = parts[0].split(":");
-    if (timeComponents.length == 3) {
-      double h = double.tryParse(timeComponents[0]) ?? 0;
-      double m = double.tryParse(timeComponents[1]) ?? 0;
-      double s = double.tryParse(timeComponents[2]) ?? 0;
-      return (h * 3600) + (m * 60) + s + (ms / 1000);
-    }
-    return null;
+    final ms = double.tryParse(parts[1]);
+    if (ms == null) return null;
+    final timeParts = parts[0].split(':');
+    if (timeParts.length != 3) return null;
+    final h = double.tryParse(timeParts[0]) ?? 0;
+    final m = double.tryParse(timeParts[1]) ?? 0;
+    final sec = double.tryParse(timeParts[2]) ?? 0;
+    return h * 3600 + m * 60 + sec + ms / 1000;
   }
 
   static List<SubtitleCue> _parseWebVTT(String content) {
-    List<SubtitleCue> cues = [];
-    List<String> lines = content.split('\\n');
+    final cues = <SubtitleCue>[];
+    final lines = content.split('\n');
     int i = 0;
     while (i < lines.length) {
-      String line = lines[i].trim();
-      if (line.contains("-->")) {
-        String timePart = line.split(" position:")[0].split(" align:")[0].split(" line:")[0].split(" size:")[0];
-        List<String> times = timePart.split("-->");
+      final line = lines[i].trim();
+      if (line.contains('-->')) {
+        var timePart = line;
+        for (final attr in [' position:', ' align:', ' line:', ' size:', ' region:']) {
+          timePart = timePart.split(attr)[0];
+        }
+        final times = timePart.split('-->');
         if (times.length == 2) {
-          double? start = _parseVTTTime(times[0]);
-          double? end = _parseVTTTime(times[1]);
+          final start = _parseVTTTime(times[0]);
+          final end = _parseVTTTime(times[1]);
           if (start != null && end != null) {
-            List<String> textLines = [];
+            final textLines = <String>[];
             i++;
             while (i < lines.length && lines[i].trim().isNotEmpty) {
               textLines.add(lines[i].trim());
               i++;
             }
-            String text = textLines.join('\\n').replaceAll(RegExp(r'<[^>]+>'), "").trim();
-            if (text.isNotEmpty) cues.add(SubtitleCue(start, end, text));
+            final text = textLines.join('\n')
+                .replaceAll(RegExp(r'<[^>]+>'), '')
+                .trim();
+            if (text.isNotEmpty) {
+              cues.add(SubtitleCue(startTime: start, endTime: end, text: text));
+            }
             continue;
           }
         }
@@ -1627,772 +1140,1143 @@ class SubtitleParser {
     return cues;
   }
 
-  static double? _parseVTTTime(String timeString) {
-    String clean = timeString.trim();
-    List<String> parts = clean.split(":");
-    double h = 0, m = 0, s = 0;
+  static double? _parseVTTTime(String s) {
+    s = s.trim();
+    final parts = s.split(':');
+    double hours = 0, minutes = 0, seconds = 0;
     if (parts.length == 3) {
-      h = double.tryParse(parts[0]) ?? 0;
-      m = double.tryParse(parts[1]) ?? 0;
-      List<String> sParts = parts[2].split(".");
-      s = double.tryParse(sParts[0]) ?? 0;
-      if (sParts.length == 2) s += (double.tryParse(sParts[1]) ?? 0) / 1000;
+      hours = double.tryParse(parts[0]) ?? 0;
+      minutes = double.tryParse(parts[1]) ?? 0;
+      final secParts = parts[2].split('.');
+      seconds = double.tryParse(secParts[0]) ?? 0;
+      if (secParts.length == 2) seconds += (double.tryParse(secParts[1]) ?? 0) / 1000;
     } else if (parts.length == 2) {
-      m = double.tryParse(parts[0]) ?? 0;
-      List<String> sParts = parts[1].split(".");
-      s = double.tryParse(sParts[0]) ?? 0;
-      if (sParts.length == 2) s += (double.tryParse(sParts[1]) ?? 0) / 1000;
+      minutes = double.tryParse(parts[0]) ?? 0;
+      final secParts = parts[1].split('.');
+      seconds = double.tryParse(secParts[0]) ?? 0;
+      if (secParts.length == 2) seconds += (double.tryParse(secParts[1]) ?? 0) / 1000;
     } else {
       return null;
     }
-    return (h * 3600) + (m * 60) + s;
+    return hours * 3600 + minutes * 60 + seconds;
   }
 }
-"""
-with open("UTan_Flutter/lib/services/subtitle_parser.dart", "w", encoding="utf-8") as f:
-    f.write(subtitle_parser_dart)
+""")
 
-# ============================================================
-# 13. lib/services/download_manager.dart (بدون flutter_downloader)
-# ============================================================
-download_manager_dart = """import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/material.dart';
+# ─── lib/services/auth_session.dart ─────────────────────────────────────────
+w("lib/services/auth_session.dart", r"""import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
-import 'package:permission_handler/permission_handler.dart';
-import '../models/models.dart';
-import '../stores/app_settings.dart';
-import 'connectivity_service.dart';
-import 'proxy_client.dart';
 
-class DownloadTaskItem {
+class SupabaseUser {
   final String id;
-  final String title;
-  final String imageUrl;
-  final bool isMovie;
-  String videoUrl;
-  String subtitleUrl;
-  double progress;
-  bool isCompleted;
-  String? localVideoPath;
-  bool isDownloading;
+  final String? email;
+  final Map<String, dynamic> userMetadata;
 
-  DownloadTaskItem({
-    required this.id, required this.title, required this.imageUrl, required this.isMovie,
-    required this.videoUrl, required this.subtitleUrl,
-    this.progress = 0.0, this.isCompleted = false, this.localVideoPath,
-    this.isDownloading = false
-  });
+  SupabaseUser({required this.id, this.email, required this.userMetadata});
 
-  factory DownloadTaskItem.fromJson(Map<String, dynamic> json) => DownloadTaskItem(
-    id: json['id'], title: json['title'], imageUrl: json['imageUrl'], isMovie: json['isMovie'],
-    videoUrl: json['videoUrl'], subtitleUrl: json['subtitleUrl'], progress: json['progress'].toDouble(),
-    isCompleted: json['isCompleted'], localVideoPath: json['localVideoPath'],
-    isDownloading: json['isDownloading'] ?? false
+  String get displayName {
+    final v = userMetadata['display_name'] as String?;
+    if (v != null && v.isNotEmpty) return v;
+    return email?.split('@').first ?? 'مستخدم';
+  }
+
+  factory SupabaseUser.fromJson(Map<String, dynamic> j) => SupabaseUser(
+    id: j['id'] as String? ?? '',
+    email: j['email'] as String?,
+    userMetadata: (j['user_metadata'] as Map<String, dynamic>?) ?? {},
   );
+
   Map<String, dynamic> toJson() => {
-    'id': id, 'title': title, 'imageUrl': imageUrl, 'isMovie': isMovie,
-    'videoUrl': videoUrl, 'subtitleUrl': subtitleUrl, 'progress': progress,
-    'isCompleted': isCompleted, 'localVideoPath': localVideoPath,
-    'isDownloading': isDownloading
+    'id': id, 'email': email, 'user_metadata': userMetadata,
   };
 }
 
-class DownloadManager extends ChangeNotifier {
-  static final DownloadManager shared = DownloadManager._internal();
-  DownloadManager._internal();
-  
-  final String key = "UTanDownloads_v1";
-  List<DownloadTaskItem> activeDownloads = [];
-  String? lastError;
+class AuthSession extends ChangeNotifier {
+  static final AuthSession instance = AuthSession._();
+  AuthSession._();
+
+  SupabaseUser? _user;
+  String? _accessToken;
+  String? _refreshToken;
+  bool _isAdmin = false;
+
+  SupabaseUser? get user => _user;
+  String? get accessToken => _accessToken;
+  bool get isLoggedIn => _user != null && _accessToken != null;
+  bool get isAdmin => _isAdmin;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString(key);
-    if (data != null) {
+    _accessToken = prefs.getString('ut_access_token');
+    _refreshToken = prefs.getString('ut_refresh_token');
+    final userData = prefs.getString('ut_user');
+    if (userData != null) {
       try {
-        final decoded = jsonDecode(data) as List;
-        activeDownloads = decoded.map((v) => DownloadTaskItem.fromJson(v)).toList();
+        _user = SupabaseUser.fromJson(jsonDecode(userData) as Map<String, dynamic>);
       } catch (_) {}
     }
-    await Permission.storage.request();
-  }
-
-  void startDownload({required VideoItem item, required bool isMovie, required String vUrl, required String sUrl}) async {
-    if (activeDownloads.any((e) => e.id == item.id && !e.isCompleted)) return;
-    if (AppSettings.shared.downloadOverWifiOnly && !ConnectivityService.shared.isOnWifi) {
-      lastError = "التنزيل عبر الواي فاي فقط مفعّل، اتصل بشبكة واي فاي للمتابعة";
-      notifyListeners();
-      return;
-    }
-    activeDownloads.removeWhere((e) => e.id == item.id);
-    final task = DownloadTaskItem(
-      id: item.id, title: item.title, imageUrl: item.imageUrl,
-      isMovie: isMovie, videoUrl: vUrl, subtitleUrl: sUrl,
-      progress: 0.0, isCompleted: false, isDownloading: true
-    );
-    activeDownloads.insert(0, task);
-    persist();
-    notifyListeners();
-
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/${item.id}.mp4');
-      final client = getClient();
-      final response = await client.send(http.Request('GET', Uri.parse(vUrl)));
-      if (response.statusCode == 200) {
-        final total = response.contentLength ?? 0;
-        int received = 0;
-        final sink = file.openWrite();
-        await for (var chunk in response.stream) {
-          sink.add(chunk);
-          received += chunk.length;
-          if (total > 0) {
-            final p = received / total;
-            final idx = activeDownloads.indexWhere((e) => e.id == item.id);
-            if (idx != -1) {
-              activeDownloads[idx].progress = p.clamp(0.0, 1.0);
-              persist();
-              notifyListeners();
-            }
-          }
-        }
-        await sink.flush();
-        await sink.close();
-        final idx = activeDownloads.indexWhere((e) => e.id == item.id);
-        if (idx != -1) {
-          activeDownloads[idx].isCompleted = true;
-          activeDownloads[idx].progress = 1.0;
-          activeDownloads[idx].localVideoPath = file.path;
-          activeDownloads[idx].isDownloading = false;
-          persist();
-          notifyListeners();
-        }
-      } else {
-        throw Exception('فشل التنزيل: ${response.statusCode}');
-      }
-    } catch (e) {
-      activeDownloads.removeWhere((e) => e.id == item.id);
-      persist();
-      notifyListeners();
-      lastError = 'حدث خطأ أثناء التنزيل: $e';
-    }
-  }
-
-  void cancel(String id) {
-    activeDownloads.removeWhere((e) => e.id == id);
-    persist();
     notifyListeners();
   }
 
-  Future<void> persist() async {
+  Future<void> save({
+    required String accessToken,
+    required String refreshToken,
+    required SupabaseUser user,
+  }) async {
+    _accessToken = accessToken;
+    _refreshToken = refreshToken;
+    _user = user;
     final prefs = await SharedPreferences.getInstance();
-    prefs.setString(key, jsonEncode(activeDownloads.map((e) => e.toJson()).toList()));
+    await prefs.setString('ut_access_token', accessToken);
+    await prefs.setString('ut_refresh_token', refreshToken);
+    await prefs.setString('ut_user', jsonEncode(user.toJson()));
+    notifyListeners();
+  }
+
+  void setAdmin(bool v) { _isAdmin = v; notifyListeners(); }
+
+  Future<void> signOut() async {
+    _user = null;
+    _accessToken = null;
+    _refreshToken = null;
+    _isAdmin = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('ut_access_token');
+    await prefs.remove('ut_refresh_token');
+    await prefs.remove('ut_user');
+    notifyListeners();
   }
 }
-"""
-with open("UTan_Flutter/lib/services/download_manager.dart", "w", encoding="utf-8") as f:
-    f.write(download_manager_dart)
+""")
 
-# ============================================================
-# 14. lib/views/player_view.dart (إصلاح Color.toHex)
-# ============================================================
-player_view_dart = """import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
-import 'package:volume_controller/volume_controller.dart';
-import 'package:screen_brightness/screen_brightness.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../models/models.dart';
-import '../stores/app_settings.dart';
-import '../stores/watch_progress_store.dart';
-import '../services/subtitle_parser.dart';
+print("✅ subtitle_parser + auth_session written")
 
-class CustomPlayerView extends StatefulWidget {
-  final PlayerData data;
-  const CustomPlayerView({Key? key, required this.data}) : super(key: key);
-  @override
-  _CustomPlayerViewState createState() => _CustomPlayerViewState();
+# ─── lib/services/supabase_manager.dart ─────────────────────────────────────
+w("lib/services/supabase_manager.dart", r"""import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../models/video_item.dart';
+import '../models/watch_progress.dart';
+import '../models/feedback_item.dart';
+import '../models/comment_item.dart';
+import 'auth_session.dart';
+
+const _supabaseUrl = 'https://foygwdvggwmmzfbeoone.supabase.co';
+const _anonKey =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZveWd3ZHZnZ3dtbXpmYmVvb25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NjUzMjksImV4cCI6MjA5NzU0MTMyOX0.C8yY99ZUU841rTTQz-yyC1Hvz-hHu4sNKEFSsFTdgS0';
+
+class SupabaseManager {
+  static final SupabaseManager instance = SupabaseManager._();
+  SupabaseManager._();
+
+  Map<String, String> _baseHeaders({String? token}) => {
+    'Content-Type': 'application/json',
+    'apikey': _anonKey,
+    if (token != null) 'Authorization': 'Bearer $token',
+  };
+
+  // ── Auth ────────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> signUp({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/auth/v1/signup'),
+        headers: _baseHeaders(),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'data': {'display_name': displayName},
+        }),
+      ).timeout(const Duration(seconds: 20));
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode == 200 && body['access_token'] != null) return body;
+      return {'error': body['error_description'] ?? body['msg'] ?? body['message'] ?? 'خطأ'};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>?> signIn({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/auth/v1/token?grant_type=password'),
+        headers: _baseHeaders(),
+        body: jsonEncode({'email': email, 'password': password}),
+      ).timeout(const Duration(seconds: 20));
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode == 200 && body['access_token'] != null) return body;
+      return {'error': body['error_description'] ?? body['msg'] ?? body['message'] ?? 'خطأ'};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  // ── Favorites ──────────────────────────────────────────────────────────
+  Future<List<VideoItem>> fetchFavorites() async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/user_favorites?user_id=eq.$userId&select=*'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        return rows.map((r) => VideoItem(
+          id: r['item_id'] as String,
+          title: r['title'] as String,
+          imageUrl: r['image_url'] as String,
+          type: r['type'] as String? ?? 'post',
+        )).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> upsertFavorite(VideoItem item) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/user_favorites'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'resolution=merge-duplicates'},
+        body: jsonEncode({
+          'user_id': userId, 'item_id': item.id,
+          'title': item.title, 'image_url': item.imageUrl, 'type': item.type,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> deleteFavorite(String itemId) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_supabaseUrl/rest/v1/user_favorites?user_id=eq.$userId&item_id=eq.$itemId'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  // ── Watch Progress ─────────────────────────────────────────────────────
+  Future<List<WatchProgress>> fetchProgress() async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/user_progress?user_id=eq.$userId&select=*'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        return rows.map((r) => WatchProgress(
+          itemId: r['item_id'] as String,
+          title: r['title'] as String? ?? '',
+          imageUrl: r['image_url'] as String? ?? '',
+          episodeId: r['episode_id'] as String? ?? '',
+          episodeTitle: r['episode_title'] as String? ?? '',
+          progressSeconds: (r['progress_seconds'] as num?)?.toDouble() ?? 0,
+          durationSeconds: (r['duration_seconds'] as num?)?.toDouble() ?? 0,
+          updatedAt: DateTime.tryParse(r['updated_at'] as String? ?? '') ?? DateTime.now(),
+          videoUrl: r['video_url'] as String? ?? '',
+          videoUrl720: r['video_url_720'] as String? ?? '',
+          videoUrl1080: r['video_url_1080'] as String? ?? '',
+          videoUrl360: r['video_url_360'] as String? ?? '',
+          videoUrl4k: r['video_url_4k'] as String? ?? '',
+          subtitleUrl: r['subtitle_url'] as String? ?? '',
+          subtitleVttUrl: r['subtitle_vtt_url'] as String? ?? '',
+          isMovie: r['is_movie'] as bool? ?? true,
+        )).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> upsertProgress(WatchProgress p) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/user_progress'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'resolution=merge-duplicates'},
+        body: jsonEncode({
+          'user_id': userId, 'item_id': p.itemId, 'title': p.title,
+          'image_url': p.imageUrl, 'episode_id': p.episodeId,
+          'episode_title': p.episodeTitle,
+          'progress_seconds': p.progressSeconds, 'duration_seconds': p.durationSeconds,
+          'video_url': p.videoUrl, 'video_url_720': p.videoUrl720,
+          'video_url_1080': p.videoUrl1080, 'video_url_360': p.videoUrl360,
+          'video_url_4k': p.videoUrl4k,
+          'subtitle_url': p.subtitleUrl, 'subtitle_vtt_url': p.subtitleVttUrl,
+          'is_movie': p.isMovie,
+          'updated_at': p.updatedAt.toIso8601String(),
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> deleteProgress(String itemId) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_supabaseUrl/rest/v1/user_progress?user_id=eq.$userId&item_id=eq.$itemId'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  // ── Feedback ───────────────────────────────────────────────────────────
+  Future<bool> submitFeedback({required String type, required String message}) async {
+    final token = AuthSession.instance.accessToken;
+    final user = AuthSession.instance.user;
+    if (token == null || user == null) return false;
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/feedback'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'return=representation'},
+        body: jsonEncode({
+          'user_id': user.id, 'display_name': user.displayName,
+          'email': user.email ?? '', 'type': type, 'message': message,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<List<FeedbackItem>> fetchMyFeedback() async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/feedback?user_id=eq.$userId&select=*&order=created_at.desc'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        return rows.map((r) => FeedbackItem.fromJson(r as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<FeedbackItem>> fetchAllFeedback() async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/feedback?select=*&order=created_at.desc'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        return rows.map((r) => FeedbackItem.fromJson(r as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> updateFeedbackStatus(String id, String status) async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null) return false;
+    try {
+      final resp = await http.patch(
+        Uri.parse('$_supabaseUrl/rest/v1/feedback?id=eq.$id'),
+        headers: _baseHeaders(token: token),
+        body: jsonEncode({'status': status}),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  // ── Admin check ────────────────────────────────────────────────────────
+  Future<bool> fetchIsAdmin() async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/profiles?id=eq.$userId&select=is_admin'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        if (rows.isNotEmpty) return rows.first['is_admin'] as bool? ?? false;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // ── Comments ───────────────────────────────────────────────────────────
+  Future<List<CommentItem>> fetchComments(String itemId) async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/comments?item_id=eq.$itemId&select=*&order=created_at.desc'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        return rows.map((r) => CommentItem.fromJson(r as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> postComment(String itemId, String text) async {
+    final token = AuthSession.instance.accessToken;
+    final user = AuthSession.instance.user;
+    if (token == null || user == null) return false;
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/comments'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'return=representation'},
+        body: jsonEncode({
+          'item_id': itemId, 'user_id': user.id,
+          'display_name': user.displayName, 'text': text,
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> deleteComment(String commentId) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_supabaseUrl/rest/v1/comments?id=eq.$commentId&user_id=eq.$userId'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+}
+""")
+
+print("✅ supabase_manager.dart written")
+
+# ─── lib/providers/watch_progress_store.dart ────────────────────────────────
+w("lib/providers/watch_progress_store.dart", r"""import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/watch_progress.dart';
+import '../services/auth_session.dart';
+import '../services/supabase_manager.dart';
+
+class WatchProgressStore extends ChangeNotifier {
+  static final WatchProgressStore instance = WatchProgressStore._();
+  WatchProgressStore._();
+
+  static const _key = 'UTanWatchProgress_v4';
+
+  final Map<String, WatchProgress> _all = {};
+  final Map<String, Timer> _debounceTimers = {};
+
+  Map<String, WatchProgress> get all => Map.unmodifiable(_all);
+
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_key);
+    if (data != null) {
+      try {
+        final map = jsonDecode(data) as Map<String, dynamic>;
+        for (final e in map.entries) {
+          _all[e.key] = WatchProgress.fromJson(e.value as Map<String, dynamic>);
+        }
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  void save({
+    required String itemId, required String title, required String imageUrl,
+    required String episodeId, required String episodeTitle,
+    required double progress, required double duration,
+    required String videoUrl, required String videoUrl720,
+    required String videoUrl1080, required String videoUrl360,
+    required String videoUrl4k, required String subUrl,
+    required String subVttUrl, bool isMovie = true,
+  }) {
+    final record = WatchProgress(
+      itemId: itemId, title: title, imageUrl: imageUrl,
+      episodeId: episodeId, episodeTitle: episodeTitle,
+      progressSeconds: progress, durationSeconds: duration,
+      updatedAt: DateTime.now(),
+      videoUrl: videoUrl, videoUrl720: videoUrl720, videoUrl1080: videoUrl1080,
+      videoUrl360: videoUrl360, videoUrl4k: videoUrl4k,
+      subtitleUrl: subUrl, subtitleVttUrl: subVttUrl, isMovie: isMovie,
+    );
+    final pKey = WatchProgress.progressKey(itemId, episodeId);
+    _all[pKey] = record;
+    _persist();
+    notifyListeners();
+
+    if (!AuthSession.instance.isLoggedIn) return;
+    _debounceTimers[pKey]?.cancel();
+    _debounceTimers[pKey] = Timer(const Duration(seconds: 3), () {
+      _debounceTimers.remove(pKey);
+      SupabaseManager.instance.upsertProgress(record);
+    });
+  }
+
+  void remove(String itemId) {
+    final keys = _all.keys.where((k) => k == itemId || k.startsWith('${itemId}__')).toList();
+    for (final k in keys) _all.remove(k);
+    _persist();
+    notifyListeners();
+    if (AuthSession.instance.isLoggedIn) {
+      SupabaseManager.instance.deleteProgress(itemId);
+    }
+  }
+
+  void clearAll() { _all.clear(); _persist(); notifyListeners(); }
+
+  void mergeFromCloud(List<WatchProgress> remote) {
+    for (final r in remote) {
+      final pKey = WatchProgress.progressKey(r.itemId, r.episodeId);
+      final local = _all[pKey];
+      if (local == null || r.updatedAt.isAfter(local.updatedAt)) {
+        _all[pKey] = r;
+      }
+    }
+    _persist();
+    notifyListeners();
+  }
+
+  WatchProgress? progressFor(String itemId, {String episodeId = ''}) {
+    final pKey = WatchProgress.progressKey(itemId, episodeId);
+    return _all[pKey];
+  }
+
+  WatchProgress? latestFor(String itemId) {
+    final matches = _all.values.where((p) => p.itemId == itemId).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return matches.firstOrNull;
+  }
+
+  List<WatchProgress> get recent {
+    final latest = <String, WatchProgress>{};
+    for (final p in _all.values) {
+      final ex = latest[p.itemId];
+      if (ex == null || p.updatedAt.isAfter(ex.updatedAt)) latest[p.itemId] = p;
+    }
+    return latest.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  List<WatchProgress> get allEpisodes =>
+      _all.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    final map = {for (final e in _all.entries) e.key: e.value.toJson()};
+    await prefs.setString(_key, jsonEncode(map));
+  }
+}
+""")
+
+# ─── lib/providers/favorites_store.dart ─────────────────────────────────────
+w("lib/providers/favorites_store.dart", r"""import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/video_item.dart';
+import '../services/auth_session.dart';
+import '../services/supabase_manager.dart';
+
+class FavoritesStore extends ChangeNotifier {
+  static final FavoritesStore instance = FavoritesStore._();
+  FavoritesStore._();
+
+  static const _key = 'UTanFavorites_v1';
+  final List<VideoItem> _items = [];
+
+  List<VideoItem> get items => List.unmodifiable(_items);
+
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_key);
+    if (data != null) {
+      try {
+        final list = jsonDecode(data) as List<dynamic>;
+        _items.addAll(list.map((e) => VideoItem.fromJson(e as Map<String, dynamic>)));
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  bool isFavorite(String id) => _items.any((i) => i.id == id);
+
+  void toggle(VideoItem item) {
+    final wasPresent = _items.any((i) => i.id == item.id);
+    if (wasPresent) {
+      _items.removeWhere((i) => i.id == item.id);
+    } else {
+      _items.insert(0, item);
+    }
+    _persist();
+    notifyListeners();
+
+    if (!AuthSession.instance.isLoggedIn) return;
+    if (wasPresent) {
+      SupabaseManager.instance.deleteFavorite(item.id).then((ok) {
+        if (!ok) { _items.insert(0, item); _persist(); notifyListeners(); }
+      });
+    } else {
+      SupabaseManager.instance.upsertFavorite(item).then((ok) {
+        if (!ok) { _items.removeWhere((i) => i.id == item.id); _persist(); notifyListeners(); }
+      });
+    }
+  }
+
+  void mergeFromCloud(List<VideoItem> remote) {
+    final localIds = _items.map((i) => i.id).toSet();
+    for (final item in remote) {
+      if (!localIds.contains(item.id)) _items.add(item);
+    }
+    _persist();
+    notifyListeners();
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(_items.map((i) => i.toJson()).toList()));
+  }
+}
+""")
+
+# ─── lib/providers/watchlist_store.dart ─────────────────────────────────────
+w("lib/providers/watchlist_store.dart", r"""import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/watch_list.dart';
+import '../models/video_item.dart';
+
+class WatchListStore extends ChangeNotifier {
+  static final WatchListStore instance = WatchListStore._();
+  WatchListStore._();
+
+  static const _key = 'UTanWatchLists_v1';
+  final List<WatchList> _lists = [];
+
+  List<WatchList> get lists => List.unmodifiable(_lists);
+
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_key);
+    if (data != null) {
+      try {
+        final list = jsonDecode(data) as List<dynamic>;
+        _lists.addAll(list.map((e) => WatchList.fromJson(e as Map<String, dynamic>)));
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  void createList(String name, {bool isPrivate = true}) {
+    _lists.insert(0, WatchList(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name, isPrivate: isPrivate,
+    ));
+    _persist(); notifyListeners();
+  }
+
+  void deleteList(String id) {
+    _lists.removeWhere((l) => l.id == id);
+    _persist(); notifyListeners();
+  }
+
+  void renameList(String id, String name) {
+    final idx = _lists.indexWhere((l) => l.id == id);
+    if (idx != -1) {
+      _lists[idx] = WatchList(
+        id: _lists[idx].id, name: name,
+        isPrivate: _lists[idx].isPrivate,
+        items: _lists[idx].items,
+        createdAt: _lists[idx].createdAt,
+      );
+      _persist(); notifyListeners();
+    }
+  }
+
+  void addItem(VideoItem item, String listId) {
+    final idx = _lists.indexWhere((l) => l.id == listId);
+    if (idx == -1) return;
+    if (_lists[idx].items.any((i) => i.id == item.id)) return;
+    _lists[idx].items.insert(0, WatchListItem.fromVideo(item));
+    _persist(); notifyListeners();
+  }
+
+  void removeItem(String itemId, String listId) {
+    final idx = _lists.indexWhere((l) => l.id == listId);
+    if (idx == -1) return;
+    _lists[idx].items.removeWhere((i) => i.id == itemId);
+    _persist(); notifyListeners();
+  }
+
+  bool isInAnyList(String itemId) =>
+      _lists.any((l) => l.items.any((i) => i.id == itemId));
+
+  List<WatchList> listsContaining(String itemId) =>
+      _lists.where((l) => l.items.any((i) => i.id == itemId)).toList();
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(_lists.map((l) => l.toJson()).toList()));
+  }
+}
+""")
+
+print("✅ Providers written")
+
+# ─── lib/widgets/ut_loader.dart ──────────────────────────────────────────────
+w("lib/widgets/ut_loader.dart", r"""import 'package:flutter/material.dart';
+import '../app_colors.dart';
+
+class UTanLoader extends StatefulWidget {
+  const UTanLoader({super.key});
+  @override State<UTanLoader> createState() => _UTanLoaderState();
 }
 
-class _CustomPlayerViewState extends State<CustomPlayerView> {
-  late PlayerData currentData;
-  VideoPlayerController? _controller;
-  bool isPlaying = true;
-  bool showControls = true;
-  bool isLocked = false;
-  bool isBuffering = true;
-  Timer? hideTimer;
-  Timer? saveTimer;
-  Timer? upNextTimer;
-  int upNextCountdown = 0;
-  bool showUpNext = false;
-  
-  List<SubtitleCue> cues = [];
-  String activeSub = "";
-  String activeTopSub = "";
-  int subtitleCursor = 0;
-  int? bottomCueIdx;
-  int? topCueIdx;
+class _UTanLoaderState extends State<UTanLoader>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
 
-  double volume = 0.5;
-  double brightness = 0.5;
-  bool showVolumeHUD = false;
-  bool showBrightnessHUD = false;
-  Timer? hudTimer;
-  
-  String currentQuality = 'تلقائي';
-  bool showSubtitleSettings = false;
-  double seekTarget = 0;
-  bool isDragging = false;
-  bool isFinished = false;
-  double duration = 0;
-  double currentTime = 0;
-  bool isSpeedActive = false;
-  double playbackSpeed = 1.0;
-  bool showEpisodesSheet = false;
-
-  @override
-  void initState() {
+  @override void initState() {
     super.initState();
-    currentData = widget.data;
-    VolumeController().getVolume().then((v) => volume = v);
-    ScreenBrightness().current.then((b) => brightness = b);
-    _initPlayer();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    _anim = Tween(begin: 1.0, end: 0.5).animate(_ctrl);
   }
 
-  void _initPlayer() {
-    isBuffering = true;
-    _controller?.dispose();
-    String url = _resolvedUrl(currentQuality);
-    _controller = VideoPlayerController.network(url)
-      ..initialize().then((_) {
-        setState(() { isBuffering = false; });
-        final saved = WatchProgressStore.shared.progressFor(currentData.itemId, currentData.episodeId);
-        if (saved != null && saved.progressSeconds > 5) {
-          _controller!.seekTo(Duration(seconds: saved.progressSeconds.toInt()));
-        }
-        _controller!.play();
-        _scheduleHide();
-        duration = _controller!.value.duration.inMilliseconds / 1000.0;
-      });
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
 
-    _controller!.addListener(() {
-      if (!mounted) return;
-      if (_controller!.value.isBuffering != isBuffering) {
-        setState(() => isBuffering = _controller!.value.isBuffering);
-      }
-      if (!isDragging) {
-        currentTime = _controller!.value.position.inMilliseconds / 1000.0;
-        _checkSubtitles(currentTime);
-        _checkUpNext(currentTime);
-      }
-    });
-
-    _loadSubtitles();
-    _startSaveTimer();
-  }
-
-  void _loadSubtitles() async {
-    cues.clear(); activeSub = ""; activeTopSub = "";
-    bottomCueIdx = null; topCueIdx = null; subtitleCursor = 0;
-    String sUrl = currentData.subtitleVttUrl.isEmpty ? currentData.subtitleUrl : currentData.subtitleVttUrl;
-    if (sUrl.isEmpty) return;
-    final parsed = await SubtitleParser.parse(sUrl);
-    setState(() {
-      cues = parsed.map((c) {
-        String t = c.text.replaceAll(RegExp(r'\{[^}]+\}'), '').trim();
-        return SubtitleCue(c.startTime, c.endTime, t);
-      }).where((c) => c.text.isNotEmpty).toList();
-    });
-  }
-
-  void _checkSubtitles(double time) {
-    if (cues.isEmpty) return;
-    time += AppSettings.shared.subtitleDelay;
-    
-    if (subtitleCursor >= cues.length) subtitleCursor = cues.length - 1;
-    while (subtitleCursor < cues.length - 1 && cues[subtitleCursor].endTime < time) { subtitleCursor++; }
-    if (cues[subtitleCursor].startTime > time) {
-      int lo = 0, hi = subtitleCursor;
-      while (lo < hi) {
-        int mid = (lo + hi) ~/ 2;
-        if (cues[mid].endTime < time) lo = mid + 1; else hi = mid;
-      }
-      subtitleCursor = lo;
-    }
-
-    bool changed = false;
-    if (bottomCueIdx != null && (time < cues[bottomCueIdx!].startTime || time > cues[bottomCueIdx!].endTime)) {
-      activeSub = ""; bottomCueIdx = null; changed = true;
-    }
-    if (topCueIdx != null && (time < cues[topCueIdx!].startTime || time > cues[topCueIdx!].endTime)) {
-      activeTopSub = ""; topCueIdx = null; changed = true;
-    }
-
-    int wStart = (subtitleCursor - 3).clamp(0, cues.length);
-    int wEnd = (subtitleCursor + 3).clamp(0, cues.length - 1);
-    
-    for (int i = wStart; i <= wEnd; i++) {
-      var c = cues[i];
-      if (time >= c.startTime && time <= c.endTime && i != bottomCueIdx && i != topCueIdx) {
-        if (bottomCueIdx == null) { bottomCueIdx = i; activeSub = c.text; changed = true; }
-        else if (topCueIdx == null) { topCueIdx = i; activeTopSub = c.text; changed = true; break; }
-      }
-    }
-    if (changed) setState(() {});
-  }
-
-  String _resolvedUrl(String q) {
-    String fix(String u) {
-      if (u.isEmpty) return "";
-      return u.startsWith("http") ? u : "https://movie.vodu.me/" + u;
-    }
-    switch (q) {
-      case '360p': return fix(currentData.videoUrl360.isNotEmpty ? currentData.videoUrl360 : currentData.videoUrl);
-      case '720p': return fix(currentData.videoUrl720.isNotEmpty ? currentData.videoUrl720 : currentData.videoUrl);
-      case '1080p': return fix(currentData.videoUrl1080.isNotEmpty ? currentData.videoUrl1080 : currentData.videoUrl);
-      case '4K': return fix(currentData.videoUrl4k.isNotEmpty ? currentData.videoUrl4k : currentData.videoUrl);
-      default: return fix(currentData.videoUrl);
-    }
-  }
-
-  void _startSaveTimer() {
-    saveTimer?.cancel();
-    saveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (_controller == null || !_controller!.value.isInitialized) return;
-      WatchProgressStore.shared.save(
-        itemId: currentData.itemId, title: currentData.itemTitle, imageUrl: currentData.itemImageUrl,
-        episodeId: currentData.episodeId, episodeTitle: currentData.episodeTitle,
-        progress: _controller!.value.position.inMilliseconds / 1000.0,
-        duration: _controller!.value.duration.inMilliseconds / 1000.0,
-        videoUrl: currentData.videoUrl, videoUrl720: currentData.videoUrl720, videoUrl1080: currentData.videoUrl1080,
-        videoUrl360: currentData.videoUrl360, videoUrl4k: currentData.videoUrl4k,
-        subUrl: currentData.subtitleUrl, subVttUrl: currentData.subtitleVttUrl, isMovie: currentData.isMovie
-      );
-    });
-  }
-
-  void _scheduleHide() {
-    hideTimer?.cancel();
-    hideTimer = Timer(const Duration(seconds: 4), () => setState(() => showControls = false));
-  }
-  
-  EpisodeItem? get nextEpisode {
-    if (currentData.isMovie) return null;
-    int idx = currentData.episodes.indexWhere((e) => e.id == currentData.episodeId);
-    if (idx != -1 && idx + 1 < currentData.episodes.length) return currentData.episodes[idx + 1];
-    return null;
-  }
-
-  void _checkUpNext(double currentTime) {
-    if (currentData.isMovie || !AppSettings.shared.autoPlayNextEnabled || showUpNext) return;
-    final val = _controller!.value;
-    if (!val.isInitialized) return;
-    double remain = (val.duration - val.position).inMilliseconds / 1000.0;
-    if (remain > 0 && remain <= AppSettings.shared.autoPlayCountdownSeconds && nextEpisode != null) {
-      setState(() { showUpNext = true; upNextCountdown = AppSettings.shared.autoPlayCountdownSeconds; });
-      upNextTimer?.cancel();
-      upNextTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (upNextCountdown <= 1) {
-          t.cancel(); setState(() => showUpNext = false);
-          _switchToEpisode(nextEpisode!);
-        } else {
-          setState(() => upNextCountdown--);
-        }
-      });
-    }
-  }
-
-  void _switchToEpisode(EpisodeItem ep) {
-    upNextTimer?.cancel(); saveTimer?.cancel();
-    final savedDefault = AppSettings.shared.defaultSubtitleDelay;
-    if (AppSettings.shared.subtitleDelay != savedDefault) {
-      AppSettings.shared.subtitleDelay = savedDefault;
-    }
-    setState(() {
-      currentData = PlayerData(
-        itemId: currentData.itemId, itemTitle: currentData.itemTitle, itemImageUrl: currentData.itemImageUrl,
-        isMovie: false, videoUrl: ep.url, videoUrl720: ep.url720, videoUrl1080: ep.url1080, videoUrl360: ep.url360, videoUrl4k: ep.url4k,
-        subtitleUrl: ep.subtitleUrl, subtitleVttUrl: ep.subtitleVttUrl,
-        episodeId: ep.id, episodeTitle: ep.title, episodes: currentData.episodes
-      );
-    });
-    _initPlayer();
-  }
-
-  void _seekForward() {
-    _controller!.seekTo(_controller!.value.position + const Duration(seconds: 10));
-    _scheduleHide();
-  }
-
-  void _seekBackward() {
-    _controller!.seekTo(_controller!.value.position - const Duration(seconds: 10));
-    _scheduleHide();
-  }
-
-  @override
-  void dispose() {
-    hideTimer?.cancel(); saveTimer?.cancel(); upNextTimer?.cancel(); hudTimer?.cancel();
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  String _formatTime(Duration d) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String h = d.inHours > 0 ? "${twoDigits(d.inHours)}:" : "";
-    return "$h${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}";
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: () { if (!isLocked) { setState(() => showControls = !showControls); if (showControls) _scheduleHide(); } },
-        onVerticalDragUpdate: (details) {
-          if (isLocked) return;
-          double dy = details.primaryDelta! / -250.0;
-          if (details.globalPosition.dx > MediaQuery.of(context).size.width / 2) {
-            volume = (volume + dy).clamp(0.0, 1.0);
-            VolumeController().setVolume(volume, showSystemUI: false);
-            setState(() { showVolumeHUD = true; showBrightnessHUD = false; });
-          } else {
-            brightness = (brightness + dy).clamp(0.0, 1.0);
-            ScreenBrightness().setScreenBrightness(brightness);
-            setState(() { showBrightnessHUD = true; showVolumeHUD = false; });
-          }
-          hudTimer?.cancel();
-          hudTimer = Timer(const Duration(milliseconds: 900), () => setState(() { showVolumeHUD = false; showBrightnessHUD = false; }));
-        },
-        child: Stack(
-          children: [
-            Center(child: _controller != null && _controller!.value.isInitialized ? AspectRatio(aspectRatio: _controller!.value.aspectRatio, child: VideoPlayer(_controller!)) : const SizedBox()),
-            
-            // Subtitles
-            if (AppSettings.shared.subtitlesEnabled)
-              Positioned.fill(
-                child: Column(
-                  children: [
-                    if (activeTopSub.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 60), child: _buildSub(activeTopSub)),
-                    const Spacer(),
-                    if (activeSub.isNotEmpty) Padding(padding: EdgeInsets.only(bottom: AppSettings.shared.subtitleBottomPad), child: _buildSub(activeSub)),
-                  ],
-                ),
-              ),
-
-            // Branding
-            Positioned(top: 40, left: 16, child: Opacity(opacity: 0.35, child: Text('UTan', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)))),
-
-            if (isBuffering) const Center(child: CircularProgressIndicator(color: Colors.white)),
-            
-            if (showVolumeHUD || showBrightnessHUD)
-              Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 70),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(14)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(showVolumeHUD ? Icons.volume_up : Icons.brightness_6, color: Colors.white),
-                        const SizedBox(width: 10),
-                        SizedBox(width: 100, child: LinearProgressIndicator(value: showVolumeHUD ? volume : brightness, color: Colors.white, backgroundColor: Colors.white24)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            if (showUpNext && nextEpisode != null)
-              Positioned(
-                bottom: 40, left: 20, right: 20,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(16)),
-                  child: Row(
-                    children: [
-                      CircleAvatar(backgroundColor: Colors.white12, child: Text('$upNextCountdown', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('الحلقة التالية', style: TextStyle(color: Colors.white60, fontSize: 11)),
-                        Text(nextEpisode!.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1),
-                      ])),
-                      TextButton(onPressed: () { upNextTimer?.cancel(); setState(() => showUpNext = false); }, child: const Text('إلغاء', style: TextStyle(color: Colors.white))),
-                      ElevatedButton(
-                        onPressed: () => _switchToEpisode(nextEpisode!),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
-                        child: const Text('تشغيل'),
-                      )
-                    ],
-                  ),
-                ),
-              ),
-
-            if (showEpisodesSheet) _buildEpisodesRail(),
-
-            if ((showControls || isLocked) && !showUpNext && !showEpisodesSheet) _buildControls(context),
-          ],
+  @override Widget build(BuildContext context) {
+    return Container(
+      color: appBg(),
+      child: Center(
+        child: FadeTransition(
+          opacity: _anim,
+          child: Image.asset('assets/images/logo.png', width: 120, height: 120,
+            errorBuilder: (_, __, ___) => Text('UTAN',
+              style: appFontStyle(40, bold: true, color: Colors.white)),
+          ),
         ),
       ),
-      bottomSheet: showSubtitleSettings ? _buildSubtitleSettings() : null,
     );
   }
+}
+""")
 
-  Widget _buildSub(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      decoration: BoxDecoration(color: Colors.black.withOpacity(AppSettings.shared.subtitleBgOpacity), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: AppSettings.shared.subtitleColor, fontSize: AppSettings.shared.subtitleFontSize, fontWeight: FontWeight.bold, fontFamily: AppSettings.shared.subtitleFontName)),
-    );
-  }
+# ─── lib/widgets/poster_card.dart ───────────────────────────────────────────
+w("lib/widgets/poster_card.dart", r"""import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../models/video_item.dart';
+import '../models/watch_progress.dart';
+import '../app_colors.dart';
 
-  Widget _buildEpisodesRail() {
-    final episodes = currentData.episodes;
-    final seasons = episodes.map((e) => e.season).toSet().toList()..sort();
-    String selectedSeason = seasons.isNotEmpty ? seasons.first : '';
-    if (selectedSeason.isEmpty && seasons.isNotEmpty) selectedSeason = seasons.first;
-    return _EpisodesRail(
-      episodes: episodes,
-      currentEpisodeId: currentData.episodeId,
-      seasons: seasons,
-      initialSeason: selectedSeason,
-      posterUrl: currentData.itemImageUrl,
-      onSelect: (ep) {
-        setState(() => showEpisodesSheet = false);
-        _switchToEpisode(ep);
-      },
-      onClose: () => setState(() => showEpisodesSheet = false),
-    );
-  }
+class PosterCard extends StatelessWidget {
+  final VideoItem item;
+  final WatchProgress? progress;
+  final bool showTitle;
+  final double width;
+  final double height;
 
-  Widget _buildSubtitleSettings() {
-    return Container(
-      height: 400,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: AppSettings.shared.appBgColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('إعدادات الترجمة', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => showSubtitleSettings = false)),
-            ],
-          ),
-          Expanded(
-            child: ListView(
-              children: [
-                SwitchListTile(
-                  title: Text('تفعيل الترجمة', style: TextStyle(color: Colors.white)),
-                  value: AppSettings.shared.subtitlesEnabled,
-                  onChanged: (v) { setState(() => AppSettings.shared.subtitlesEnabled = v); },
-                  activeColor: AppSettings.shared.accentColor,
+  const PosterCard({
+    super.key,
+    required this.item,
+    this.progress,
+    this.showTitle = true,
+    this.width = 120,
+    this.height = 176,
+  });
+
+  @override Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Stack(
+          alignment: Alignment.bottomLeft,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: CachedNetworkImage(
+                imageUrl: item.imageUrl,
+                width: width, height: height, fit: BoxFit.cover,
+                placeholder: (_, __) => _shimmer(),
+                errorWidget: (_, __, ___) => Container(
+                  width: width, height: height,
+                  color: const Color(0x1AFFFFFF),
+                  child: const Icon(Icons.movie, color: Color(0x33FFFFFF), size: 28),
                 ),
-                ListTile(
-                  title: Text('تأخير الترجمة: ${AppSettings.shared.subtitleDelay.toStringAsFixed(1)} ثانية', style: TextStyle(color: Colors.white)),
-                  subtitle: Slider(
-                    value: AppSettings.shared.subtitleDelay,
-                    min: -10,
-                    max: 10,
-                    divisions: 40,
-                    onChanged: (v) { setState(() => AppSettings.shared.subtitleDelay = v); },
-                    activeColor: AppSettings.shared.accentColor,
+              ),
+            ),
+            if (progress != null && progress!.durationSeconds > 0)
+              Positioned(
+                left: 8, right: 8, bottom: 8,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(1.5),
+                  child: LinearProgressIndicator(
+                    value: (progress!.progressSeconds / progress!.durationSeconds).clamp(0, 1),
+                    minHeight: 3,
+                    backgroundColor: Colors.white24,
+                    valueColor: AlwaysStoppedAnimation<Color>(utRed()),
                   ),
                 ),
-                ListTile(
-                  title: Text('حجم الخط: ${AppSettings.shared.subtitleFontSize.toInt()}', style: TextStyle(color: Colors.white)),
-                  subtitle: Slider(
-                    value: AppSettings.shared.subtitleFontSize,
-                    min: 14,
-                    max: 40,
-                    divisions: 26,
-                    onChanged: (v) { setState(() => AppSettings.shared.subtitleFontSize = v); },
-                    activeColor: AppSettings.shared.accentColor,
-                  ),
-                ),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    'أبيض', 'أصفر', 'سماوي', 'وردي', 'أحمر', 'أخضر', 'أزرق'
-                  ].map((label) {
-                    Color color;
-                    switch (label) {
-                      case 'أبيض': color = Colors.white; break;
-                      case 'أصفر': color = Colors.yellow; break;
-                      case 'سماوي': color = Colors.cyan; break;
-                      case 'وردي': color = Colors.pink; break;
-                      case 'أحمر': color = Colors.red; break;
-                      case 'أخضر': color = Colors.green; break;
-                      case 'أزرق': color = Colors.blue; break;
-                      default: color = Colors.white;
-                    }
-                    return ChoiceChip(
-                      label: Text(label, style: TextStyle(color: Colors.white)),
-                      selected: AppSettings.shared.subtitleColorHex == color.toHex(),
-                      onSelected: (selected) {
-                        if (selected) setState(() => AppSettings.shared.subtitleColorHex = color.toHex());
-                      },
-                      selectedColor: AppSettings.shared.accentColor,
-                      backgroundColor: Colors.white12,
-                    );
-                  }).toList(),
-                ),
-                ListTile(
-                  title: Text('شفافية الخلفية: ${(AppSettings.shared.subtitleBgOpacity * 100).toInt()}%', style: TextStyle(color: Colors.white)),
-                  subtitle: Slider(
-                    value: AppSettings.shared.subtitleBgOpacity,
-                    min: 0,
-                    max: 1,
-                    onChanged: (v) { setState(() => AppSettings.shared.subtitleBgOpacity = v); },
-                    activeColor: AppSettings.shared.accentColor,
-                  ),
-                ),
-                DropdownButtonFormField<String>(
-                  value: AppSettings.shared.subtitleFontName,
-                  items: ['Cairo', 'Rubik', 'Ibm', 'Expo'].map((f) => DropdownMenuItem(value: f, child: Text(f, style: TextStyle(color: Colors.white)))).toList(),
-                  onChanged: (v) { setState(() => AppSettings.shared.subtitleFontName = v!); },
-                  style: TextStyle(color: Colors.white),
-                  dropdownColor: AppSettings.shared.appBgColor,
-                  decoration: InputDecoration(labelText: 'الخط', labelStyle: TextStyle(color: Colors.white)),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() => showSubtitleSettings = false);
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
-                        child: Text('تطبيق على الحلقة فقط', style: TextStyle(color: Colors.white)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          AppSettings.shared.defaultSubtitleDelay = AppSettings.shared.subtitleDelay;
-                          setState(() => showSubtitleSettings = false);
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                        child: Text('تطبيق على كل المسلسل', style: TextStyle(color: Colors.white)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
+          ],
+        ),
+        if (showTitle) ...[
+          const SizedBox(height: 6),
+          SizedBox(
+            width: width,
+            child: Text(item.title,
+              style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w500,
+                color: Color(0xE0FFFFFF),
+              ),
+              maxLines: 2, overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 
-  Widget _buildControls(BuildContext context) {
-    if (isLocked) {
-      return Positioned(
-        top: 20, right: 20,
-        child: IconButton(icon: const Icon(Icons.lock, color: Colors.white), onPressed: () => setState(() { isLocked = false; _scheduleHide(); }))
-      );
-    }
-    return Stack(
-      children: [
-        Positioned(top: 0, left: 0, right: 0, child: Container(height: 100, decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.black87, Colors.transparent], begin: Alignment.topCenter, end: Alignment.bottomCenter)))),
-        Positioned(bottom: 0, left: 0, right: 0, child: Container(height: 150, decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black87], begin: Alignment.topCenter, end: Alignment.bottomCenter)))),
-        
-        // Top bar
-        Positioned(
-          top: 20, left: 10, right: 10,
-          child: Row(
-            children: [
-              IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white), onPressed: () => Navigator.pop(context)),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(currentData.itemTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1),
-                if (!currentData.isMovie) Text(currentData.episodeTitle, style: const TextStyle(color: Colors.white54, fontSize: 12), maxLines: 1),
-              ])),
-              IconButton(icon: const Icon(Icons.closed_caption, color: Colors.white), onPressed: () => setState(() => showSubtitleSettings = !showSubtitleSettings)),
-              if (!currentData.isMovie && currentData.episodes.isNotEmpty)
-                IconButton(icon: const Icon(Icons.list_alt, color: Colors.white), onPressed: () => setState(() => showEpisodesSheet = !showEpisodesSheet)),
-              IconButton(icon: const Icon(Icons.lock_open, color: Colors.white), onPressed: () => setState(() => isLocked = true)),
-            ],
-          ),
-        ),
+  Widget _shimmer() => Container(
+    width: width, height: height,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(10),
+      color: const Color(0x17FFFFFF),
+    ),
+  );
+}
+""")
 
-        // Center play/pause
-        Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(icon: const Icon(Icons.replay_10, color: Colors.white, size: 40), onPressed: _seekBackward),
-              const SizedBox(width: 40),
-              GestureDetector(
-                onTap: () {
-                  setState(() { _controller!.value.isPlaying ? _controller!.pause() : _controller!.play(); });
-                  _scheduleHide();
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
-                  child: Icon(_controller!.value.isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 50),
+# ─── lib/widgets/hero_carousel.dart ─────────────────────────────────────────
+w("lib/widgets/hero_carousel.dart", r"""import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../models/video_item.dart';
+import '../app_colors.dart';
+
+class HeroCarousel extends StatefulWidget {
+  final List<VideoItem> items;
+  final void Function(String itemId) onTap;
+
+  const HeroCarousel({super.key, required this.items, required this.onTap});
+
+  @override State<HeroCarousel> createState() => _HeroCarouselState();
+}
+
+class _HeroCarouselState extends State<HeroCarousel> {
+  final PageController _ctrl = PageController(viewportFraction: 0.88);
+  int _current = 0;
+  Timer? _timer;
+
+  @override void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (widget.items.isEmpty) return;
+      final next = (_current + 1) % widget.items.length;
+      _ctrl.animateToPage(next,
+        duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+    });
+  }
+
+  @override void dispose() { _timer?.cancel(); _ctrl.dispose(); super.dispose(); }
+
+  @override Widget build(BuildContext context) {
+    if (widget.items.isEmpty) return const SizedBox(height: 230);
+    return SizedBox(
+      height: 230,
+      child: PageView.builder(
+        controller: _ctrl,
+        onPageChanged: (i) => setState(() => _current = i),
+        itemCount: widget.items.length,
+        itemBuilder: (_, i) {
+          final item = widget.items[i];
+          return GestureDetector(
+            onTap: () => widget.onTap(item.id),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: item.imageUrl, fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(color: const Color(0x1AFFFFFF)),
+                      errorWidget: (_, __, ___) => Container(color: const Color(0x1AFFFFFF)),
+                    ),
+                    // gradient overlay
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 14, right: 14, bottom: 14,
+                      child: Text(item.title,
+                        style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+                        ),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 40),
-              IconButton(icon: const Icon(Icons.forward_10, color: Colors.white, size: 40), onPressed: _seekForward),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+""")
+
+# ─── lib/widgets/category_row.dart ──────────────────────────────────────────
+w("lib/widgets/category_row.dart", r"""import 'package:flutter/material.dart';
+import '../models/video_item.dart';
+import '../models/watch_progress.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import 'poster_card.dart';
+
+class CategoryRow extends StatelessWidget {
+  final String title;
+  final List<VideoItem> items;
+  final int tagId;
+  final Map<String, WatchProgress> progressMap;
+  final void Function(String itemId) onItemTap;
+  final void Function(int tagId, String title)? onSeeAll;
+
+  const CategoryRow({
+    super.key,
+    required this.title,
+    required this.items,
+    this.tagId = -1,
+    required this.progressMap,
+    required this.onItemTap,
+    this.onSeeAll,
+  });
+
+  @override Widget build(BuildContext context) {
+    final lang = AppSettings.instance.appLanguage;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title,
+                style: const TextStyle(
+                  fontSize: 19, fontWeight: FontWeight.w600, color: Colors.white,
+                )),
+              if (tagId >= 0 && onSeeAll != null)
+                GestureDetector(
+                  onTap: () => onSeeAll!(tagId, title),
+                  child: Row(children: [
+                    Text(L('عرض الكل', 'See All'),
+                      style: const TextStyle(fontSize: 13, color: Color(0x73FFFFFF))),
+                    const Icon(Icons.chevron_right, size: 16, color: Color(0x73FFFFFF)),
+                  ]),
+                ),
             ],
           ),
         ),
-
-        // Bottom scrubber
-        Positioned(
-          bottom: 30, left: 20, right: 20,
-          child: Column(
-            children: [
-              if (_controller != null) Row(
-                children: [
-                  Text(_formatTime(_controller!.value.position), style: const TextStyle(color: Colors.white)),
-                  Expanded(child: VideoProgressIndicator(_controller!, allowScrubbing: true, colors: VideoProgressColors(playedColor: Colors.white, bufferedColor: Colors.white30, backgroundColor: Colors.white12))),
-                  Text(_formatTime(_controller!.value.duration), style: const TextStyle(color: Colors.white)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  for (var q in ['تلقائي', '720p', '1080p']) ...[
-                    GestureDetector(
-                      onTap: () { setState(() => currentQuality = q); _initPlayer(); },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), margin: const EdgeInsets.only(right: 6),
-                        decoration: BoxDecoration(color: currentQuality == q ? Colors.white : Colors.white12, borderRadius: BorderRadius.circular(12)),
-                        child: Text(q, style: TextStyle(color: currentQuality == q ? Colors.black : Colors.white, fontSize: 11)),
-                      ),
-                    )
-                  ],
-                  const Spacer(),
-                  if (!currentData.isMovie && nextEpisode != null)
-                    GestureDetector(
-                      onTap: () => _switchToEpisode(nextEpisode!),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)),
-                        child: const Row(children: [Text('التالية', style: TextStyle(color: Colors.white, fontSize: 12)), SizedBox(width: 4), Icon(Icons.skip_next, color: Colors.white, size: 14)]),
-                      ),
-                    )
-                ],
-              )
-            ],
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: items.length,
+            itemBuilder: (_, i) {
+              final item = items[i];
+              final prog = progressMap[item.id];
+              return GestureDetector(
+                onTap: () => onItemTap(item.id),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  child: PosterCard(item: item, progress: prog),
+                ),
+              );
+            },
           ),
-        )
+        ),
       ],
     );
   }
 }
+""")
 
-class PlayerData {
+# ─── lib/widgets/continue_watching_row.dart ─────────────────────────────────
+w("lib/widgets/continue_watching_row.dart", r"""import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../models/watch_progress.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+
+class ContinueWatchingRow extends StatelessWidget {
+  final List<WatchProgress> items;
+  final void Function(WatchProgress p) onTap;
+  final void Function(String itemId) onRemove;
+
+  const ContinueWatchingRow({
+    super.key, required this.items,
+    required this.onTap, required this.onRemove,
+  });
+
+  @override Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+          child: Text(L('متابعة المشاهدة', 'Continue Watching'),
+            style: const TextStyle(
+              fontSize: 19, fontWeight: FontWeight.w600, color: Colors.white,
+            )),
+        ),
+        SizedBox(
+          height: 160,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: items.length,
+            itemBuilder: (_, i) {
+              final p = items[i];
+              final pct = p.durationSeconds > 0
+                  ? (p.progressSeconds / p.durationSeconds).clamp(0.0, 1.0)
+                  : 0.0;
+              return GestureDetector(
+                onTap: () => onTap(p),
+                child: Container(
+                  width: 150, margin: const EdgeInsets.only(right: 12),
+                  child: Stack(children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Stack(children: [
+                        CachedNetworkImage(
+                          imageUrl: p.imageUrl, width: 150, height: 120, fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            width: 150, height: 120, color: const Color(0x17FFFFFF)),
+                          errorWidget: (_, __, ___) => Container(
+                            width: 150, height: 120, color: const Color(0x17FFFFFF),
+                            child: const Icon(Icons.movie, color: Colors.white24)),
+                        ),
+                        Positioned(
+                          left: 0, right: 0, bottom: 0,
+                          child: LinearProgressIndicator(
+                            value: pct, minHeight: 3,
+                            backgroundColor: Colors.white24,
+                            valueColor: AlwaysStoppedAnimation<Color>(utRed()),
+                          ),
+                        ),
+                      ]),
+                    ),
+                    // Remove button
+                    Positioned(
+                      top: 4, right: 4,
+                      child: GestureDetector(
+                        onTap: () => onRemove(p.itemId),
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    // Title
+                    Positioned(
+                      left: 0, right: 0, bottom: 0,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 122),
+                          Text(p.title,
+                            style: const TextStyle(
+                              fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          ),
+                          if (!p.isMovie && p.episodeTitle.isNotEmpty)
+                            Text(p.episodeTitle,
+                              style: const TextStyle(fontSize: 10, color: Colors.white38),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+""")
+
+print("✅ Widget files written")
+
+# ─── lib/player/player_screen.dart ──────────────────────────────────────────
+w("lib/player/player_screen.dart", r"""import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import '../models/episode_item.dart';
+import '../models/subtitle_cue.dart';
+import '../services/subtitle_parser.dart';
+import '../providers/watch_progress_store.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+
+enum VideoQuality { auto, q360, q720, q1080, q4k }
+
+class PlayerScreen extends StatefulWidget {
   final String itemId;
   final String itemTitle;
   final String itemImageUrl;
@@ -2408,2212 +2292,3166 @@ class PlayerData {
   final String episodeTitle;
   final List<EpisodeItem> episodes;
 
-  PlayerData({required this.itemId, required this.itemTitle, required this.itemImageUrl, this.isMovie = true, required this.videoUrl, required this.videoUrl720, required this.videoUrl1080, required this.videoUrl360, this.videoUrl4k = "", required this.subtitleUrl, required this.subtitleVttUrl, required this.episodeId, required this.episodeTitle, this.episodes = const []});
-}
-
-extension ColorExtension on Color {
-  String toHex() {
-    final r = (red * 255).round();
-    final g = (green * 255).round();
-    final b = (blue * 255).round();
-    return '#${r.toRadixString(16).padLeft(2, '0')}${g.toRadixString(16).padLeft(2, '0')}${b.toRadixString(16).padLeft(2, '0')}';
-  }
-}
-
-class _EpisodesRail extends StatefulWidget {
-  final List<EpisodeItem> episodes;
-  final String currentEpisodeId;
-  final List<String> seasons;
-  final String initialSeason;
-  final String posterUrl;
-  final Function(EpisodeItem) onSelect;
-  final VoidCallback onClose;
-
-  const _EpisodesRail({
-    required this.episodes,
-    required this.currentEpisodeId,
-    required this.seasons,
-    required this.initialSeason,
-    required this.posterUrl,
-    required this.onSelect,
-    required this.onClose,
+  const PlayerScreen({
+    super.key,
+    required this.itemId, required this.itemTitle, required this.itemImageUrl,
+    required this.isMovie,
+    required this.videoUrl, this.videoUrl720 = '', this.videoUrl1080 = '',
+    this.videoUrl360 = '', this.videoUrl4k = '',
+    this.subtitleUrl = '', this.subtitleVttUrl = '',
+    required this.episodeId, required this.episodeTitle,
+    this.episodes = const [],
   });
 
-  @override
-  _EpisodesRailState createState() => _EpisodesRailState();
+  @override State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _EpisodesRailState extends State<_EpisodesRail> {
-  late String selectedSeason;
+class _PlayerScreenState extends State<PlayerScreen> {
+  VideoPlayerController? _vpc;
+  bool _isPlaying = false;
+  bool _showControls = true;
+  bool _isBuffering = false;
+  bool _isFinished = false;
+  bool _isLocked = false;
+  bool _showEpisodes = false;
+  bool _showSubtitleSettings = false;
+  bool _isSpeedMode = false;
+  String? _errorMessage;
+
+  // Subtitle state
+  List<SubtitleCue> _cues = [];
+  String _activeSub = '';
+  String _activeTopSub = '';
+  Timer? _subTimer;
+
+  // Controls hide timer
+  Timer? _hideTimer;
+  Timer? _saveTimer;
+  Timer? _upNextTimer;
+
+  double _currentTime = 0;
+  double _duration = 0;
+  double _volumeValue = 1.0;
+  double _brightnessValue = 1.0;
+  bool _showVolumeHud = false;
+  bool _showBrightnessHud = false;
+  Timer? _hudTimer;
+
+  bool _showUpNext = false;
+  int _upNextCountdown = 10;
+  EpisodeItem? _nextEpisodeItem;
+  String? _autoNextSkippedFor;
+
+  VideoQuality _quality = VideoQuality.auto;
+  double _playbackSpeed = 1.0;
+  bool _showSpeedMenu = false;
+  bool _showQualityMenu = false;
+
+  // Current episode tracking
+  String _currentEpisodeId = '';
+  String _currentEpisodeTitle = '';
+
+  // Seek feedback
+  bool _showSeekFeedback = false;
+  bool _seekRight = false;
+  Timer? _seekFeedbackTimer;
 
   @override
   void initState() {
     super.initState();
-    selectedSeason = widget.initialSeason;
+    _currentEpisodeId = widget.episodeId;
+    _currentEpisodeTitle = widget.episodeTitle;
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight,
+    ]);
+    WakelockPlus.enable();
+    _initQuality();
+    _setupPlayer();
+    _loadSubtitles();
   }
 
-  List<EpisodeItem> get filteredEpisodes {
-    return widget.episodes.where((e) => e.season == selectedSeason).toList();
+  void _initQuality() {
+    final pref = AppSettings.instance.preferredQuality;
+    if (pref == 'q720' && widget.videoUrl720.isNotEmpty) _quality = VideoQuality.q720;
+    else if (pref == 'q1080' && widget.videoUrl1080.isNotEmpty) _quality = VideoQuality.q1080;
+    else if (pref == 'q360' && widget.videoUrl360.isNotEmpty) _quality = VideoQuality.q360;
+    else _quality = VideoQuality.auto;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        height: 200,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.transparent, Colors.black87],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  icon: Icon(Icons.close, color: Colors.white),
-                  onPressed: widget.onClose,
-                ),
-              ],
-            ),
-            if (widget.seasons.length > 1)
-              Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: widget.seasons.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (ctx, i) {
-                    final s = widget.seasons[i];
-                    return GestureDetector(
-                      onTap: () => setState(() => selectedSeason = s),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: selectedSeason == s ? AppSettings.shared.accentColor : Colors.white12,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(s, style: TextStyle(color: Colors.white)),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            Expanded(
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: filteredEpisodes.length,
-                itemBuilder: (ctx, i) {
-                  final ep = filteredEpisodes[i];
-                  final isCurrent = ep.id == widget.currentEpisodeId;
-                  return GestureDetector(
-                    onTap: () => widget.onSelect(ep),
-                    child: Container(
-                      width: 130,
-                      margin: const EdgeInsets.only(right: 10),
-                      child: Column(
-                        children: [
-                          Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: CachedNetworkImage(
-                                  imageUrl: widget.posterUrl,
-                                  width: 130,
-                                  height: 73,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              if (isCurrent)
-                                Container(
-                                  color: Colors.black54,
-                                  child: Center(
-                                    child: Icon(Icons.play_arrow, color: Colors.white),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            ep.title,
-                            style: TextStyle(color: isCurrent ? AppSettings.shared.accentColor : Colors.white, fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-"""
-with open("UTan_Flutter/lib/views/player_view.dart", "w", encoding="utf-8") as f:
-    f.write(player_view_dart)
-
-# ============================================================
-# 15. lib/views/main_tab_view.dart (إزالة const من SettingsView)
-# ============================================================
-main_tab_view_dart = """import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../stores/app_settings.dart';
-import '../services/scraper.dart';
-import 'home_view.dart';
-import 'browse_search_settings.dart';
-
-class MainTabView extends StatefulWidget {
-  const MainTabView({Key? key}) : super(key: key);
-  @override
-  _MainTabViewState createState() => _MainTabViewState();
-}
-
-class _MainTabViewState extends State<MainTabView> {
-  int _currentIndex = 0;
-  final MovieScraper _scraper = MovieScraper();
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initFetch();
-  }
-
-  void _initFetch() async {
-    await _scraper.fetchHome();
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Text("UTan", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white)),
-        const SizedBox(height: 20),
-        CircularProgressIndicator(color: AppSettings.shared.accentColor)
-      ])));
+  String _resolvedUrl({VideoQuality? q}) {
+    q ??= _quality;
+    String fix(String u) {
+      if (u.isEmpty) return '';
+      if (u.startsWith('http')) return u;
+      return 'https://movie.vodu.me/$u';
     }
-
-    final List<Widget> pages = [
-      HomeView(scraper: _scraper),
-      BrowseView(scraper: _scraper),
-      SearchView(scraper: _scraper),
-      DownloadsView(),
-      SettingsView(),
-    ];
-
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: pages),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: Colors.black87,
-        selectedItemColor: AppSettings.shared.accentColor,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        items: [
-          BottomNavigationBarItem(icon: const Icon(Icons.home), label: L('الرئيسية', 'Home')),
-          BottomNavigationBarItem(icon: const Icon(Icons.grid_view), label: L('تصفح', 'Browse')),
-          BottomNavigationBarItem(icon: const Icon(Icons.search), label: L('بحث', 'Search')),
-          BottomNavigationBarItem(icon: const Icon(Icons.download), label: L('التحميلات', 'Downloads')),
-          BottomNavigationBarItem(icon: const Icon(Icons.menu), label: L('المزيد', 'More')),
-        ],
-      ),
-    );
-  }
-}
-"""
-with open("UTan_Flutter/lib/views/main_tab_view.dart", "w", encoding="utf-8") as f:
-    f.write(main_tab_view_dart)
-
-# ============================================================
-# 16. lib/views/home_view.dart (مع استيراد CategoryListView)
-# ============================================================
-home_view_dart = """import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
-import '../services/scraper.dart';
-import '../stores/watch_progress_store.dart';
-import '../stores/app_settings.dart';
-import '../stores/favorites_store.dart';
-import 'details_view.dart';
-import 'player_view.dart';
-import 'browse_search_settings.dart'; // يحتوي على CategoryListView
-
-class HomeView extends StatelessWidget {
-  final MovieScraper scraper;
-  const HomeView({Key? key, required this.scraper}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (scraper.heroItems.isNotEmpty) _buildHero(context),
-                if (WatchProgressStore.shared.recent.isNotEmpty)
-                  _buildContinueWatching(context),
-                if (scraper.heroItems.length >= 5)
-                  _buildTop10(context),
-                _buildNetworkCards(context),
-                ...scraper.categories.map((c) => _buildCategoryRow(context, c)),
-                const SizedBox(height: 40)
-              ],
-            ),
-          ),
-          Positioned(top: MediaQuery.of(context).padding.top + 8, left: 20, child: Text("UTan", style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 4)]))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHero(BuildContext context) {
-    final item = scraper.heroItems.first;
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.62,
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImage(imageUrl: item.imageUrl, fit: BoxFit.cover),
-            Container(decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black], begin: Alignment.center, end: Alignment.bottomCenter))),
-            Positioned(
-              bottom: 40, left: 28, right: 28,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.title, style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black87, blurRadius: 8, offset: Offset(0, 4))]), maxLines: 2),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.play_arrow, color: Colors.black), label: Text(L('تشغيل', 'Play'), style: const TextStyle(color: Colors.black)),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.white, shape: const StadiumBorder()),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.info_outline, color: Colors.white), label: Text(L('تفاصيل', 'Details'), style: const TextStyle(color: Colors.white)),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.white24, shape: const StadiumBorder()),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                      ),
-                    ],
-                  )
-                ],
-              ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContinueWatching(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(L('متابعة المشاهدة', 'Continue Watching'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white))),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 150,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: WatchProgressStore.shared.recent.take(12).length,
-            itemBuilder: (ctx, i) {
-              final p = WatchProgressStore.shared.recent[i];
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPlayerView(data: PlayerData(
-                    itemId: p.itemId, itemTitle: p.title, itemImageUrl: p.imageUrl, isMovie: p.isMovie,
-                    videoUrl: p.videoUrl, videoUrl720: p.videoUrl720, videoUrl1080: p.videoUrl1080, videoUrl360: p.videoUrl360, videoUrl4k: p.videoUrl4k,
-                    subtitleUrl: p.subtitleUrl, subtitleVttUrl: p.subtitleVttUrl, episodeId: p.episodeId, episodeTitle: p.episodeTitle
-                  ))));
-                },
-                child: Container(
-                  width: 200, margin: const EdgeInsets.only(right: 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(height: 112, width: 200, child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          CachedNetworkImage(imageUrl: p.imageUrl, fit: BoxFit.cover),
-                          const ColoredBox(color: Colors.black45),
-                          const Center(child: Icon(Icons.play_circle_fill, size: 34, color: Colors.white)),
-                          if (p.durationSeconds > 0) Positioned(bottom: 0, left: 0, right: 0, child: LinearProgressIndicator(value: p.progressSeconds / p.durationSeconds, color: AppSettings.shared.accentColor, backgroundColor: Colors.white30))
-                        ]
-                      ))),
-                      const SizedBox(height: 4),
-                      Text(p.title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        )
-      ],
-    );
-  }
-
-  Widget _buildTop10(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(L('الأكثر مشاهدة اليوم', 'Trending Today'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white))),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 165,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: scraper.heroItems.take(10).length,
-            itemBuilder: (ctx, i) {
-              final item = scraper.heroItems[i];
-              return GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                child: Container(
-                  width: 110, margin: const EdgeInsets.only(right: 8),
-                  child: Stack(
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, fit: BoxFit.cover, width: 110, height: 165)),
-                      Positioned(bottom: -10, left: -5, child: Text('${i+1}', style: const TextStyle(fontSize: 70, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 4)])))
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        )
-      ],
-    );
-  }
-
-  Widget _buildNetworkCards(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Text(L('تصفح حسب التصنيف', 'Browse by Genre'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white))),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 110,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: SITE_CATEGORIES.length > 6 ? 6 : SITE_CATEGORIES.length,
-            itemBuilder: (ctx, i) {
-              final cat = SITE_CATEGORIES[i];
-              return GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryListView(category: cat, scraper: scraper))),
-                child: Container(
-                  width: 160,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [categoryColor(cat), categoryColor(cat).withOpacity(0.3)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: Text(
-                      AppSettings.shared.appLanguage == 'ar' ? cat.nameAr : cat.nameEn,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Color categoryColor(SiteCategory cat) {
-    final n = cat.nameEn.toLowerCase();
-    if (n.contains('anime')) return Colors.purple;
-    if (n.contains('movie')) return Colors.blue;
-    if (n.contains('kids')) return Colors.orange;
-    if (n.contains('action')) return Colors.red;
-    if (n.contains('netflix')) return Colors.red;
-    if (n.contains('disney')) return Colors.cyan;
-    if (n.contains('hbo')) return Colors.indigo;
-    return AppSettings.shared.accentColor;
-  }
-
-  Widget _buildCategoryRow(BuildContext context, CategoryData c) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              Text(c.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
-              const Spacer(),
-              GestureDetector(
-                onTap: () {
-                  final cat = SITE_CATEGORIES.firstWhere(
-                    (e) => e.remoteId == c.tagId,
-                    orElse: () => SiteCategory(id: c.tagId, remoteId: c.tagId, isTag: true, nameAr: c.name, nameEn: c.name),
-                  );
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryListView(category: cat, scraper: scraper)));
-                },
-                child: Text(
-                  L('عرض الكل', 'See All'),
-                  style: TextStyle(color: AppSettings.shared.accentColor, fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 220,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: c.items.length,
-            itemBuilder: (ctx, i) {
-              final item = c.items[i];
-              return GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                child: Container(
-                  width: 120, margin: const EdgeInsets.only(right: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: 120, height: 176, fit: BoxFit.cover)),
-                      const SizedBox(height: 4),
-                      Text(item.title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 2)
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        )
-      ],
-    );
-  }
-}
-"""
-with open("UTan_Flutter/lib/views/home_view.dart", "w", encoding="utf-8") as f:
-    f.write(home_view_dart)
-
-# ============================================================
-# 17. lib/views/browse_search_settings.dart (مع كل الواردات المطلوبة)
-# ============================================================
-browse_search_settings_dart = """import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
-import '../models/models.dart';
-import '../services/scraper.dart';
-import '../stores/app_settings.dart';
-import '../stores/favorites_store.dart';
-import '../stores/watch_progress_store.dart';
-import '../stores/watchlist_store.dart';
-import '../services/supabase_manager.dart';
-import '../services/download_manager.dart';
-import 'details_view.dart';
-import 'player_view.dart';
-import 'account_view.dart';
-
-// ── Browse View ──
-class BrowseView extends StatelessWidget {
-  final MovieScraper scraper;
-  const BrowseView({Key? key, required this.scraper}) : super(key: key);
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(L('تصفح', 'Browse')), backgroundColor: Colors.transparent, elevation: 0),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 14, mainAxisSpacing: 14, childAspectRatio: 1.5),
-        itemCount: SITE_CATEGORIES.length,
-        itemBuilder: (ctx, i) {
-          final cat = SITE_CATEGORIES[i];
-          return GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CategoryListView(category: cat, scraper: scraper))),
-            child: Container(
-              decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.blue.withOpacity(0.5), Colors.blue.withOpacity(0.1)]), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.blue.withOpacity(0.2))),
-              child: Stack(
-                children: [
-                  const Positioned(top: 12, right: 12, child: Icon(Icons.tv, size: 44, color: Colors.white24)),
-                  Positioned(bottom: 12, left: 12, child: Text(AppSettings.shared.appLanguage == 'ar' ? cat.nameAr : cat.nameEn, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)))
-                ],
-              ),
-            ),
-          );
-        },
-      )
-    );
-  }
-}
-
-// ── Category List View ──
-class CategoryListView extends StatefulWidget {
-  final SiteCategory category;
-  final MovieScraper scraper;
-  const CategoryListView({Key? key, required this.category, required this.scraper}) : super(key: key);
-  @override
-  _CategoryListViewState createState() => _CategoryListViewState();
-}
-
-class _CategoryListViewState extends State<CategoryListView> {
-  List<VideoItem> items = [];
-  bool loading = false;
-  bool hasMore = true;
-  int page = 1;
-  String selectedSort = 'date';
-  String selectedGenre = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (loading || !hasMore) return;
-    setState(() => loading = true);
-    final result = await widget.scraper.fetchCategory(
-      widget.category.remoteId, page, widget.category.isTag, selectedSort, selectedGenre.isEmpty ? null : selectedGenre
-    );
-    final newItems = result['items'] as List<VideoItem>;
-    final hasMoreResult = result['hasMore'] as bool;
-    setState(() {
-      items.addAll(newItems);
-      hasMore = hasMoreResult;
-      loading = false;
-      page++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(AppSettings.shared.appLanguage == 'ar' ? widget.category.nameAr : widget.category.nameEn), backgroundColor: Colors.transparent, elevation: 0),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedSort,
-                    items: ['date', 'year', 'views', 'rating'].map((s) => DropdownMenuItem(value: s, child: Text(L(s, s)))).toList(),
-                    onChanged: (v) {
-                      setState(() {
-                        selectedSort = v!;
-                        items.clear();
-                        page = 1;
-                        hasMore = true;
-                        _load();
-                      });
-                    },
-                    style: TextStyle(color: Colors.white),
-                    dropdownColor: Colors.black,
-                    decoration: InputDecoration(labelText: L('ترتيب', 'Sort'), labelStyle: TextStyle(color: Colors.white)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedGenre.isEmpty ? null : selectedGenre,
-                    items: ['', 'Action', 'Comedy', 'Drama', 'Horror', 'Romance', 'Sci-Fi', 'Thriller'].map((g) => DropdownMenuItem(value: g.isEmpty ? null : g, child: Text(g.isEmpty ? L('الكل', 'All') : g))).toList(),
-                    onChanged: (v) {
-                      setState(() {
-                        selectedGenre = v ?? '';
-                        items.clear();
-                        page = 1;
-                        hasMore = true;
-                        _load();
-                      });
-                    },
-                    style: TextStyle(color: Colors.white),
-                    dropdownColor: Colors.black,
-                    decoration: InputDecoration(labelText: L('نوع', 'Genre'), labelStyle: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.7),
-              itemCount: items.length + (loading ? 1 : 0),
-              itemBuilder: (ctx, i) {
-                if (i == items.length) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final item = items[i];
-                return GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                  child: Column(
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: double.infinity, height: 160, fit: BoxFit.cover)),
-                      const SizedBox(height: 6),
-                      Text(item.title, style: TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Search View مع الفلاتر المتقدمة والترتيب ──
-class SearchView extends StatefulWidget {
-  final MovieScraper scraper;
-  const SearchView({Key? key, required this.scraper}) : super(key: key);
-  @override
-  _SearchViewState createState() => _SearchViewState();
-}
-
-class _SearchViewState extends State<SearchView> {
-  String title = "";
-  List<VideoItem> results = [];
-  bool searching = false;
-  bool showFilters = false;
-  String genre = "";
-  String type = "";
-  String year = "";
-  String imdbrate = "";
-  String language = "";
-  String director = "";
-  String cast = "";
-  String sortBy = 'title';
-  bool ascending = true;
-  Timer? _debounce;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(L('بحث', 'Search')), backgroundColor: Colors.transparent, elevation: 0),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: L('بحث...', 'Search...'),
-                      filled: true,
-                      fillColor: Colors.white12,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      suffixIcon: title.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(Icons.clear, color: Colors.grey),
-                              onPressed: () => setState(() { title = ""; results = []; }),
-                            )
-                          : null,
-                    ),
-                    style: const TextStyle(color: Colors.white),
-                    onChanged: (v) {
-                      setState(() => title = v);
-                      _debounce?.cancel();
-                      _debounce = Timer(const Duration(milliseconds: 500), () => _performSearch());
-                    },
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.filter_list, color: showFilters ? AppSettings.shared.accentColor : Colors.grey),
-                  onPressed: () => setState(() => showFilters = !showFilters),
-                ),
-              ],
-            ),
-          ),
-          if (showFilters)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: L('نوع', 'Genre'), hintStyle: TextStyle(color: Colors.grey)),
-                          style: TextStyle(color: Colors.white),
-                          onChanged: (v) => genre = v,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: L('السنة', 'Year'), hintStyle: TextStyle(color: Colors.grey)),
-                          style: TextStyle(color: Colors.white),
-                          onChanged: (v) => year = v,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: L('التقييم', 'Rating'), hintStyle: TextStyle(color: Colors.grey)),
-                          style: TextStyle(color: Colors.white),
-                          onChanged: (v) => imdbrate = v,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: L('اللغة', 'Language'), hintStyle: TextStyle(color: Colors.grey)),
-                          style: TextStyle(color: Colors.white),
-                          onChanged: (v) => language = v,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: L('المخرج', 'Director'), hintStyle: TextStyle(color: Colors.grey)),
-                          style: TextStyle(color: Colors.white),
-                          onChanged: (v) => director = v,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(hintText: L('الممثلين', 'Cast'), hintStyle: TextStyle(color: Colors.grey)),
-                          style: TextStyle(color: Colors.white),
-                          onChanged: (v) => cast = v,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: sortBy,
-                          items: ['title', 'year', 'rating'].map((s) => DropdownMenuItem(value: s, child: Text(L(s, s)))).toList(),
-                          onChanged: (v) { setState(() => sortBy = v!); _performSearch(); },
-                          style: TextStyle(color: Colors.white),
-                          dropdownColor: Colors.black,
-                          decoration: InputDecoration(labelText: L('ترتيب', 'Sort'), labelStyle: TextStyle(color: Colors.white)),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(ascending ? Icons.arrow_upward : Icons.arrow_downward, color: Colors.white),
-                        onPressed: () { setState(() => ascending = !ascending); _performSearch(); },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: _performSearch,
-                    style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
-                    child: Text(L('بحث', 'Search'), style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: searching
-                ? const Center(child: CircularProgressIndicator())
-                : results.isEmpty
-                    ? Center(child: Text(L('ابحث عن فيلم أو مسلسل', 'Search for a movie or series'), style: TextStyle(color: Colors.grey)))
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.7),
-                        itemCount: results.length,
-                        itemBuilder: (ctx, i) {
-                          final item = results[i];
-                          return GestureDetector(
-                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                            child: Column(
-                              children: [
-                                ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: double.infinity, height: 160, fit: BoxFit.cover)),
-                                const SizedBox(height: 6),
-                                Text(item.title, style: TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _performSearch() async {
-    if (title.isEmpty) { setState(() => results = []); return; }
-    setState(() => searching = true);
-    final items = await widget.scraper.advancedSearch(
-      title: title,
-      genre: genre.isNotEmpty ? genre : null,
-      type: type.isNotEmpty ? type : null,
-      year: year.isNotEmpty ? year : null,
-      imdbrate: imdbrate.isNotEmpty ? imdbrate : null,
-      language: language.isNotEmpty ? language : null,
-      director: director.isNotEmpty ? director : null,
-      cast: cast.isNotEmpty ? cast : null,
-    );
-    List<VideoItem> sorted = items;
-    if (sortBy == 'title') {
-      sorted.sort((a, b) => ascending ? a.title.compareTo(b.title) : b.title.compareTo(a.title));
-    } else if (sortBy == 'year') {
-      sorted.sort((a, b) {
-        final y1 = int.tryParse(a.title.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        final y2 = int.tryParse(b.title.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        return ascending ? y1.compareTo(y2) : y2.compareTo(y1);
-      });
+    switch (q) {
+      case VideoQuality.q360: return fix(widget.videoUrl360.isNotEmpty ? widget.videoUrl360 : widget.videoUrl);
+      case VideoQuality.q720: return fix(widget.videoUrl720.isNotEmpty ? widget.videoUrl720 : widget.videoUrl);
+      case VideoQuality.q1080: return fix(widget.videoUrl1080.isNotEmpty ? widget.videoUrl1080 : widget.videoUrl);
+      case VideoQuality.q4k: return fix(widget.videoUrl4k.isNotEmpty ? widget.videoUrl4k : widget.videoUrl);
+      default: return fix(widget.videoUrl);
     }
+  }
+
+  Future<void> _setupPlayer() async {
+    final url = _resolvedUrl();
+    if (url.isEmpty) { setState(() => _errorMessage = 'الرابط غير متاح'); return; }
+    setState(() { _errorMessage = null; _isBuffering = true; });
+    _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await _vpc!.initialize();
+      _vpc!.addListener(_onPlayerUpdate);
+      final saved = WatchProgressStore.instance.progressFor(widget.itemId, episodeId: _currentEpisodeId);
+      if (saved != null && saved.progressSeconds > 5 && saved.progressSeconds < saved.durationSeconds - 10) {
+        await _vpc!.seekTo(Duration(milliseconds: (saved.progressSeconds * 1000).round()));
+      }
+      _vpc!.play();
+      setState(() { _isPlaying = true; _duration = _vpc!.value.duration.inMilliseconds / 1000.0; });
+      _scheduleHide();
+      _startSaveTimer();
+    } catch (e) {
+      setState(() { _errorMessage = 'تعذر تشغيل الفيديو. تحقق من اتصالك بالإنترنت.'; _isBuffering = false; });
+    }
+  }
+
+  void _onPlayerUpdate() {
+    if (_vpc == null || !mounted) return;
+    final v = _vpc!.value;
     setState(() {
-      results = sorted;
-      searching = false;
+      _isBuffering = v.isBuffering;
+      _isPlaying = v.isPlaying;
+      _currentTime = v.position.inMilliseconds / 1000.0;
+      _duration = v.duration.inMilliseconds / 1000.0;
+      if (_duration > 0 && _currentTime >= _duration - 0.5 && !_isFinished) {
+        _isFinished = true;
+        _isPlaying = false;
+        _onVideoEnd();
+      }
     });
-  }
-}
-
-// ── Downloads View ──
-class DownloadsView extends StatelessWidget {
-  const DownloadsView({Key? key}) : super(key: key);
-  @override
-  Widget build(BuildContext context) {
-    final downloads = DownloadManager.shared.activeDownloads;
-    return Scaffold(
-      appBar: AppBar(title: Text(L('التحميلات', 'Downloads')), backgroundColor: Colors.transparent, elevation: 0),
-      body: downloads.isEmpty
-          ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.download, size: 60, color: Colors.grey),
-              const SizedBox(height: 20),
-              Text(L("لا توجد تحميلات", "No downloads"), style: const TextStyle(color: Colors.grey))
-            ]))
-          : ListView.builder(
-              itemCount: downloads.length,
-              itemBuilder: (ctx, i) {
-                final dl = downloads[i];
-                return ListTile(
-                  leading: CachedNetworkImage(imageUrl: dl.imageUrl, width: 50, height: 70, fit: BoxFit.cover),
-                  title: Text(dl.title, style: TextStyle(color: Colors.white)),
-                  subtitle: Text(
-                    dl.isCompleted ? L('مكتمل', 'Completed') : '${(dl.progress * 100).toInt()}%',
-                    style: TextStyle(color: dl.isCompleted ? Colors.green : Colors.grey),
-                  ),
-                  trailing: dl.isDownloading
-                      ? const CircularProgressIndicator()
-                      : IconButton(
-                          icon: Icon(Icons.cancel, color: Colors.red),
-                          onPressed: () => DownloadManager.shared.cancel(dl.id),
-                        ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-// ── Settings View ──
-class SettingsView extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(AuthSession.shared.user?.displayName ?? L('الملف الشخصي', 'Profile')),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.person),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AccountView())),
-          ),
-        ],
-      ),
-      body: ListView(
-        children: [
-          _buildProfileHeader(context),
-          const Divider(color: Colors.white24),
-          _buildSectionHeader(L('قوائمي', 'My Lists'), context, () => Navigator.push(context, MaterialPageRoute(builder: (_) => WatchListsView()))),
-          _buildListMiniature(context),
-          _buildSectionHeader(L('المفضلة', 'Favorites'), context, () => Navigator.push(context, MaterialPageRoute(builder: (_) => FavoritesListView()))),
-          _buildFavoritesMiniature(context),
-          _buildSectionHeader(L('السجل', 'History'), context, () => Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryView()))),
-          _buildHistoryMiniature(context),
-          const Divider(color: Colors.white24),
-          ListTile(
-            title: Text(L('الشكاوى والاقتراحات', 'Feedback'), style: TextStyle(color: Colors.white)),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FeedbackView())),
-          ),
-          if (AuthSession.shared.isAdmin)
-            ListTile(
-              title: Text(L('لوحة الإدارة', 'Admin Panel'), style: TextStyle(color: Colors.orange)),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelView())),
-            ),
-          SwitchListTile(
-            title: Text(L('اللغة', 'Language'), style: TextStyle(color: Colors.white)),
-            value: AppSettings.shared.appLanguage == 'en',
-            onChanged: (v) => AppSettings.shared.appLanguage = v ? 'en' : 'ar',
-            activeColor: AppSettings.shared.accentColor,
-          ),
-          ListTile(
-            title: Text(L('الثيم', 'Theme'), style: TextStyle(color: Colors.white)),
-            trailing: DropdownButton<String>(
-              value: AppSettings.shared.appTheme,
-              items: ['dark', 'amoled', 'dark_blue', 'dark_purple'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-              onChanged: (v) { AppSettings.shared.appTheme = v!; },
-              dropdownColor: Colors.black,
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          ListTile(
-            title: Text(L('اللون الأساسي', 'Accent Color'), style: TextStyle(color: Colors.white)),
-            trailing: DropdownButton<String>(
-              value: AppSettings.shared.accentColorName,
-              items: ['red', 'blue', 'orange', 'green', 'pink'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (v) { AppSettings.shared.accentColorName = v!; },
-              dropdownColor: Colors.black,
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          SwitchListTile(
-            title: Text(L('تشغيل الحلقة التالية', 'Autoplay Next'), style: TextStyle(color: Colors.white)),
-            value: AppSettings.shared.autoPlayNextEnabled,
-            onChanged: (v) => AppSettings.shared.autoPlayNextEnabled = v,
-            activeColor: AppSettings.shared.accentColor,
-          ),
-          if (AppSettings.shared.autoPlayNextEnabled)
-            ListTile(
-              title: Text(L('العد التنازلي: ${AppSettings.shared.autoPlayCountdownSeconds}s', 'Countdown: ${AppSettings.shared.autoPlayCountdownSeconds}s'), style: TextStyle(color: Colors.white)),
-              subtitle: Slider(
-                value: AppSettings.shared.autoPlayCountdownSeconds.toDouble(),
-                min: 3,
-                max: 20,
-                divisions: 17,
-                onChanged: (v) => AppSettings.shared.autoPlayCountdownSeconds = v.toInt(),
-                activeColor: AppSettings.shared.accentColor,
-              ),
-            ),
-          SwitchListTile(
-            title: Text(L('التنزيل عبر الواي فاي فقط', 'Wi-Fi Only Download'), style: TextStyle(color: Colors.white)),
-            value: AppSettings.shared.downloadOverWifiOnly,
-            onChanged: (v) => AppSettings.shared.downloadOverWifiOnly = v,
-            activeColor: AppSettings.shared.accentColor,
-          ),
-          ListTile(
-            title: Text(L('مسح الكاش', 'Clear Cache'), style: TextStyle(color: Colors.white)),
-            trailing: Icon(Icons.delete_forever, color: Colors.red),
-            onTap: () => AppSettings.shared.clearCache(),
-          ),
-          if (AuthSession.shared.isLoggedIn)
-            ListTile(
-              title: Text(L('تسجيل الخروج', 'Sign Out'), style: TextStyle(color: Colors.red)),
-              onTap: () => AuthSession.shared.signOut(),
-            ),
-        ],
-      ),
-    );
+    _updateSubtitle();
   }
 
-  Widget _buildProfileHeader(BuildContext context) {
-    final user = AuthSession.shared.user;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: AppSettings.shared.accentColor,
-            child: Text(user?.displayName[0] ?? 'U', style: TextStyle(fontSize: 24, color: Colors.white)),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user?.displayName ?? L('زائر', 'Guest'), style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(user?.email ?? '', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _statChip(FavoritesStore.shared.items.length, L('مفضلة', 'Favorites')),
-                    const SizedBox(width: 12),
-                    _statChip(WatchProgressStore.shared.allEpisodes.length, L('مشاهدات', 'Watched')),
-                    const SizedBox(width: 12),
-                    _statChip(DownloadManager.shared.activeDownloads.length, L('تنزيلات', 'Downloads')),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  void _updateSubtitle() {
+    if (!AppSettings.instance.subtitlesEnabled || _cues.isEmpty) {
+      if (_activeSub.isNotEmpty || _activeTopSub.isNotEmpty) {
+        setState(() { _activeSub = ''; _activeTopSub = ''; });
+      }
+      return;
+    }
+    final delay = AppSettings.instance.subtitleDelay;
+    final t = _currentTime - delay;
+    final active = _cues.where((c) => t >= c.startTime && t <= c.endTime).toList();
+    String bot = '', top = '';
+    if (active.length == 1) { bot = active[0].text; }
+    else if (active.length >= 2) { top = active[0].text; bot = active[1].text; }
+    setState(() { _activeSub = bot; _activeTopSub = top; });
   }
 
-  Widget _statChip(int count, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white12,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text('$count $label', style: TextStyle(color: Colors.white70, fontSize: 11)),
-    );
+  Future<void> _loadSubtitles() async {
+    final url = widget.subtitleVttUrl.isNotEmpty ? widget.subtitleVttUrl : widget.subtitleUrl;
+    if (url.isEmpty) return;
+    final cues = await SubtitleParser.parse(url);
+    if (mounted) setState(() => _cues = cues);
   }
 
-  Widget _buildSectionHeader(String title, BuildContext context, VoidCallback onTap) {
-    return ListTile(
-      title: Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      trailing: Text(L('عرض الكل', 'See All'), style: TextStyle(color: AppSettings.shared.accentColor)),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildListMiniature(BuildContext context) {
-    final lists = WatchListStore.shared.lists.take(3).toList();
-    return Container(
-      height: 120,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: lists.length,
-        itemBuilder: (ctx, i) {
-          final list = lists[i];
-          return GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WatchListDetailView(list: list))),
-            child: Container(
-              width: 100,
-              margin: const EdgeInsets.only(right: 10),
-              child: Column(
-                children: [
-                  Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white12,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Center(
-                      child: Icon(Icons.list_alt, color: Colors.white54),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(list.name, style: TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildFavoritesMiniature(BuildContext context) {
-    final items = FavoritesStore.shared.items.take(3).toList();
-    return Container(
-      height: 120,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        itemBuilder: (ctx, i) {
-          final item = items[i];
-          return GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-            child: Container(
-              width: 80,
-              margin: const EdgeInsets.only(right: 10),
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: item.imageUrl,
-                      width: 80,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(item.title, style: TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildHistoryMiniature(BuildContext context) {
-    final episodes = WatchProgressStore.shared.recent.take(3).toList();
-    return Container(
-      height: 120,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: episodes.length,
-        itemBuilder: (ctx, i) {
-          final p = episodes[i];
-          return GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPlayerView(data: PlayerData(
-              itemId: p.itemId, itemTitle: p.title, itemImageUrl: p.imageUrl, isMovie: p.isMovie,
-              videoUrl: p.videoUrl, videoUrl720: p.videoUrl720, videoUrl1080: p.videoUrl1080,
-              videoUrl360: p.videoUrl360, videoUrl4k: p.videoUrl4k,
-              subtitleUrl: p.subtitleUrl, subtitleVttUrl: p.subtitleVttUrl,
-              episodeId: p.episodeId, episodeTitle: p.episodeTitle
-            )))),
-            child: Container(
-              width: 80,
-              margin: const EdgeInsets.only(right: 10),
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: p.imageUrl,
-                      width: 80,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(p.title, style: TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ── Favorites List View ──
-class FavoritesListView extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final items = FavoritesStore.shared.items;
-    return Scaffold(
-      appBar: AppBar(title: Text(L('المفضلة', 'Favorites')), backgroundColor: Colors.transparent),
-      body: items.isEmpty
-          ? Center(child: Text(L('لا توجد مفضلات', 'No favorites'), style: TextStyle(color: Colors.grey)))
-          : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.7),
-              itemCount: items.length,
-              itemBuilder: (ctx, i) {
-                final item = items[i];
-                return GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                  child: Column(
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: double.infinity, height: 160, fit: BoxFit.cover)),
-                      const SizedBox(height: 6),
-                      Text(item.title, style: TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-// ── Watch Lists View ──
-class WatchListsView extends StatefulWidget {
-  @override
-  _WatchListsViewState createState() => _WatchListsViewState();
-}
-
-class _WatchListsViewState extends State<WatchListsView> {
-  final TextEditingController _nameController = TextEditingController();
-  @override
-  Widget build(BuildContext context) {
-    final lists = WatchListStore.shared.lists;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(L('قوائمي', 'My Lists')),
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: Text(L('قائمة جديدة', 'New List')),
-                  content: TextField(controller: _nameController, decoration: InputDecoration(hintText: L('اسم القائمة', 'List name'))),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: Text(L('إلغاء', 'Cancel'))),
-                    TextButton(
-                      onPressed: () {
-                        if (_nameController.text.isNotEmpty) {
-                          WatchListStore.shared.createList(_nameController.text);
-                          _nameController.clear();
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: Text(L('إنشاء', 'Create'), style: TextStyle(color: AppSettings.shared.accentColor)),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: lists.isEmpty
-          ? Center(child: Text(L('لا توجد قوائم', 'No lists'), style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-              itemCount: lists.length,
-              itemBuilder: (ctx, i) {
-                final list = lists[i];
-                return ListTile(
-                  title: Text(list.name, style: TextStyle(color: Colors.white)),
-                  subtitle: Text('${list.items.length} ${L('عنصر', 'items')}', style: TextStyle(color: Colors.grey)),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.edit, color: Colors.white),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: Text(L('إعادة التسمية', 'Rename')),
-                              content: TextField(controller: _nameController..text = list.name, decoration: InputDecoration(hintText: L('اسم القائمة', 'List name'))),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(context), child: Text(L('إلغاء', 'Cancel'))),
-                                TextButton(
-                                  onPressed: () {
-                                    if (_nameController.text.isNotEmpty) {
-                                      WatchListStore.shared.renameList(list.id, _nameController.text);
-                                      _nameController.clear();
-                                      Navigator.pop(context);
-                                    }
-                                  },
-                                  child: Text(L('حفظ', 'Save'), style: TextStyle(color: AppSettings.shared.accentColor)),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => WatchListStore.shared.deleteList(list.id),
-                      ),
-                    ],
-                  ),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WatchListDetailView(list: list))),
-                );
-              },
-            ),
-    );
-  }
-}
-
-class WatchListDetailView extends StatelessWidget {
-  final WatchList list;
-  const WatchListDetailView({Key? key, required this.list}) : super(key: key);
-  @override
-  Widget build(BuildContext context) {
-    final items = list.items;
-    return Scaffold(
-      appBar: AppBar(title: Text(list.name), backgroundColor: Colors.transparent),
-      body: items.isEmpty
-          ? Center(child: Text(L('القائمة فارغة', 'List is empty'), style: TextStyle(color: Colors.grey)))
-          : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.7),
-              itemCount: items.length,
-              itemBuilder: (ctx, i) {
-                final item = items[i];
-                return GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsView(itemId: item.id))),
-                  child: Column(
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(10), child: CachedNetworkImage(imageUrl: item.imageUrl, width: double.infinity, height: 160, fit: BoxFit.cover)),
-                      const SizedBox(height: 6),
-                      Text(item.title, style: TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-// ── History View ──
-class HistoryView extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final episodes = WatchProgressStore.shared.allEpisodes;
-    return Scaffold(
-      appBar: AppBar(title: Text(L('السجل', 'History')), backgroundColor: Colors.transparent),
-      body: episodes.isEmpty
-          ? Center(child: Text(L('لا يوجد سجل', 'No history'), style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-              itemCount: episodes.length,
-              itemBuilder: (ctx, i) {
-                final p = episodes[i];
-                return ListTile(
-                  leading: CachedNetworkImage(imageUrl: p.imageUrl, width: 50, height: 70, fit: BoxFit.cover),
-                  title: Text(p.title, style: TextStyle(color: Colors.white)),
-                  subtitle: Text(p.episodeTitle.isNotEmpty ? p.episodeTitle : L('فيلم', 'Movie'), style: TextStyle(color: Colors.grey)),
-                  trailing: Text('${(p.progressSeconds / p.durationSeconds * 100).toInt()}%', style: TextStyle(color: Colors.grey)),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPlayerView(data: PlayerData(
-                    itemId: p.itemId, itemTitle: p.title, itemImageUrl: p.imageUrl, isMovie: p.isMovie,
-                    videoUrl: p.videoUrl, videoUrl720: p.videoUrl720, videoUrl1080: p.videoUrl1080,
-                    videoUrl360: p.videoUrl360, videoUrl4k: p.videoUrl4k,
-                    subtitleUrl: p.subtitleUrl, subtitleVttUrl: p.subtitleVttUrl,
-                    episodeId: p.episodeId, episodeTitle: p.episodeTitle
-                  )))),
-                );
-              },
-            ),
-    );
-  }
-}
-"""
-with open("UTan_Flutter/lib/views/browse_search_settings.dart", "w", encoding="utf-8") as f:
-    f.write(browse_search_settings_dart)
-
-# ============================================================
-# 18. lib/views/details_view.dart (بدون أخطاء)
-# ============================================================
-details_view_dart = """import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import '../services/scraper.dart';
-import '../models/models.dart';
-import '../stores/app_settings.dart';
-import '../stores/favorites_store.dart';
-import '../stores/watchlist_store.dart';
-import '../services/supabase_manager.dart';
-import 'player_view.dart';
-import '../stores/watch_progress_store.dart';
-import '../services/download_manager.dart';
-
-class DetailsView extends StatefulWidget {
-  final String itemId;
-  const DetailsView({Key? key, required this.itemId}) : super(key: key);
-
-  @override
-  _DetailsViewState createState() => _DetailsViewState();
-}
-
-class _DetailsViewState extends State<DetailsView> {
-  final MovieScraper scraper = MovieScraper();
-  MediaDetails? details;
-  bool loading = true;
-  String selectedSeason = "";
-  String? error;
-  bool synopsisExpanded = false;
-
-  List<CommentItem> comments = [];
-  bool commentsLoading = true;
-  final TextEditingController _commentController = TextEditingController();
-  bool _isPosting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  void _load() async {
-    final d = await scraper.fetchDetails(widget.itemId);
-    if (mounted) {
-      if (d.title.isEmpty) {
-        setState(() => error = 'تعذّر تحميل البيانات');
-      } else {
-        setState(() {
-          details = d;
-          selectedSeason = d.sortedSeasons.isNotEmpty ? d.sortedSeasons.first : "";
-          loading = false;
+  void _onVideoEnd() {
+    if (!widget.isMovie && widget.episodes.isNotEmpty && AppSettings.instance.autoPlayNextEnabled) {
+      final next = _findNextEpisode();
+      if (next != null && next.id != _autoNextSkippedFor) {
+        _nextEpisodeItem = next;
+        _upNextCountdown = AppSettings.instance.autoPlayCountdownSeconds;
+        setState(() => _showUpNext = true);
+        _upNextTimer?.cancel();
+        _upNextTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (!mounted) { t.cancel(); return; }
+          if (_upNextCountdown <= 1) {
+            t.cancel();
+            setState(() => _showUpNext = false);
+            _switchEpisode(next, autoplay: true);
+          } else {
+            setState(() => _upNextCountdown--);
+          }
         });
-        _loadComments();
       }
     }
   }
 
-  void _loadComments() async {
-    setState(() => commentsLoading = true);
-    final items = await SupabaseManager.shared.fetchComments(widget.itemId);
-    setState(() {
-      comments = items;
-      commentsLoading = false;
+  EpisodeItem? _findNextEpisode() {
+    if (widget.episodes.isEmpty) return null;
+    final idx = widget.episodes.indexWhere((e) => e.id == _currentEpisodeId);
+    if (idx == -1 || idx + 1 >= widget.episodes.length) return null;
+    return widget.episodes[idx + 1];
+  }
+
+  Future<void> _switchEpisode(EpisodeItem ep, {bool autoplay = false}) async {
+    _saveProgress();
+    _vpc?.removeListener(_onPlayerUpdate);
+    await _vpc?.dispose();
+    _vpc = null;
+    _cues = [];
+    _activeSub = ''; _activeTopSub = '';
+    _isFinished = false; _showUpNext = false;
+    _currentEpisodeId = ep.id;
+    _currentEpisodeTitle = ep.title;
+    setState(() { _showEpisodes = false; _isBuffering = true; });
+    final url = ep.url.startsWith('http') ? ep.url : 'https://movie.vodu.me/${ep.url}';
+    _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await _vpc!.initialize();
+      _vpc!.addListener(_onPlayerUpdate);
+      if (autoplay) _vpc!.play();
+      setState(() { _isPlaying = autoplay; _duration = _vpc!.value.duration.inMilliseconds / 1000.0; });
+    } catch (e) {
+      setState(() { _errorMessage = 'تعذر تشغيل الحلقة.'; _isBuffering = false; });
+    }
+    final subUrl = ep.subtitleVttUrl.isNotEmpty ? ep.subtitleVttUrl : ep.subtitleUrl;
+    if (subUrl.isNotEmpty) {
+      SubtitleParser.parse(subUrl).then((cues) { if (mounted) setState(() => _cues = cues); });
+    }
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showControls = false);
     });
   }
 
-  void _postComment() async {
-    final text = _commentController.text.trim();
-    if (text.isEmpty) return;
-    if (!AuthSession.shared.isLoggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(L('يجب تسجيل الدخول لإضافة تعليق', 'Please login to comment'))),
-      );
-      return;
-    }
-    setState(() => _isPosting = true);
-    final success = await SupabaseManager.shared.postComment(widget.itemId, text);
-    setState(() => _isPosting = false);
-    if (success) {
-      _commentController.clear();
-      _loadComments();
-    }
+  void _saveProgress() {
+    if (_duration <= 0) return;
+    WatchProgressStore.instance.save(
+      itemId: widget.itemId, title: widget.itemTitle, imageUrl: widget.itemImageUrl,
+      episodeId: _currentEpisodeId, episodeTitle: _currentEpisodeTitle,
+      progress: _currentTime, duration: _duration,
+      videoUrl: widget.videoUrl, videoUrl720: widget.videoUrl720,
+      videoUrl1080: widget.videoUrl1080, videoUrl360: widget.videoUrl360,
+      videoUrl4k: widget.videoUrl4k,
+      subUrl: widget.subtitleUrl, subVttUrl: widget.subtitleVttUrl,
+      isMovie: widget.isMovie,
+    );
   }
 
-  void _deleteComment(String id) async {
-    final success = await SupabaseManager.shared.deleteComment(id);
-    if (success) _loadComments();
+  void _startSaveTimer() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer.periodic(const Duration(seconds: 10), (_) => _saveProgress());
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (loading) return Scaffold(body: Center(child: CircularProgressIndicator(color: AppSettings.shared.accentColor)));
-    if (error != null || details == null) {
-      return Scaffold(
-        appBar: AppBar(backgroundColor: Colors.transparent),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, color: Colors.grey, size: 60),
-              const SizedBox(height: 16),
-              Text(error ?? 'حدث خطأ', style: TextStyle(color: Colors.white)),
-              const SizedBox(height: 16),
-              ElevatedButton(onPressed: _load, child: Text(L('إعادة المحاولة', 'Retry'))),
-            ],
-          ),
-        ),
-      );
-    }
+  @override void dispose() {
+    _saveProgress();
+    _hideTimer?.cancel(); _saveTimer?.cancel();
+    _upNextTimer?.cancel(); _hudTimer?.cancel();
+    _seekFeedbackTimer?.cancel();
+    _vpc?.removeListener(_onPlayerUpdate);
+    _vpc?.dispose();
+    WakelockPlus.disable();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
 
-    final d = details!;
-    final w = MediaQuery.of(context).size.width;
-    final latestProg = WatchProgressStore.shared.progressFor(widget.itemId);
+  void _togglePlayPause() {
+    if (_vpc == null) return;
+    if (_isPlaying) { _vpc!.pause(); } else { _vpc!.play(); }
+    setState(() => _isPlaying = !_isPlaying);
+    _scheduleHide();
+  }
 
+  void _seek(double seconds) {
+    if (_vpc == null) return;
+    final target = (_currentTime + seconds).clamp(0, _duration);
+    _vpc!.seekTo(Duration(milliseconds: (target * 1000).round()));
+    _scheduleHide();
+  }
+
+  void _doubleTapSeek(bool isRight) {
+    _seek(isRight ? 10 : -10);
+    setState(() { _showSeekFeedback = true; _seekRight = isRight; });
+    _seekFeedbackTimer?.cancel();
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _showSeekFeedback = false);
+    });
+  }
+
+  @override Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: w * 1.15,
-              width: w,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(imageUrl: d.imageUrl, fit: BoxFit.cover),
-                  Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, AppSettings.shared.appBgColor], begin: Alignment.center, end: Alignment.bottomCenter)))
-                ],
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(children: [
+          // Video
+          if (_vpc != null && _vpc!.value.isInitialized)
+            Center(child: AspectRatio(
+              aspectRatio: _vpc!.value.aspectRatio,
+              child: VideoPlayer(_vpc!),
+            ))
+          else
+            const Center(child: SizedBox.shrink()),
+
+          // Gesture detector
+          _buildGestureLayer(),
+
+          // Subtitle overlay
+          _buildSubtitles(),
+
+          // Buffering indicator
+          if (_isBuffering && !_isFinished && _errorMessage == null)
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
+
+          // Error message
+          if (_errorMessage != null) _buildError(),
+
+          // Finished overlay
+          if (_isFinished) _buildFinishedOverlay(),
+
+          // Speed mode indicator
+          if (_isSpeedMode) _buildSpeedIndicator(),
+
+          // Seek feedback
+          if (_showSeekFeedback) _buildSeekFeedback(),
+
+          // Volume/Brightness HUD
+          if (_showVolumeHud || _showBrightnessHud) _buildHUD(),
+
+          // Controls overlay
+          if (_showControls && !_showEpisodes && !_isLocked) _buildControls(),
+
+          // Lock button only
+          if (_isLocked) _buildLockButton(),
+
+          // Episodes drawer
+          if (_showEpisodes) _buildEpisodesDrawer(),
+
+          // Up Next banner
+          if (_showUpNext && _nextEpisodeItem != null) _buildUpNextBanner(),
+
+          // Subtitle settings panel
+          if (_showSubtitleSettings) _buildSubtitleSettings(),
+
+          // Episode handle
+          if (!widget.isMovie && widget.episodes.isNotEmpty && !_showEpisodes)
+            _buildEpisodeHandle(),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildGestureLayer() {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        if (_isLocked) return;
+        setState(() => _showControls = !_showControls);
+        if (_showControls) _scheduleHide();
+      },
+      onDoubleTapDown: (d) {
+        final x = d.localPosition.dx;
+        final w = MediaQuery.of(context).size.width;
+        _doubleTapSeek(x > w / 2);
+      },
+      onDoubleTap: () {},
+      onLongPressStart: (_) {
+        if (_isLocked || _isSpeedMode) return;
+        _vpc?.setPlaybackSpeed(2.0);
+        setState(() => _isSpeedMode = true);
+      },
+      onLongPressEnd: (_) {
+        if (_isSpeedMode) {
+          _vpc?.setPlaybackSpeed(_playbackSpeed);
+          setState(() => _isSpeedMode = false);
+        }
+      },
+      onVerticalDragUpdate: (d) {
+        if (_isLocked) return;
+        final x = d.localPosition.dx;
+        final w = MediaQuery.of(context).size.width;
+        final delta = -d.delta.dy / 200;
+        if (x > w / 2) {
+          _volumeValue = (_volumeValue + delta).clamp(0, 1);
+          setState(() => _showVolumeHud = true);
+        } else {
+          _brightnessValue = (_brightnessValue + delta).clamp(0, 1);
+          setState(() => _showBrightnessHud = true);
+        }
+        _hudTimer?.cancel();
+        _hudTimer = Timer(const Duration(milliseconds: 900), () {
+          if (mounted) setState(() { _showVolumeHud = false; _showBrightnessHud = false; });
+        });
+      },
+      child: Container(color: Colors.transparent,
+        width: double.infinity, height: double.infinity),
+    );
+  }
+
+  Widget _buildSubtitles() {
+    final settings = AppSettings.instance;
+    if (!settings.subtitlesEnabled && _activeSub.isEmpty && _activeTopSub.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return IgnorePointer(
+      child: Stack(children: [
+        if (_activeTopSub.isNotEmpty)
+          Positioned(
+            top: 54, left: 20, right: 20,
+            child: Center(child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(settings.subtitleBgOpacity),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(_activeTopSub,
+                style: subtitleFontStyle(settings.subtitleFontName, settings.subtitleFontSize,
+                  color: colorFromHex(settings.subtitleColorHex)),
+                textAlign: TextAlign.center,
+              ),
+            )),
+          ),
+        if (_activeSub.isNotEmpty)
+          Positioned(
+            bottom: settings.subtitleBottomPad, left: 20, right: 20,
+            child: Center(child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(settings.subtitleBgOpacity),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(_activeSub,
+                style: subtitleFontStyle(settings.subtitleFontName, settings.subtitleFontSize,
+                  color: colorFromHex(settings.subtitleColorHex)),
+                textAlign: TextAlign.center,
+              ),
+            )),
+          ),
+      ]),
+    );
+  }
+
+  Widget _buildControls() {
+    return Positioned.fill(
+      child: Column(children: [
+        // Top bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+            ),
+          ),
+          child: Row(children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            Expanded(
+              child: Text(
+                widget.isMovie ? widget.itemTitle : '$_currentEpisodeTitle – ${widget.itemTitle}',
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              icon: Icon(_isLocked ? Icons.lock : Icons.lock_open, color: Colors.white),
+              onPressed: () => setState(() => _isLocked = !_isLocked),
+            ),
+            IconButton(
+              icon: const Icon(Icons.subtitles, color: Colors.white),
+              onPressed: () => setState(() => _showSubtitleSettings = !_showSubtitleSettings),
+            ),
+            PopupMenuButton<VideoQuality>(
+              icon: const Icon(Icons.hd, color: Colors.white),
+              color: const Color(0xFF1A1A1A),
+              onSelected: (q) => _switchQuality(q),
+              itemBuilder: (_) => [
+                _qualityItem(VideoQuality.auto, 'تلقائي / Auto'),
+                if (widget.videoUrl360.isNotEmpty) _qualityItem(VideoQuality.q360, '360p'),
+                if (widget.videoUrl720.isNotEmpty) _qualityItem(VideoQuality.q720, '720p'),
+                if (widget.videoUrl1080.isNotEmpty) _qualityItem(VideoQuality.q1080, '1080p'),
+                if (widget.videoUrl4k.isNotEmpty) _qualityItem(VideoQuality.q4k, '4K'),
+              ],
+            ),
+            PopupMenuButton<double>(
+              icon: const Icon(Icons.speed, color: Colors.white),
+              color: const Color(0xFF1A1A1A),
+              onSelected: (s) { _playbackSpeed = s; _vpc?.setPlaybackSpeed(s); },
+              itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                  .map((s) => PopupMenuItem(value: s,
+                    child: Text('${s}x', style: TextStyle(
+                      color: s == _playbackSpeed ? utRed() : Colors.white))))
+                  .toList(),
+            ),
+          ]),
+        ),
+        const Spacer(),
+        // Center controls
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          _playerBtn(Icons.replay_10, () => _seek(-10)),
+          const SizedBox(width: 20),
+          _playerBtn(
+            _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+            _togglePlayPause, size: 64,
+          ),
+          const SizedBox(width: 20),
+          _playerBtn(Icons.forward_10, () => _seek(10)),
+        ]),
+        const Spacer(),
+        // Bottom seek bar
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter, end: Alignment.topCenter,
+              colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+            ),
+          ),
+          child: Column(children: [
+            SliderTheme(
+              data: SliderThemeData(
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                activeTrackColor: utRed(),
+                inactiveTrackColor: Colors.white24,
+                thumbColor: utRed(),
+                overlayColor: utRed().withOpacity(0.2),
+                trackHeight: 3,
+              ),
+              child: Slider(
+                value: _duration > 0 ? _currentTime.clamp(0, _duration) : 0,
+                min: 0, max: _duration > 0 ? _duration : 1,
+                onChanged: (v) {
+                  _vpc?.seekTo(Duration(milliseconds: (v * 1000).round()));
+                  setState(() => _currentTime = v);
+                  _scheduleHide();
+                },
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(d.title, style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2)),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      if (d.year.isNotEmpty) _badge(d.year, Icons.calendar_today),
-                      if (d.rating.isNotEmpty) _badge(d.rating, Icons.star, Colors.yellow),
-                      if (d.runtime.isNotEmpty) _badge(d.runtime, Icons.access_time),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  if (latestProg != null && latestProg.progressSeconds > 30)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        if (d.isMovie) {
-                          _playMovie(d);
-                        } else if (d.episodeWithId(latestProg.episodeId) != null) {
-                          _playEpisode(d, d.episodeWithId(latestProg.episodeId)!);
-                        }
-                      },
-                      icon: Icon(Icons.play_arrow, color: Colors.black),
-                      label: Text(L('متابعة المشاهدة', 'Continue Watching'), style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.white, minimumSize: const Size(double.infinity, 46)),
-                    ),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white, minimumSize: const Size(double.infinity, 46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                    onPressed: () {
-                      if (d.isMovie) {
-                        _playMovie(d);
-                      } else if (d.episodes.isNotEmpty) {
-                        _playEpisode(d, d.episodes.first);
-                      }
-                    },
-                    icon: const Icon(Icons.play_arrow, color: Colors.black),
-                    label: Text(d.isMovie ? L('تشغيل', 'Play') : L('تشغيل الحلقة الأولى', 'Play First Episode'), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _actionBtn(FavoritesStore.shared.isFavorite(widget.itemId) ? Icons.favorite : Icons.favorite_border, L('مفضلة', 'Favorite'), () {
-                        FavoritesStore.shared.toggle(VideoItem(id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: d.isMovie ? 'movies' : 'series'));
-                        setState((){});
-                      }),
-                      _actionBtn(Icons.add_to_photos, L('قائمة', 'List'), () => _showAddToList(context, d)),
-                      if (d.isMovie) _actionBtn(Icons.download, L('تنزيل', 'Download'), () {
-                        DownloadManager.shared.startDownload(
-                          item: VideoItem(id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: 'movies'),
-                          isMovie: true, vUrl: d.movieUrl, sUrl: d.movieSubtitleUrl
-                        );
-                      }),
-                      _actionBtn(Icons.share, L('مشاركة', 'Share'), () {
-                        Share.share('${d.title}\\nhttps://movie.vodu.me/index.php?do=view&type=post&id=${widget.itemId}');
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  if (d.synopsis.isNotEmpty) ...[
-                    Text(L('القصة', 'Synopsis'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                    const SizedBox(height: 8),
-                    Text(
-                      d.synopsis,
-                      style: const TextStyle(color: Colors.white70, height: 1.5),
-                      maxLines: synopsisExpanded ? null : 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    GestureDetector(
-                      onTap: () => setState(() => synopsisExpanded = !synopsisExpanded),
-                      child: Text(
-                        synopsisExpanded ? L('عرض أقل', 'Show less') : L('عرض المزيد', 'Read more'),
-                        style: TextStyle(color: AppSettings.shared.accentColor),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                  _buildCommentsSection(context),
-                ],
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text(formatTime(_currentTime),
+                  style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: 'monospace')),
+                Text(formatTime(_duration),
+                  style: const TextStyle(fontSize: 12, color: Colors.white70, fontFamily: 'monospace')),
+              ]),
             ),
-            if (!d.isMovie && d.sortedSeasons.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(children: [
-                  Text(L('الحلقات', 'Episodes'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const Spacer(),
-                  Text('${d.episodes.length} حلقة', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                ]),
-              ),
-              const SizedBox(height: 16),
-              if (d.sortedSeasons.length > 1) SizedBox(
-                height: 40,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: d.sortedSeasons.length,
-                  itemBuilder: (c, i) {
-                    final s = d.sortedSeasons[i];
-                    return GestureDetector(
-                      onTap: () => setState(() => selectedSeason = s),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 10), padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                        decoration: BoxDecoration(color: selectedSeason == s ? AppSettings.shared.accentColor : Colors.white12, borderRadius: BorderRadius.circular(20)),
-                        child: Text(s, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ),
-                    );
-                  }
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...d.seasonsDict[selectedSeason]!.map((ep) {
-                final prog = WatchProgressStore.shared.progressFor(widget.itemId, ep.id);
-                return ListTile(
-                  onTap: () => _playEpisode(d, ep),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  leading: Stack(
-                    children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(8), child: CachedNetworkImage(imageUrl: d.imageUrl, width: 100, height: 60, fit: BoxFit.cover)),
-                      if (prog != null)
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: LinearProgressIndicator(
-                            value: prog.durationSeconds > 0 ? prog.progressSeconds / prog.durationSeconds : 0,
-                            color: AppSettings.shared.accentColor,
-                            backgroundColor: Colors.white30,
-                          ),
-                        ),
-                    ],
-                  ),
-                  title: Text(ep.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  trailing: Icon(Icons.download, color: Colors.grey),
-                );
-              }).toList(),
-              const SizedBox(height: 40),
-            ]
-          ],
+          ]),
         ),
+      ]),
+    );
+  }
+
+  PopupMenuItem<VideoQuality> _qualityItem(VideoQuality q, String label) =>
+      PopupMenuItem(value: q, child: Text(label, style: TextStyle(
+        color: q == _quality ? utRed() : Colors.white)));
+
+  Widget _playerBtn(IconData icon, VoidCallback onTap, {double size = 44}) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white, size: size),
+        ),
+      );
+
+  Widget _buildLockButton() => Positioned(
+    top: 20, right: 12,
+    child: IconButton(
+      icon: const Icon(Icons.lock, color: Colors.white),
+      onPressed: () => setState(() => _isLocked = false),
+    ),
+  );
+
+  Widget _buildEpisodeHandle() => Positioned(
+    bottom: 0, left: 0, right: 0,
+    child: GestureDetector(
+      onTap: () => setState(() => _showEpisodes = true),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Colors.transparent, Colors.black.withOpacity(0.55)],
+          ),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 46, height: 5,
+            decoration: BoxDecoration(
+              color: Colors.white54, borderRadius: BorderRadius.circular(3)),
+          ),
+          const SizedBox(height: 4),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.expand_less, color: Colors.white70, size: 14),
+            const SizedBox(width: 4),
+            Text(L('قائمة الحلقات', 'Episodes'),
+              style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
+          ]),
+        ]),
+      ),
+    ),
+  );
+
+  Widget _buildEpisodesDrawer() {
+    final episodes = widget.episodes;
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.9),
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(children: [
+              Text(widget.itemTitle,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => setState(() => _showEpisodes = false),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: episodes.length,
+              itemBuilder: (_, i) {
+                final ep = episodes[i];
+                final isCurrent = ep.id == _currentEpisodeId;
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: isCurrent ? utRed() : Colors.white12,
+                    child: Text('${i + 1}',
+                      style: TextStyle(color: isCurrent ? Colors.white : Colors.white70, fontSize: 13)),
+                  ),
+                  title: Text(ep.title,
+                    style: TextStyle(
+                      color: isCurrent ? utRed() : Colors.white,
+                      fontSize: 14, fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                    )),
+                  onTap: () => _switchEpisode(ep),
+                );
+              },
+            ),
+          ),
+        ]),
       ),
     );
+  }
+
+  Widget _buildUpNextBanner() {
+    final next = _nextEpisodeItem!;
+    return Positioned(
+      bottom: 60, left: 14, right: 14,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(children: [
+          Container(
+            width: 56, height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white12, borderRadius: BorderRadius.circular(12)),
+            child: Center(child: Text('$_upNextCountdown',
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(L('الحلقة التالية', 'Next Episode'),
+              style: const TextStyle(fontSize: 11, color: Colors.white60)),
+            Text(next.title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          ])),
+          TextButton(
+            onPressed: () {
+              _upNextTimer?.cancel();
+              setState(() => _showUpNext = false);
+              _autoNextSkippedFor = _currentEpisodeId;
+            },
+            child: Text(L('إلغاء', 'Cancel'),
+              style: const TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: utRed()),
+            icon: const Icon(Icons.play_arrow, size: 16),
+            label: Text(L('تشغيل', 'Play')),
+            onPressed: () {
+              _upNextTimer?.cancel();
+              setState(() => _showUpNext = false);
+              _switchEpisode(next, autoplay: true);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildError() => Center(child: Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: Colors.black.withOpacity(0.55),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.error_outline, color: utRed(), size: 34),
+      const SizedBox(height: 12),
+      Text(_errorMessage!, textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white)),
+      const SizedBox(height: 16),
+      ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(backgroundColor: utRed()),
+        icon: const Icon(Icons.refresh), label: const Text('إعادة المحاولة'),
+        onPressed: () { setState(() { _errorMessage = null; }); _setupPlayer(); },
+      ),
+    ]),
+  ));
+
+  Widget _buildFinishedOverlay() => Center(child: Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: Colors.black.withOpacity(0.45),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      IconButton(
+        icon: const Icon(Icons.replay_circle_filled, color: Colors.white, size: 64),
+        onPressed: () {
+          _vpc?.seekTo(Duration.zero); _vpc?.play();
+          setState(() { _isFinished = false; _isPlaying = true; });
+        },
+      ),
+      Text(L('إعادة التشغيل', 'Restart'),
+        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+    ]),
+  ));
+
+  Widget _buildSpeedIndicator() => Positioned(
+    top: 60, left: 0, right: 0,
+    child: Center(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.75), borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.fast_forward, color: Colors.white, size: 18),
+        const SizedBox(width: 6),
+        const Text('2× سرعة',
+          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+      ]),
+    )),
+  );
+
+  Widget _buildSeekFeedback() => Positioned(
+    bottom: 80, left: 0, right: 0,
+    child: Center(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(30)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(_seekRight ? Icons.forward_10 : Icons.replay_10, color: Colors.white, size: 40),
+        const SizedBox(width: 8),
+        Text(_seekRight ? '+10' : '-10',
+          style: const TextStyle(color: Colors.white, fontSize: 20)),
+      ]),
+    )),
+  );
+
+  Widget _buildHUD() => Positioned(
+    top: 60, left: 0, right: 0,
+    child: Center(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(14)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(
+          _showVolumeHud
+              ? (_volumeValue <= 0.01 ? Icons.volume_off : Icons.volume_up)
+              : (_brightnessValue < 0.5 ? Icons.brightness_3 : Icons.brightness_high),
+          color: Colors.white,
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 110,
+          child: LinearProgressIndicator(
+            value: _showVolumeHud ? _volumeValue : _brightnessValue,
+            color: Colors.white, backgroundColor: Colors.white30,
+          ),
+        ),
+      ]),
+    )),
+  );
+
+  Widget _buildSubtitleSettings() {
+    final s = AppSettings.instance;
+    return Positioned(
+      bottom: 0, left: 0, right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: StatefulBuilder(builder: (ctx, setSt) {
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(L('إعدادات الترجمة', 'Subtitle Settings'),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => setState(() => _showSubtitleSettings = false),
+              ),
+            ]),
+            SwitchListTile(
+              title: Text(L('تفعيل الترجمة', 'Enable Subtitles'),
+                style: const TextStyle(color: Colors.white)),
+              value: s.subtitlesEnabled,
+              activeColor: utRed(),
+              onChanged: (v) { s.subtitlesEnabled = v; setSt(() {}); setState(() {}); },
+            ),
+            _subSlider(L('تأخير (ثانية)', 'Delay (s)'), s.subtitleDelay, -5, 5, (v) {
+              s.subtitleDelay = v; setSt(() {}); }),
+            _subSlider(L('حجم الخط', 'Font Size'), s.subtitleFontSize, 12, 36, (v) {
+              s.subtitleFontSize = v; setSt(() {}); }),
+            _subSlider(L('شفافية الخلفية', 'BG Opacity'), s.subtitleBgOpacity, 0, 1, (v) {
+              s.subtitleBgOpacity = v; setSt(() {}); }),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, children: [
+              '#FFFFFF', '#FFFF00', '#00FFFF', '#FF69B4', '#FF4444', '#44FF44', '#4444FF',
+            ].map((hex) => GestureDetector(
+              onTap: () { s.subtitleColorHex = hex; setSt(() {}); setState(() {}); },
+              child: Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: colorFromHex(hex),
+                  shape: BoxShape.circle,
+                  border: s.subtitleColorHex == hex
+                      ? Border.all(color: Colors.white, width: 2) : null,
+                ),
+              ),
+            )).toList()),
+            const SizedBox(height: 8),
+            Row(children: [
+              Text(L('الخط:', 'Font:'), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(width: 8),
+              ...['Cairo', 'Rubik', 'IBMPlexArabic', 'ExpoArabic'].map((f) =>
+                GestureDetector(
+                  onTap: () { s.subtitleFontName = f; setSt(() {}); setState(() {}); },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: s.subtitleFontName == f ? utRed() : Colors.white12,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(f, style: TextStyle(
+                      color: Colors.white, fontSize: 11,
+                      fontFamily: f,
+                    )),
+                  ),
+                )),
+            ]),
+            const SizedBox(height: 8),
+          ]);
+        }),
+      ),
+    );
+  }
+
+  Widget _subSlider(String label, double val, double min, double max, ValueChanged<double> onChanged) =>
+    Row(children: [
+      SizedBox(width: 120,
+        child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+      Expanded(child: Slider(
+        value: val.clamp(min, max), min: min, max: max,
+        activeColor: utRed(), inactiveColor: Colors.white24,
+        onChanged: onChanged,
+      )),
+      SizedBox(width: 36, child: Text(val.toStringAsFixed(1),
+        style: const TextStyle(color: Colors.white70, fontSize: 11))),
+    ]);
+
+  Future<void> _switchQuality(VideoQuality q) async {
+    if (_vpc == null) return;
+    final t = _currentTime;
+    _quality = q;
+    AppSettings.instance.preferredQuality = q.name;
+    final url = _resolvedUrl(q: q);
+    if (url.isEmpty) return;
+    _vpc?.removeListener(_onPlayerUpdate);
+    await _vpc?.dispose();
+    _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await _vpc!.initialize();
+      _vpc!.addListener(_onPlayerUpdate);
+      await _vpc!.seekTo(Duration(milliseconds: (t * 1000).round()));
+      if (_isPlaying) _vpc!.play();
+      setState(() {});
+    } catch (_) {}
+  }
+}
+""")
+
+print("✅ player_screen.dart written")
+
+# ─── lib/screens/home_screen.dart ───────────────────────────────────────────
+w("lib/screens/home_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/scraper.dart';
+import '../providers/watch_progress_store.dart';
+import '../models/video_item.dart';
+import '../models/site_category.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../widgets/hero_carousel.dart';
+import '../widgets/category_row.dart';
+import '../widgets/continue_watching_row.dart';
+import 'details_screen.dart';
+import 'category_list_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+  @override State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _didLoad = false;
+
+  @override void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didLoad) {
+      _didLoad = true;
+      context.read<MovieScraper>().fetchHome();
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    final scraper = context.watch<MovieScraper>();
+    final progressStore = context.watch<WatchProgressStore>();
+    final recentlyWatched = progressStore.recent;
+    final progressMap = {
+      for (final p in recentlyWatched) p.itemId: p,
+    };
+    final settings = AppSettings.instance;
+
+    return Scaffold(
+      backgroundColor: appBg(),
+      body: scraper.isLoading && scraper.categories.isEmpty
+          ? Center(child: CircularProgressIndicator(color: utRed()))
+          : RefreshIndicator(
+              onRefresh: scraper.refreshHome,
+              color: utRed(),
+              child: CustomScrollView(slivers: [
+                SliverAppBar(
+                  backgroundColor: appBg(),
+                  floating: true,
+                  title: Image.asset('assets/images/logo.png', height: 36,
+                    errorBuilder: (_, __, ___) => Text('UTan',
+                      style: appFontStyle(22, bold: true, color: utRed()))),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none, color: Colors.white),
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
+                SliverToBoxAdapter(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Hero carousel
+                    if (scraper.heroItems.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      HeroCarousel(
+                        items: scraper.heroItems.take(10).toList(),
+                        onTap: (id) => _openDetails(context, id),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Continue watching
+                    if (recentlyWatched.isNotEmpty) ...[
+                      ContinueWatchingRow(
+                        items: recentlyWatched,
+                        onTap: (p) => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => DetailsScreen(itemId: p.itemId))),
+                        onRemove: (id) => progressStore.remove(id),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Category rows
+                    ...scraper.categories.map((cat) => Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: CategoryRow(
+                        title: settings.appLanguage == 'en' ? cat.name : cat.name,
+                        items: cat.items,
+                        tagId: cat.tagId,
+                        progressMap: progressMap,
+                        onItemTap: (id) => _openDetails(context, id),
+                        onSeeAll: (tagId, title) => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => CategoryListScreen(
+                            category: SiteCategory(
+                              id: tagId, remoteId: tagId, isTag: true,
+                              nameAr: title, nameEn: title,
+                            ),
+                          ),
+                        )),
+                      ),
+                    )),
+                    const SizedBox(height: 80),
+                  ],
+                )),
+              ]),
+            ),
+    );
+  }
+
+  void _openDetails(BuildContext ctx, String id) {
+    Navigator.push(ctx, MaterialPageRoute(builder: (_) => DetailsScreen(itemId: id)));
+  }
+}
+""")
+
+# ─── lib/screens/browse_screen.dart ─────────────────────────────────────────
+w("lib/screens/browse_screen.dart", r"""import 'package:flutter/material.dart';
+import '../models/site_category.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import 'category_list_screen.dart';
+
+class BrowseScreen extends StatelessWidget {
+  const BrowseScreen({super.key});
+
+  @override Widget build(BuildContext context) {
+    final lang = AppSettings.instance.appLanguage;
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(),
+        title: Text(L('تصفح', 'Browse'),
+          style: appFontStyle(20, bold: true)),
+        elevation: 0,
+      ),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, childAspectRatio: 2.5, crossAxisSpacing: 14, mainAxisSpacing: 14,
+        ),
+        itemCount: siteCategories.length,
+        itemBuilder: (_, i) {
+          final cat = siteCategories[i];
+          final color = categoryColor(cat.nameEn);
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => CategoryListScreen(category: cat))),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color.withOpacity(0.5), color.withOpacity(0.12)],
+                  begin: Alignment.topRight, end: Alignment.bottomLeft,
+                ),
+                border: Border.all(color: color.withOpacity(0.25)),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Stack(children: [
+                Positioned(
+                  top: 8, right: 8,
+                  child: Icon(categoryIcon(cat.nameEn),
+                    size: 36, color: color.withOpacity(0.3)),
+                ),
+                Positioned(
+                  left: 12, bottom: 10,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(cat.localizedName(lang),
+                      style: TextStyle(
+                        fontFamily: 'ExpoArabic', fontSize: 14,
+                        fontWeight: FontWeight.w700, color: Colors.white,
+                      ),
+                      maxLines: 2,
+                    ),
+                    if (lang == 'ar' && cat.nameEn.isNotEmpty)
+                      Text(cat.nameEn,
+                        style: const TextStyle(fontSize: 10, color: Colors.white54)),
+                  ]),
+                ),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+""")
+
+print("✅ home + browse screens written")
+
+# ─── lib/screens/category_list_screen.dart ───────────────────────────────────
+w("lib/screens/category_list_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/site_category.dart';
+import '../models/video_item.dart';
+import '../services/scraper.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../widgets/poster_card.dart';
+import 'details_screen.dart';
+
+class CategoryListScreen extends StatefulWidget {
+  final SiteCategory category;
+  const CategoryListScreen({super.key, required this.category});
+  @override State<CategoryListScreen> createState() => _CategoryListScreenState();
+}
+
+class _CategoryListScreenState extends State<CategoryListScreen> {
+  final List<VideoItem> _items = [];
+  bool _loading = false;
+  bool _reachedEnd = false;
+  int _page = 1;
+  String _sort = 'date';
+  String _genre = '';
+  final ScrollController _scroll = ScrollController();
+  static const _genres = ['Action','Adventure','Animation','Comedy','Drama',
+    'Fantasy','Horror','Romance','Sci-Fi','Thriller'];
+
+  @override void initState() {
+    super.initState();
+    _loadMore();
+    _scroll.addListener(() {
+      if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 300) _loadMore();
+    });
+  }
+
+  @override void dispose() { _scroll.dispose(); super.dispose(); }
+
+  Future<void> _loadMore() async {
+    if (_loading || _reachedEnd) return;
+    setState(() => _loading = true);
+    final scraper = context.read<MovieScraper>();
+    final newItems = await scraper.fetchCategory(
+      widget.category.remoteId, page: _page,
+      useTag: widget.category.isTag, sort: _sort,
+      genre: _genre.isEmpty ? null : _genre,
+    );
+    if (!mounted) return;
+    final existingIds = _items.map((i) => i.id).toSet();
+    final unique = newItems.where((i) => existingIds.add(i.id)).toList();
+    setState(() {
+      _items.addAll(unique);
+      _loading = false;
+      if (newItems.isEmpty || unique.isEmpty) { _reachedEnd = true; }
+      else { _page++; }
+    });
+  }
+
+  Future<void> _reset() async {
+    setState(() { _items.clear(); _page = 1; _reachedEnd = false; });
+    await _loadMore();
+  }
+
+  @override Widget build(BuildContext context) {
+    final lang = AppSettings.instance.appLanguage;
+    final minWidth = AppSettings.instance.posterMinWidth;
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(),
+        title: Text(widget.category.localizedName(lang),
+          style: appFontStyle(18, bold: true)),
+        elevation: 0,
+      ),
+      body: Column(children: [
+        // Sort & filter bar
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Row(children: [
+            Expanded(child: SegmentedButton<String>(
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: utRed(),
+                foregroundColor: Colors.white,
+                selectedForegroundColor: Colors.white,
+              ),
+              segments: [
+                ButtonSegment(value: 'date', label: Text(L('تاريخ', 'Date'))),
+                ButtonSegment(value: 'year', label: Text(L('سنة', 'Year'))),
+                ButtonSegment(value: 'views', label: Text(L('مشاهدات', 'Views'))),
+                ButtonSegment(value: 'rating', label: Text(L('تقييم', 'Rating'))),
+              ],
+              selected: {_sort},
+              onSelectionChanged: (s) { _sort = s.first; _reset(); },
+            )),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              icon: Icon(Icons.tune,
+                color: _genre.isEmpty ? Colors.white70 : utRed()),
+              color: const Color(0xFF1A1A1A),
+              onSelected: (g) { _genre = g == 'All' ? '' : g; _reset(); },
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'All', child: Text(L('الكل', 'All'),
+                  style: const TextStyle(color: Colors.white))),
+                ..._genres.map((g) => PopupMenuItem(value: g,
+                  child: Text(g, style: const TextStyle(color: Colors.white)))),
+              ],
+            ),
+          ]),
+        ),
+        Expanded(child: RefreshIndicator(
+          onRefresh: _reset,
+          color: utRed(),
+          child: GridView.builder(
+            controller: _scroll,
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: minWidth + 40,
+              childAspectRatio: 120 / (176 + 44),
+              crossAxisSpacing: 14, mainAxisSpacing: 16,
+            ),
+            itemCount: _items.length + (_loading || _reachedEnd ? 1 : 0),
+            itemBuilder: (_, i) {
+              if (i >= _items.length) {
+                if (_reachedEnd && _items.isNotEmpty) {
+                  return Center(child: Text(L('تم تحميل الكل', 'All loaded'),
+                    style: const TextStyle(color: Colors.white38, fontSize: 12)));
+                }
+                return Center(child: CircularProgressIndicator(color: utRed()));
+              }
+              final item = _items[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => DetailsScreen(itemId: item.id))),
+                child: PosterCard(item: item),
+              );
+            },
+          ),
+        )),
+      ]),
+    );
+  }
+}
+""")
+
+# ─── lib/screens/search_screen.dart ─────────────────────────────────────────
+w("lib/screens/search_screen.dart", r"""import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/scraper.dart';
+import '../models/video_item.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../widgets/poster_card.dart';
+import 'details_screen.dart';
+
+class SearchScreen extends StatefulWidget {
+  const SearchScreen({super.key});
+  @override State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  final _titleCtrl = TextEditingController();
+  final _genreCtrl = TextEditingController();
+  final _yearCtrl  = TextEditingController();
+  List<VideoItem> _results = [];
+  bool _searching = false;
+  bool _showFilters = false;
+  Timer? _debounce;
+
+  @override void dispose() {
+    _titleCtrl.dispose(); _genreCtrl.dispose(); _yearCtrl.dispose();
+    _debounce?.cancel(); super.dispose();
+  }
+
+  void _performSearch() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      if (_titleCtrl.text.isEmpty && _genreCtrl.text.isEmpty && _yearCtrl.text.isEmpty) {
+        setState(() => _results = []); return;
+      }
+      setState(() => _searching = true);
+      final scraper = context.read<MovieScraper>();
+      final r = await scraper.advancedSearch(
+        title: _titleCtrl.text,
+        genre: _genreCtrl.text,
+        year: _yearCtrl.text,
+      );
+      if (mounted) setState(() { _results = r; _searching = false; });
+    });
+  }
+
+  @override Widget build(BuildContext context) {
+    final lang = AppSettings.instance.appLanguage;
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(L('بحث', 'Search'), style: appFontStyle(20, bold: true)),
+      ),
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(Icons.search, color: Colors.grey)),
+              Expanded(child: TextField(
+                controller: _titleCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  hintText: L('بحث...', 'Search...'),
+                  hintStyle: const TextStyle(color: Colors.grey),
+                ),
+                onChanged: (_) => _performSearch(),
+              )),
+              if (_searching)
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: utRed()))),
+              if (_titleCtrl.text.isNotEmpty && !_searching)
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                  onPressed: () { _titleCtrl.clear(); setState(() => _results = []); },
+                ),
+              IconButton(
+                icon: Icon(Icons.tune, color: _showFilters ? utRed() : Colors.white54),
+                onPressed: () => setState(() => _showFilters = !_showFilters),
+              ),
+            ]),
+          ),
+        ),
+
+        // Advanced filters
+        if (_showFilters)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(children: [
+              Expanded(child: _filterField(_genreCtrl, L('النوع', 'Genre'))),
+              const SizedBox(width: 8),
+              Expanded(child: _filterField(_yearCtrl, L('السنة', 'Year'))),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: utRed()),
+                onPressed: _performSearch,
+                child: Text(L('بحث', 'Search')),
+              ),
+            ]),
+          ),
+
+        // Results grid
+        Expanded(child: _results.isEmpty && !_searching
+            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.search, size: 60, color: Colors.white12),
+                const SizedBox(height: 16),
+                Text(L('ابحث عن أفلامك المفضلة', 'Search your favourite titles'),
+                  style: const TextStyle(color: Colors.white38)),
+              ]))
+            : GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 150,
+                  childAspectRatio: 120 / 220,
+                  crossAxisSpacing: 14, mainAxisSpacing: 16,
+                ),
+                itemCount: _results.length,
+                itemBuilder: (_, i) {
+                  final item = _results[i];
+                  return GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => DetailsScreen(itemId: item.id))),
+                    child: PosterCard(item: item),
+                  );
+                },
+              )),
+      ]),
+    );
+  }
+
+  Widget _filterField(TextEditingController ctrl, String hint) =>
+    TextField(
+      controller: ctrl,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
+      decoration: InputDecoration(
+        hintText: hint, hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+        filled: true, fillColor: Colors.white.withOpacity(0.07),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+    );
+}
+""")
+
+print("✅ category_list + search screens written")
+
+# ─── lib/screens/details_screen.dart ────────────────────────────────────────
+w("lib/screens/details_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../services/scraper.dart';
+import '../models/media_details.dart';
+import '../models/video_item.dart';
+import '../models/episode_item.dart';
+import '../providers/watch_progress_store.dart';
+import '../providers/favorites_store.dart';
+import '../providers/watchlist_store.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../player/player_screen.dart';
+
+class DetailsScreen extends StatefulWidget {
+  final String itemId;
+  const DetailsScreen({super.key, required this.itemId});
+  @override State<DetailsScreen> createState() => _DetailsScreenState();
+}
+
+class _DetailsScreenState extends State<DetailsScreen> {
+  MediaDetails? _details;
+  bool _loading = true;
+  String _selectedSeason = '';
+  bool _showAddToList = false;
+
+  @override void initState() {
+    super.initState();
+    _fetchDetails();
+  }
+
+  Future<void> _fetchDetails() async {
+    final scraper = context.read<MovieScraper>();
+    final d = await scraper.fetchDetails(widget.itemId);
+    if (mounted) setState(() { _details = d; _loading = false;
+      if (d.sortedSeasons.isNotEmpty) _selectedSeason = d.sortedSeasons.first; });
   }
 
   void _playMovie(MediaDetails d) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPlayerView(data: PlayerData(
-      itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl, isMovie: true,
-      videoUrl: d.movieUrl, videoUrl720: d.movieUrl720, videoUrl1080: d.movieUrl1080,
-      videoUrl360: d.movieUrl360, videoUrl4k: d.movieUrl4k,
+    String fix(String u) {
+      if (u.isEmpty) return '';
+      if (u.startsWith('http')) return u;
+      return 'https://movie.vodu.me/$u';
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
+      isMovie: true,
+      videoUrl: fix(d.movieUrl), videoUrl720: fix(d.movieUrl720),
+      videoUrl1080: fix(d.movieUrl1080), videoUrl360: fix(d.movieUrl360),
+      videoUrl4k: fix(d.movieUrl4k),
       subtitleUrl: d.movieSubtitleUrl, subtitleVttUrl: d.movieSubtitleVttUrl,
-      episodeId: '', episodeTitle: '', episodes: []
-    ))));
+      episodeId: widget.itemId, episodeTitle: d.title,
+    )));
   }
 
   void _playEpisode(MediaDetails d, EpisodeItem ep) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPlayerView(data: PlayerData(
-      itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl, isMovie: false,
-      videoUrl: ep.url, videoUrl720: ep.url720, videoUrl1080: ep.url1080,
-      videoUrl360: ep.url360, videoUrl4k: ep.url4k,
+    String fix(String u) {
+      if (u.isEmpty) return '';
+      if (u.startsWith('http')) return u;
+      return 'https://movie.vodu.me/$u';
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
+      isMovie: false,
+      videoUrl: fix(ep.url), videoUrl720: fix(ep.url720),
+      videoUrl1080: fix(ep.url1080), videoUrl360: fix(ep.url360),
+      videoUrl4k: fix(ep.url4k),
       subtitleUrl: ep.subtitleUrl, subtitleVttUrl: ep.subtitleVttUrl,
-      episodeId: ep.id, episodeTitle: ep.title, episodes: d.episodes
-    ))));
+      episodeId: ep.id, episodeTitle: ep.title,
+      episodes: d.episodes,
+    )));
   }
 
-  Widget _badge(String text, IconData icon, [Color color = Colors.white]) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: color == Colors.white ? Colors.white12 : color.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-      child: Row(children: [Icon(icon, size: 12, color: color == Colors.white ? Colors.white70 : color), const SizedBox(width: 4), Text(text, style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))]),
+  @override Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: appBg(),
+      body: _loading
+          ? Center(child: CircularProgressIndicator(color: utRed()))
+          : _details == null
+              ? Center(child: Text(L('فشل التحميل', 'Load failed'),
+                  style: const TextStyle(color: Colors.white)))
+              : _buildBody(_details!),
     );
   }
 
-  Widget _actionBtn(IconData icon, String label, VoidCallback tap) {
-    return GestureDetector(
-      onTap: tap,
-      child: Column(children: [Icon(icon, color: Colors.white), const SizedBox(height: 4), Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10))]),
-    );
-  }
+  Widget _buildBody(MediaDetails d) {
+    final favStore = context.watch<FavoritesStore>();
+    final listStore = context.watch<WatchListStore>();
+    final isFav = favStore.isFavorite(widget.itemId);
+    final item = VideoItem(
+      id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: 'post');
 
-  void _showAddToList(BuildContext context, MediaDetails d) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppSettings.shared.appBgColor,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(L('أضف إلى قائمة', 'Add to List'), style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+    return CustomScrollView(slivers: [
+      // Hero image + back button
+      SliverAppBar(
+        expandedHeight: 300, pinned: true,
+        backgroundColor: appBg(), elevation: 0,
+        flexibleSpace: FlexibleSpaceBar(
+          background: Stack(fit: StackFit.expand, children: [
+            CachedNetworkImage(
+              imageUrl: d.imageUrl, fit: BoxFit.cover,
+              placeholder: (_, __) => Container(color: const Color(0x1AFFFFFF)),
+              errorWidget: (_, __, ___) => Container(color: const Color(0x1AFFFFFF),
+                child: const Icon(Icons.movie, size: 60, color: Colors.white24)),
             ),
-            ...WatchListStore.shared.lists.map((list) {
-              final already = list.items.any((i) => i.id == widget.itemId);
-              return ListTile(
-                title: Text(list.name, style: TextStyle(color: Colors.white)),
-                trailing: Icon(already ? Icons.check_circle : Icons.add_circle_outline, color: already ? Colors.green : Colors.grey),
-                onTap: () {
-                  if (already) {
-                    WatchListStore.shared.removeItem(widget.itemId, list.id);
-                  } else {
-                    WatchListStore.shared.addItem(VideoItem(id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: d.isMovie ? 'movies' : 'series'), list.id);
-                  }
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCommentsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(L('التعليقات', 'Comments'), style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _commentController,
-                decoration: InputDecoration(
-                  hintText: L('أضف تعليقاً...', 'Add a comment...'),
-                  hintStyle: TextStyle(color: Colors.grey),
-                  filled: true,
-                  fillColor: Colors.white10,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                ),
-                style: TextStyle(color: Colors.white),
+            Container(decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Colors.transparent, appBg()],
               ),
+            )),
+          ]),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(isFav ? Icons.favorite : Icons.favorite_border,
+              color: isFav ? utRed() : Colors.white),
+            onPressed: () => favStore.toggle(item),
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
+            onPressed: () => _showAddToListDialog(context, item),
+          ),
+        ],
+      ),
+
+      SliverToBoxAdapter(child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Title
+          Text(d.title, style: appFontStyle(22, bold: true)),
+          const SizedBox(height: 10),
+
+          // Metadata badges
+          Wrap(spacing: 8, runSpacing: 6, children: [
+            if (d.year.isNotEmpty) _badge(d.year),
+            if (d.genre.isNotEmpty) _badge(d.genre),
+            if (d.rating.isNotEmpty) _badge('⭐ ${d.rating}'),
+            if (d.runtime.isNotEmpty) _badge(d.runtime),
+            _badge(d.isMovie ? L('فيلم', 'Movie') : L('مسلسل', 'Series')),
+          ]),
+          const SizedBox(height: 20),
+
+          // Action buttons row
+          Row(children: [
+            Expanded(child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: utRed(), padding: const EdgeInsets.symmetric(vertical: 14)),
+              icon: const Icon(Icons.play_arrow),
+              label: Text(d.isMovie ? L('تشغيل', 'Play') : L('أول حلقة', 'First Episode'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              onPressed: () {
+                if (d.isMovie) { _playMovie(d); }
+                else if (d.episodes.isNotEmpty) { _playEpisode(d, d.episodes.first); }
+              },
+            )),
+            const SizedBox(width: 12),
+            _actionIconBtn(
+              isFav ? Icons.favorite : Icons.favorite_border,
+              L('مفضلة', 'Favourite'),
+              () => favStore.toggle(item),
+              color: isFav ? utRed() : null,
             ),
             const SizedBox(width: 8),
-            _isPosting
-                ? const CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _postComment,
-                    child: Text(L('نشر', 'Post')),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppSettings.shared.accentColor),
-                  ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        commentsLoading
-            ? const Center(child: CircularProgressIndicator())
-            : comments.isEmpty
-                ? Text(L('لا توجد تعليقات بعد', 'No comments yet'), style: TextStyle(color: Colors.grey))
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: comments.length,
-                    itemBuilder: (ctx, i) {
-                      final c = comments[i];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppSettings.shared.accentColor,
-                          child: Text(c.displayName[0], style: TextStyle(color: Colors.white)),
-                        ),
-                        title: Text(c.displayName, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        subtitle: Text('${c.text}\\n${c.formattedDate}', style: TextStyle(color: Colors.white70)),
-                        trailing: (AuthSession.shared.user?.id == c.userId)
-                            ? IconButton(
-                                icon: Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteComment(c.id),
-                              )
-                            : null,
-                      );
-                    },
-                  ),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-}
-"""
-with open("UTan_Flutter/lib/views/details_view.dart", "w", encoding="utf-8") as f:
-    f.write(details_view_dart)
+            _actionIconBtn(Icons.playlist_add, L('قائمة', 'List'),
+              () => _showAddToListDialog(context, item)),
+          ]),
+          const SizedBox(height: 20),
 
-# ============================================================
-# 19. lib/views/account_view.dart (إصلاح الخطأ النحوي)
-# ============================================================
-account_view_dart = """import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../stores/app_settings.dart';
-import '../services/supabase_manager.dart';
-import '../models/models.dart';
-
-class AccountView extends StatefulWidget {
-  @override
-  _AccountViewState createState() => _AccountViewState();
-}
-
-class _AccountViewState extends State<AccountView> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-  bool _isSignUp = false;
-  bool _loading = false;
-  String? _error;
-
-  @override
-  Widget build(BuildContext context) {
-    final session = AuthSession.shared;
-    if (session.isLoggedIn) {
-      return _buildProfile(session);
-    }
-    return Scaffold(
-      appBar: AppBar(title: Text(L('حسابي', 'Account')), backgroundColor: Colors.transparent),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_isSignUp ? L('إنشاء حساب جديد', 'Create Account') : L('تسجيل الدخول', 'Sign In'), style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 30),
-            if (_isSignUp)
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  hintText: L('الاسم', 'Name'),
-                  filled: true,
-                  fillColor: Colors.white12,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-                style: TextStyle(color: Colors.white),
-              ),
-            TextField(
-              controller: _emailController,
-              decoration: InputDecoration(
-                hintText: L('البريد الإلكتروني', 'Email'),
-                filled: true,
-                fillColor: Colors.white12,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-              style: TextStyle(color: Colors.white),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                hintText: L('كلمة المرور', 'Password'),
-                filled: true,
-                fillColor: Colors.white12,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-              style: TextStyle(color: Colors.white),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: TextStyle(color: Colors.red)),
-            ],
-            const SizedBox(height: 24),
-            _loading
-                ? const CircularProgressIndicator()
-                : Column(
-                    children: [
-                      ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: AppSettings.shared.accentColor),
-                        child: Text(_isSignUp ? L('إنشاء حساب', 'Create') : L('تسجيل الدخول', 'Sign In'), style: TextStyle(color: Colors.white)),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _signInWithGoogle,
-                        style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: Colors.white),
-                        icon: Icon(Icons.g_mobiledata, color: Colors.black),
-                        label: Text(L('تسجيل الدخول عبر Google', 'Sign in with Google'), style: TextStyle(color: Colors.black)),
-                      ),
-                    ],
-                  ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => setState(() => _isSignUp = !_isSignUp),
-              child: Text(
-                _isSignUp ? L('لديك حساب؟ سجّل دخول', 'Already have an account? Sign in') : L('ليس لديك حساب؟ أنشئ حساباً', "Don't have an account? Create one"),
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfile(AuthSession session) {
-    return Scaffold(
-      appBar: AppBar(title: Text(L('الملف الشخصي', 'Profile')), backgroundColor: Colors.transparent),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: AppSettings.shared.accentColor,
-              child: Text(session.user?.displayName[0] ?? 'U', style: TextStyle(fontSize: 40, color: Colors.white)),
-            ),
-            const SizedBox(height: 16),
-            Text(session.user?.displayName ?? '', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          // Synopsis
+          if (d.synopsis.isNotEmpty) ...[
+            Text(L('القصة', 'Synopsis'),
+              style: appFontStyle(16, bold: true, color: Colors.white70)),
             const SizedBox(height: 8),
-            Text(session.user?.email ?? '', style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 30),
-            if (session.isAdmin)
-              ListTile(
-                leading: Icon(Icons.admin_panel_settings, color: Colors.orange),
-                title: Text(L('لوحة الإدارة', 'Admin Panel'), style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelView())),
-              ),
-            ListTile(
-              leading: Icon(Icons.feedback, color: Colors.white),
-              title: Text(L('الشكاوى والاقتراحات', 'Feedback'), style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FeedbackView())),
-            ),
-            ListTile(
-              leading: Icon(Icons.logout, color: Colors.red),
-              title: Text(L('تسجيل الخروج', 'Sign Out'), style: TextStyle(color: Colors.red)),
-              onTap: () => session.signOut(),
-            ),
+            Text(d.synopsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.6)),
+            const SizedBox(height: 20),
           ],
+
+          // Series episodes
+          if (!d.isMovie && d.episodes.isNotEmpty) ...[
+            // Season picker
+            if (d.sortedSeasons.length > 1)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: d.sortedSeasons.map((s) =>
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedSeason = s),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: _selectedSeason == s ? utRed() : Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _selectedSeason == s
+                            ? utRed() : Colors.white.withOpacity(0.15)),
+                      ),
+                      child: Text(s, style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: _selectedSeason == s ? FontWeight.w700 : FontWeight.w400,
+                      )),
+                    ),
+                  )).toList(),
+              ),
+            const SizedBox(height: 14),
+
+            // Episodes list for selected season
+            ...(() {
+              final eps = _selectedSeason.isEmpty
+                  ? d.episodes
+                  : (d.seasonsDict[_selectedSeason] ?? []);
+              return eps.map((ep) => _episodeTile(d, ep)).toList();
+            })(),
+          ],
+        ]),
+      )),
+    ]);
+  }
+
+  Widget _episodeTile(MediaDetails d, EpisodeItem ep) {
+    final prog = context.read<WatchProgressStore>()
+        .progressFor(widget.itemId, episodeId: ep.id);
+    final pct = (prog != null && prog.durationSeconds > 0)
+        ? prog.progressSeconds / prog.durationSeconds : 0.0;
+    return GestureDetector(
+      onTap: () => _playEpisode(d, ep),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
+        child: Row(children: [
+          // Play icon
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: utRed().withOpacity(0.15), shape: BoxShape.circle),
+            child: Icon(Icons.play_arrow, color: utRed()),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ep.title,
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+            if (pct > 0) ...[
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: pct.clamp(0, 1), minHeight: 2,
+                backgroundColor: Colors.white12,
+                valueColor: AlwaysStoppedAnimation<Color>(utRed()),
+              ),
+            ],
+          ])),
+          const Icon(Icons.chevron_right, color: Colors.white38),
+        ]),
       ),
     );
   }
 
-  void _submit() async {
-    setState(() { _loading = true; _error = null; });
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-    if (email.isEmpty || password.isEmpty) {
-      setState(() { _error = L('الرجاء تعبئة جميع الحقول', 'Please fill all fields'); _loading = false; });
+  Widget _badge(String text) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    decoration: BoxDecoration(
+      color: utRed().withOpacity(0.12),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: utRed().withOpacity(0.3)),
+    ),
+    child: Text(text, style: TextStyle(
+      color: utRed(), fontSize: 11, fontWeight: FontWeight.w700, fontFamily: 'ExpoArabic')),
+  );
+
+  Widget _actionIconBtn(IconData icon, String label, VoidCallback onTap, {Color? color}) =>
+    GestureDetector(
+      onTap: onTap,
+      child: Column(children: [
+        Icon(icon, color: color ?? Colors.white, size: 24),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ]),
+    );
+
+  void _showAddToListDialog(BuildContext ctx, VideoItem item) {
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _AddToListSheet(item: item),
+    );
+  }
+}
+
+class _AddToListSheet extends StatefulWidget {
+  final VideoItem item;
+  const _AddToListSheet({required this.item});
+  @override State<_AddToListSheet> createState() => _AddToListSheetState();
+}
+
+class _AddToListSheetState extends State<_AddToListSheet> {
+  @override Widget build(BuildContext context) {
+    final store = context.watch<WatchListStore>();
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(L('أضف إلى قائمة', 'Add to List'),
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 16),
+        ListTile(
+          leading: Container(
+            width: 50, height: 50,
+            decoration: BoxDecoration(color: utRed().withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+            child: Icon(Icons.add, color: utRed()),
+          ),
+          title: Text(L('إنشاء قائمة جديدة', 'Create New List'),
+            style: TextStyle(color: utRed(), fontWeight: FontWeight.w700)),
+          onTap: () { Navigator.pop(context); _createListDialog(context); },
+        ),
+        ...store.lists.map((list) {
+          final added = list.items.any((i) => i.id == widget.item.id);
+          return ListTile(
+            leading: const Icon(Icons.playlist_play, color: Colors.white54),
+            title: Text(list.name, style: const TextStyle(color: Colors.white)),
+            trailing: added ? Icon(Icons.check, color: utRed()) : null,
+            onTap: () {
+              if (added) { store.removeItem(widget.item.id, list.id); }
+              else { store.addItem(widget.item, list.id); }
+              setState(() {});
+            },
+          );
+        }),
+        const SizedBox(height: 8),
+      ]),
+    );
+  }
+
+  void _createListDialog(BuildContext ctx) {
+    final ctrl = TextEditingController();
+    showDialog(context: ctx, builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      title: Text(L('قائمة جديدة', 'New List'), style: const TextStyle(color: Colors.white)),
+      content: TextField(controller: ctrl,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: L('اسم القائمة', 'List name'), hintStyle: const TextStyle(color: Colors.grey),
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: utRed())),
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: utRed())),
+        )),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+          child: Text(L('إلغاء', 'Cancel'), style: const TextStyle(color: Colors.grey))),
+        TextButton(
+          onPressed: () {
+            final n = ctrl.text.trim();
+            if (n.isNotEmpty) {
+              ctx.read<WatchListStore>().createList(n);
+              Navigator.pop(ctx);
+            }
+          },
+          child: Text(L('إنشاء', 'Create'), style: TextStyle(color: utRed())),
+        ),
+      ],
+    ));
+  }
+}
+""")
+
+print("✅ details_screen.dart written")
+
+# ─── lib/screens/settings_screen.dart ───────────────────────────────────────
+w("lib/screens/settings_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/favorites_store.dart';
+import '../providers/watchlist_store.dart';
+import '../providers/watch_progress_store.dart';
+import '../services/auth_session.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import 'account_screen.dart';
+import 'list_detail_screen.dart';
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _showMoreSettings = false;
+
+  @override Widget build(BuildContext context) {
+    final session = context.watch<AuthSession>();
+    final favStore = context.watch<FavoritesStore>();
+    final listStore = context.watch<WatchListStore>();
+    final progStore = context.watch<WatchProgressStore>();
+    final settings = AppSettings.instance;
+
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(L('المزيد', 'More'), style: appFontStyle(20, bold: true)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            onPressed: () => setState(() => _showMoreSettings = true),
+          ),
+        ],
+      ),
+      body: ListView(padding: const EdgeInsets.symmetric(horizontal: 20), children: [
+        // Account section
+        GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Row(children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: utRed().withOpacity(0.2),
+                child: Text(
+                  session.isLoggedIn ? session.user!.displayName[0].toUpperCase() : '?',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: utRed()),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(
+                  session.isLoggedIn ? session.user!.displayName : L('ضيف', 'Guest'),
+                  style: appFontStyle(16, bold: true),
+                ),
+                Text(
+                  session.isLoggedIn
+                      ? (session.user!.email ?? '')
+                      : L('اضغط لتسجيل الدخول', 'Tap to sign in'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ])),
+              const Icon(Icons.chevron_right, color: Colors.white38),
+            ]),
+          ),
+        ),
+
+        // Stats row
+        Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(children: [
+            _statCell(favStore.items.length, L('المفضلة', 'Favourites')),
+            _divider(),
+            _statCell(listStore.lists.length, L('القوائم', 'Lists')),
+            _divider(),
+            _statCell(progStore.allEpisodes.length, L('المشاهدة', 'Watched')),
+          ]),
+        ),
+
+        // Watch Lists
+        _sectionHeader(L('قوائم المشاهدة', 'Watch Lists')),
+        SizedBox(
+          height: 140,
+          child: listStore.lists.isEmpty
+              ? Center(child: Text(L('لا توجد قوائم بعد', 'No lists yet'),
+                  style: const TextStyle(color: Colors.white38)))
+              : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: listStore.lists.length,
+                  itemBuilder: (_, i) {
+                    final list = listStore.lists[i];
+                    return GestureDetector(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ListDetailScreen(list: list))),
+                      child: Container(
+                        width: 120, margin: const EdgeInsets.only(right: 12),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Container(
+                            height: 90, decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.07),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(child: Icon(
+                              list.isPrivate ? Icons.lock : Icons.playlist_play,
+                              color: Colors.white38, size: 28)),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(list.name, style: const TextStyle(color: Colors.white, fontSize: 12,
+                            fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${list.items.length} ${L("عنصر", "items")}',
+                            style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(side: BorderSide(color: utRed().withOpacity(0.4))),
+          icon: Icon(Icons.add, color: utRed()),
+          label: Text(L('إنشاء قائمة', 'Create List'), style: TextStyle(color: utRed())),
+          onPressed: () => _createListDialog(context),
+        ),
+        const SizedBox(height: 20),
+
+        // Favourites
+        _sectionHeader(L('المفضلة', 'Favourites')),
+        if (favStore.items.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(L('لا توجد مفضلات', 'No favourites'),
+              style: const TextStyle(color: Colors.white38)))
+        else
+          SizedBox(height: 120, child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: favStore.items.length,
+            itemBuilder: (_, i) {
+              final item = favStore.items[i];
+              return GestureDetector(
+                onTap: () {},
+                child: Container(
+                  width: 80, height: 110, margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white12,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(item.imageUrl, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.movie, color: Colors.white24)),
+                  ),
+                ),
+              );
+            },
+          )),
+        const SizedBox(height: 80),
+      ]),
+    );
+  }
+
+  Widget _statCell(int count, String label) => Expanded(child: Column(children: [
+    Text('$count', style: appFontStyle(18, bold: true)),
+    Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+  ]));
+
+  Widget _divider() => Container(height: 30, width: 1, color: Colors.white12);
+
+  Widget _sectionHeader(String title) => Padding(
+    padding: const EdgeInsets.fromLTRB(0, 10, 0, 12),
+    child: Text(title, style: appFontStyle(17, bold: true)),
+  );
+
+  void _createListDialog(BuildContext ctx) {
+    final ctrl = TextEditingController();
+    showDialog(context: ctx, builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      title: Text(L('قائمة جديدة', 'New List'), style: const TextStyle(color: Colors.white)),
+      content: TextField(controller: ctrl,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: L('اسم القائمة', 'List name'), hintStyle: const TextStyle(color: Colors.grey),
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: utRed())),
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: utRed())),
+        )),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+          child: Text(L('إلغاء', 'Cancel'), style: const TextStyle(color: Colors.grey))),
+        TextButton(
+          onPressed: () {
+            final n = ctrl.text.trim();
+            if (n.isNotEmpty) { ctx.read<WatchListStore>().createList(n); Navigator.pop(ctx); }
+          },
+          child: Text(L('إنشاء', 'Create'), style: TextStyle(color: utRed())),
+        ),
+      ],
+    ));
+  }
+}
+
+// ─── More Settings overlay ─────────────────────────────────────────────────
+class MoreSettingsView extends StatelessWidget {
+  const MoreSettingsView({super.key});
+  @override Widget build(BuildContext context) {
+    final s = AppSettings.instance;
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(L('الإعدادات', 'Settings'), style: appFontStyle(18, bold: true)),
+        leading: IconButton(icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context)),
+      ),
+      body: StatefulBuilder(builder: (ctx, setSt) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _section(L('اللغة', 'Language'), [
+            _picker(['ar', 'en'], ['العربية', 'English'], s.appLanguage,
+              (v) { s.appLanguage = v; setSt(() {}); }),
+          ]),
+          _section(L('الثيم', 'Theme'), [
+            _picker(['amoled', 'dark_blue', 'dark_purple'],
+              ['AMOLED Black', 'Dark Blue', 'Dark Purple'],
+              s.appTheme, (v) { s.appTheme = v; setSt(() {}); }),
+          ]),
+          _section(L('لون التمييز', 'Accent Color'), [
+            Wrap(spacing: 10, children: {
+              'red': const Color(0xFFE30A14),
+              'blue': const Color(0xFF1A66E6),
+              'orange': const Color(0xFFF27A0D),
+              'green': const Color(0xFF1AC759),
+              'pink': const Color(0xFFE6338C),
+            }.entries.map((e) => GestureDetector(
+              onTap: () { s.accentColorName = e.key; setSt(() {}); },
+              child: Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: e.value, shape: BoxShape.circle,
+                  border: s.accentColorName == e.key
+                      ? Border.all(color: Colors.white, width: 2.5) : null,
+                ),
+              ),
+            )).toList()),
+          ]),
+          _section(L('التشغيل التلقائي', 'Autoplay'), [
+            SwitchListTile(
+              title: Text(L('تشغيل الحلقة التالية', 'Play Next Episode'),
+                style: const TextStyle(color: Colors.white)),
+              value: s.autoPlayNextEnabled, activeColor: utRed(),
+              onChanged: (v) { s.autoPlayNextEnabled = v; setSt(() {}); },
+            ),
+            if (s.autoPlayNextEnabled) Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                Text(L('عداد: ${s.autoPlayCountdownSeconds}s',
+                  'Countdown: ${s.autoPlayCountdownSeconds}s'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Expanded(child: Slider(
+                  value: s.autoPlayCountdownSeconds.toDouble(), min: 3, max: 20,
+                  divisions: 17, activeColor: utRed(), inactiveColor: Colors.white24,
+                  onChanged: (v) { s.autoPlayCountdownSeconds = v.round(); setSt(() {}); },
+                )),
+              ]),
+            ),
+          ]),
+          _section(L('البيانات', 'Data'), [
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: Text(L('مسح الكاش', 'Clear Cache'),
+                style: const TextStyle(color: Colors.white)),
+              onTap: () { s.clearCache(); ScaffoldMessenger.of(ctx)
+                .showSnackBar(SnackBar(content: Text(L('تم المسح', 'Cleared')))); },
+            ),
+          ]),
+        ],
+      )),
+    );
+  }
+
+  Widget _section(String title, List<Widget> children) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
+        child: Text(title, style: TextStyle(color: utRed(), fontSize: 13,
+          fontWeight: FontWeight.w700))),
+      Container(
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12)),
+        child: Column(children: children),
+      ),
+    ],
+  );
+
+  Widget _picker(List<String> values, List<String> labels, String current, void Function(String) onTap) =>
+    Padding(padding: const EdgeInsets.all(12), child: Wrap(spacing: 8, children: List.generate(
+      values.length, (i) => GestureDetector(
+        onTap: () => onTap(values[i]),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: current == values[i] ? utRed() : Colors.white.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(labels[i], style: TextStyle(
+            color: Colors.white,
+            fontWeight: current == values[i] ? FontWeight.w700 : FontWeight.w400,
+          )),
+        ),
+      ))));
+}
+""")
+
+print("✅ settings_screen.dart written")
+
+# ─── lib/screens/account_screen.dart ────────────────────────────────────────
+w("lib/screens/account_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_session.dart';
+import '../services/supabase_manager.dart';
+import '../providers/favorites_store.dart';
+import '../providers/watch_progress_store.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../models/feedback_item.dart';
+import 'admin_panel_screen.dart';
+
+class AccountScreen extends StatefulWidget {
+  const AccountScreen({super.key});
+  @override State<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends State<AccountScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+  bool _isLogin = true;
+  bool _loading = false;
+  String _error = '';
+  final _emailCtrl = TextEditingController();
+  final _passCtrl  = TextEditingController();
+  final _nameCtrl  = TextEditingController();
+  bool _obscure = true;
+
+  // Feedback
+  List<FeedbackItem> _myFeedback = [];
+  bool _feedbackLoading = false;
+  final _fbMsgCtrl = TextEditingController();
+  String _fbType = 'suggestion';
+
+  @override void initState() {
+    super.initState();
+    _tab = TabController(length: 3, vsync: this);
+    _loadFeedback();
+  }
+
+  @override void dispose() {
+    _tab.dispose();
+    _emailCtrl.dispose(); _passCtrl.dispose();
+    _nameCtrl.dispose(); _fbMsgCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFeedback() async {
+    if (!AuthSession.instance.isLoggedIn) return;
+    setState(() => _feedbackLoading = true);
+    _myFeedback = await SupabaseManager.instance.fetchMyFeedback();
+    if (mounted) setState(() => _feedbackLoading = false);
+  }
+
+  Future<void> _doAuth() async {
+    final email = _emailCtrl.text.trim();
+    final pass  = _passCtrl.text.trim();
+    if (email.isEmpty || pass.isEmpty) { setState(() => _error = L('أدخل البريد وكلمة المرور', 'Enter email and password')); return; }
+    setState(() { _loading = true; _error = ''; });
+    final sm = SupabaseManager.instance;
+    Map<String, dynamic>? result;
+    if (_isLogin) {
+      result = await sm.signIn(email: email, password: pass);
+    } else {
+      final name = _nameCtrl.text.trim();
+      if (name.isEmpty) { setState(() { _loading = false; _error = L('أدخل اسمك', 'Enter your name'); }); return; }
+      result = await sm.signUp(email: email, password: pass, displayName: name);
+    }
+    if (!mounted) return;
+    if (result == null) { setState(() { _loading = false; _error = L('حدث خطأ', 'An error occurred'); }); return; }
+    if (result.containsKey('error')) {
+      setState(() { _loading = false; _error = result!['error'] as String; });
       return;
     }
-    String? err;
-    if (_isSignUp) {
-      final name = _nameController.text.trim();
-      if (name.isEmpty) {
-        setState(() { _error = L('الرجاء إدخال الاسم', 'Please enter name'); _loading = false; });
-        return;
-      }
-      err = await SupabaseManager.shared.signUp(email, password, name);
-    } else {
-      err = await SupabaseManager.shared.signIn(email, password);
-    }
-    setState(() { _loading = false; });
-    if (err != null) {
-      setState(() => _error = err);
-    } else {
-      Navigator.pop(context);
-    }
+    final userMap = result['user'] as Map<String, dynamic>? ?? {};
+    final user = SupabaseUser(
+      id: userMap['id'] as String? ?? '',
+      email: userMap['email'] as String?,
+      userMetadata: (userMap['user_metadata'] as Map<String, dynamic>?) ?? {},
+    );
+    await AuthSession.instance.save(
+      accessToken: result['access_token'] as String,
+      refreshToken: result['refresh_token'] as String,
+      user: user,
+    );
+    // Sync cloud data
+    final cloudFavs = await SupabaseManager.instance.fetchFavorites();
+    if (cloudFavs.isNotEmpty && mounted) context.read<FavoritesStore>().mergeFromCloud(cloudFavs);
+    final cloudProg = await SupabaseManager.instance.fetchProgress();
+    if (cloudProg.isNotEmpty && mounted) context.read<WatchProgressStore>().mergeFromCloud(cloudProg);
+    // Check admin
+    final isAdmin = await SupabaseManager.instance.fetchIsAdmin();
+    AuthSession.instance.setAdmin(isAdmin);
+    setState(() => _loading = false);
+    if (mounted) Navigator.pop(context);
   }
 
-  void _signInWithGoogle() async {
-    try {
-      await SupabaseManager.shared.signInWithGoogle();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
-  }
-}
-
-// ── Feedback View ──
-class FeedbackView extends StatefulWidget {
-  @override
-  _FeedbackViewState createState() => _FeedbackViewState();
-}
-
-class _FeedbackViewState extends State<FeedbackView> {
-  final _messageController = TextEditingController();
-  String _type = 'suggestion';
-  bool _loading = false;
-  bool _submitted = false;
-  List<FeedbackItem> _myFeedback = [];
-  bool _loadingList = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMyFeedback();
-  }
-
-  Future<void> _loadMyFeedback() async {
-    setState(() => _loadingList = true);
-    final items = await SupabaseManager.shared.fetchMyFeedback();
-    setState(() {
-      _myFeedback = items;
-      _loadingList = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  @override Widget build(BuildContext context) {
+    final session = context.watch<AuthSession>();
     return Scaffold(
-      appBar: AppBar(title: Text(L('الشكاوى والاقتراحات', 'Feedback')), backgroundColor: Colors.transparent),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(L('أرسل لنا رأيك', 'Send us your feedback'), style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _type,
-              items: [
-                DropdownMenuItem(value: 'suggestion', child: Text(L('اقتراح', 'Suggestion'))),
-                DropdownMenuItem(value: 'complaint', child: Text(L('شكوى', 'Complaint'))),
-              ],
-              onChanged: (v) => setState(() => _type = v!),
-              style: TextStyle(color: Colors.white),
-              dropdownColor: Colors.black,
-              decoration: InputDecoration(labelText: L('النوع', 'Type'), labelStyle: TextStyle(color: Colors.white)),
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(L('الحساب', 'Account'), style: appFontStyle(18, bold: true)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context)),
+        actions: [
+          if (session.isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings, color: Colors.orange),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _messageController,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: L('اكتب رسالتك هنا...', 'Write your message here...'),
-                filled: true,
-                fillColor: Colors.white12,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-              style: TextStyle(color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            _loading
-                ? const CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _submit,
-                    style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: AppSettings.shared.accentColor),
-                    child: Text(_submitted ? L('تم الإرسال ✓', 'Sent ✓') : L('إرسال', 'Send'), style: TextStyle(color: Colors.white)),
-                  ),
-            const Divider(color: Colors.white24, height: 40),
-            Text(L('رسائلك السابقة', 'Your previous messages'), style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            _loadingList
-                ? const CircularProgressIndicator()
-                : Expanded(
-                    child: _myFeedback.isEmpty
-                        ? Center(child: Text(L('لا توجد رسائل', 'No messages'), style: TextStyle(color: Colors.grey)))
-                        : ListView.builder(
-                            itemCount: _myFeedback.length,
-                            itemBuilder: (ctx, i) {
-                              final f = _myFeedback[i];
-                              return ListTile(
-                                title: Text(f.message, style: TextStyle(color: Colors.white)),
-                                subtitle: Text('${f.type} - ${f.formattedDate}', style: TextStyle(color: Colors.grey)),
-                                trailing: Text(f.status == 'resolved' ? '✅' : '🕒', style: TextStyle(fontSize: 20)),
-                              );
-                            },
-                          ),
-                  ),
-          ],
-        ),
+        ],
       ),
+      body: session.isLoggedIn ? _buildLoggedIn(session) : _buildAuth(),
     );
   }
 
-  void _submit() async {
-    final msg = _messageController.text.trim();
-    if (msg.isEmpty) return;
-    setState(() => _loading = true);
-    final success = await SupabaseManager.shared.submitFeedback(_type, msg);
-    setState(() {
-      _loading = false;
-      if (success) {
-        _submitted = true;
-        _messageController.clear();
-        _loadMyFeedback();
-        Future.delayed(const Duration(seconds: 2), () => setState(() => _submitted = false));
-      }
-    });
+  Widget _buildLoggedIn(AuthSession session) {
+    return Column(children: [
+      // Profile header
+      Container(
+        padding: const EdgeInsets.all(20),
+        child: Row(children: [
+          CircleAvatar(radius: 36, backgroundColor: utRed().withOpacity(0.18),
+            child: Text(session.user!.displayName[0].toUpperCase(),
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: utRed()))),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(session.user!.displayName, style: appFontStyle(18, bold: true)),
+            Text(session.user!.email ?? '', style: const TextStyle(color: Colors.white54, fontSize: 13)),
+          ])),
+          TextButton.icon(
+            icon: const Icon(Icons.logout, color: Colors.red, size: 18),
+            label: Text(L('خروج', 'Sign Out'), style: const TextStyle(color: Colors.red)),
+            onPressed: () async {
+              await AuthSession.instance.signOut();
+              if (mounted) Navigator.pop(context);
+            },
+          ),
+        ]),
+      ),
+      // Tabs
+      TabBar(
+        controller: _tab, indicatorColor: utRed(), labelColor: utRed(),
+        unselectedLabelColor: Colors.white54,
+        tabs: [
+          Tab(text: L('الملف الشخصي', 'Profile')),
+          Tab(text: L('الشكاوى', 'Feedback')),
+          Tab(text: L('ملاحظاتي', 'My Reports')),
+        ],
+      ),
+      Expanded(child: TabBarView(controller: _tab, children: [
+        // Profile tab
+        ListView(padding: const EdgeInsets.all(16), children: [
+          _infoTile(Icons.person_outline, L('الاسم', 'Name'), session.user!.displayName),
+          _infoTile(Icons.email_outlined, L('البريد', 'Email'), session.user!.email ?? '-'),
+          if (session.isAdmin) _infoTile(Icons.admin_panel_settings, L('الصلاحية', 'Role'), 'Admin'),
+        ]),
+
+        // Feedback tab
+        StatefulBuilder(builder: (_, setSt) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(L('نوع الرسالة', 'Type'), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 8),
+            Row(children: [
+              _fbTypeChip('suggestion', L('اقتراح', 'Suggestion'), setSt),
+              const SizedBox(width: 8),
+              _fbTypeChip('complaint', L('شكوى', 'Complaint'), setSt),
+              const SizedBox(width: 8),
+              _fbTypeChip('bug', L('خطأ', 'Bug'), setSt),
+            ]),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _fbMsgCtrl, maxLines: 5,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: L('اكتب رسالتك...', 'Write your message...'),
+                hintStyle: const TextStyle(color: Colors.grey),
+                filled: true, fillColor: Colors.white.withOpacity(0.07),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: utRed(),
+                padding: const EdgeInsets.symmetric(vertical: 14)),
+              onPressed: () async {
+                final msg = _fbMsgCtrl.text.trim();
+                if (msg.isEmpty) return;
+                final ok = await SupabaseManager.instance.submitFeedback(
+                  type: _fbType, message: msg);
+                _fbMsgCtrl.clear();
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(ok ? L('تم الإرسال', 'Sent!') : L('فشل الإرسال', 'Failed'))));
+                if (ok) _loadFeedback();
+              },
+              child: Text(L('إرسال', 'Send'), style: const TextStyle(fontSize: 16)),
+            )),
+          ]),
+        )),
+
+        // My Reports tab
+        _feedbackLoading
+            ? Center(child: CircularProgressIndicator(color: utRed()))
+            : _myFeedback.isEmpty
+                ? Center(child: Text(L('لا توجد رسائل', 'No messages'),
+                    style: const TextStyle(color: Colors.white38)))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _myFeedback.length,
+                    itemBuilder: (_, i) {
+                      final fb = _myFeedback[i];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: fb.type == 'complaint' ? Colors.red.withOpacity(0.18)
+                                    : utRed().withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6)),
+                              child: Text(fb.type,
+                                style: TextStyle(fontSize: 11, color: utRed())),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: fb.status == 'open' ? Colors.orange.withOpacity(0.18)
+                                    : Colors.green.withOpacity(0.18),
+                                borderRadius: BorderRadius.circular(6)),
+                              child: Text(fb.status,
+                                style: TextStyle(fontSize: 11,
+                                  color: fb.status == 'open' ? Colors.orange : Colors.green)),
+                            ),
+                          ]),
+                          const SizedBox(height: 8),
+                          Text(fb.message, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        ]),
+                      );
+                    }),
+      ])),
+    ]);
   }
+
+  Widget _fbTypeChip(String type, String label, StateSetter setSt) =>
+    GestureDetector(
+      onTap: () => setSt(() => _fbType = type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: _fbType == type ? utRed() : Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(20)),
+        child: Text(label, style: TextStyle(
+          color: Colors.white, fontWeight: _fbType == type ? FontWeight.w700 : FontWeight.w400)),
+      ),
+    );
+
+  Widget _buildAuth() => SingleChildScrollView(
+    padding: const EdgeInsets.all(24),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 20),
+      // Toggle login/signup
+      Row(children: [
+        GestureDetector(
+          onTap: () => setState(() { _isLogin = true; _error = ''; }),
+          child: Text(L('تسجيل الدخول', 'Sign In'),
+            style: TextStyle(
+              fontSize: 22, fontWeight: _isLogin ? FontWeight.w700 : FontWeight.w400,
+              color: _isLogin ? Colors.white : Colors.white38)),
+        ),
+        const SizedBox(width: 20),
+        GestureDetector(
+          onTap: () => setState(() { _isLogin = false; _error = ''; }),
+          child: Text(L('إنشاء حساب', 'Sign Up'),
+            style: TextStyle(
+              fontSize: 22, fontWeight: !_isLogin ? FontWeight.w700 : FontWeight.w400,
+              color: !_isLogin ? Colors.white : Colors.white38)),
+        ),
+      ]),
+      const SizedBox(height: 30),
+      if (!_isLogin) ...[
+        _authField(_nameCtrl, L('الاسم', 'Name'), Icons.person_outline),
+        const SizedBox(height: 16),
+      ],
+      _authField(_emailCtrl, L('البريد الإلكتروني', 'Email'), Icons.email_outlined,
+        type: TextInputType.emailAddress),
+      const SizedBox(height: 16),
+      _authField(_passCtrl, L('كلمة المرور', 'Password'), Icons.lock_outline,
+        obscure: _obscure, suffixIcon: IconButton(
+          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
+            color: Colors.white38),
+          onPressed: () => setState(() => _obscure = !_obscure),
+        )),
+      const SizedBox(height: 12),
+      if (_error.isNotEmpty)
+        Text(_error, style: const TextStyle(color: Colors.red, fontSize: 13)),
+      const SizedBox(height: 24),
+      SizedBox(width: double.infinity, child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: utRed(), padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        onPressed: _loading ? null : _doAuth,
+        child: _loading
+            ? const SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : Text(_isLogin ? L('دخول', 'Sign In') : L('إنشاء', 'Create'),
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+      )),
+    ]),
+  );
+
+  Widget _authField(TextEditingController ctrl, String label, IconData icon,
+      {bool obscure = false, TextInputType? type, Widget? suffixIcon}) =>
+    TextField(
+      controller: ctrl, obscureText: obscure, keyboardType: type,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: label, hintStyle: const TextStyle(color: Colors.grey),
+        prefixIcon: Icon(icon, color: Colors.white38),
+        suffixIcon: suffixIcon,
+        filled: true, fillColor: Colors.white.withOpacity(0.08),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none),
+      ),
+    );
+
+  Widget _infoTile(IconData icon, String label, String value) =>
+    ListTile(
+      leading: Icon(icon, color: Colors.white54),
+      title: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      subtitle: Text(value, style: const TextStyle(color: Colors.white, fontSize: 15)),
+    );
+}
+""")
+print("✅ account_screen.dart written")
+
+# ─── lib/screens/admin_panel_screen.dart ────────────────────────────────────
+w("lib/screens/admin_panel_screen.dart", r"""import 'package:flutter/material.dart';
+import '../services/supabase_manager.dart';
+import '../models/feedback_item.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+
+class AdminPanelScreen extends StatefulWidget {
+  const AdminPanelScreen({super.key});
+  @override State<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
-// ── Admin Panel View ──
-class AdminPanelView extends StatefulWidget {
-  @override
-  _AdminPanelViewState createState() => _AdminPanelViewState();
-}
-
-class _AdminPanelViewState extends State<AdminPanelView> {
-  List<FeedbackItem> _allFeedback = [];
+class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  List<FeedbackItem> _items = [];
   bool _loading = true;
   String _filter = 'all';
 
-  @override
-  void initState() {
+  @override void initState() {
     super.initState();
     _load();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final items = await SupabaseManager.shared.fetchAllFeedback();
-    setState(() {
-      _allFeedback = items;
-      _loading = false;
-    });
+    _items = await SupabaseManager.instance.fetchAllFeedback();
+    if (mounted) setState(() => _loading = false);
   }
 
   List<FeedbackItem> get _filtered {
-    if (_filter == 'all') return _allFeedback;
-    if (_filter == 'open') return _allFeedback.where((f) => f.status != 'resolved').toList();
-    return _allFeedback.where((f) => f.status == 'resolved').toList();
+    if (_filter == 'all') return _items;
+    if (_filter == 'open') return _items.where((i) => i.status == 'open').toList();
+    return _items.where((i) => i.type == _filter).toList();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  @override Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: appBg(),
       appBar: AppBar(
-        title: Text(L('لوحة الإدارة', 'Admin Panel')),
-        backgroundColor: Colors.transparent,
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(L('لوحة التحكم', 'Admin Panel'), style: appFontStyle(18, bold: true)),
+      ),
+      body: Column(children: [
+        // Filter chips
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final f in ['all', 'open', 'suggestion', 'complaint', 'bug'])
+                GestureDetector(
+                  onTap: () => setState(() => _filter = f),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _filter == f ? utRed() : Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20)),
+                    child: Text(f, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+        Expanded(child: _loading
+          ? Center(child: CircularProgressIndicator(color: utRed()))
+          : RefreshIndicator(
+              onRefresh: _load, color: utRed(),
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _filtered.length,
+                itemBuilder: (_, i) {
+                  final fb = _filtered[i];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: Text(fb.displayName,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700))),
+                        _chip(fb.type, utRed()),
+                        const SizedBox(width: 6),
+                        PopupMenuButton<String>(
+                          icon: _chip(fb.status,
+                            fb.status == 'open' ? Colors.orange : Colors.green),
+                          color: const Color(0xFF1A1A1A),
+                          onSelected: (s) async {
+                            await SupabaseManager.instance.updateFeedbackStatus(fb.id, s);
+                            _load();
+                          },
+                          itemBuilder: (_) => ['open', 'in_progress', 'resolved', 'closed']
+                              .map((s) => PopupMenuItem(value: s,
+                                child: Text(s, style: const TextStyle(color: Colors.white))))
+                              .toList(),
+                        ),
+                      ]),
+                      if (fb.email != null) Text(fb.email!,
+                        style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      const SizedBox(height: 8),
+                      Text(fb.message, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Text(fb.createdAt.substring(0, 10),
+                        style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                    ]),
+                  );
+                },
+              ),
+          )),
+      ]),
+    );
+  }
+
+  Widget _chip(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.18), borderRadius: BorderRadius.circular(6)),
+    child: Text(text, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700)),
+  );
+}
+""")
+
+# ─── lib/screens/list_detail_screen.dart ─────────────────────────────────────
+w("lib/screens/list_detail_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../models/watch_list.dart';
+import '../providers/watchlist_store.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import 'details_screen.dart';
+
+class ListDetailScreen extends StatelessWidget {
+  final WatchList list;
+  const ListDetailScreen({super.key, required this.list});
+
+  @override Widget build(BuildContext context) {
+    final store = context.watch<WatchListStore>();
+    final current = store.lists.firstWhere((l) => l.id == list.id, orElse: () => list);
+
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(current.name, style: appFontStyle(18, bold: true)),
         actions: [
-          PopupMenuButton<String>(
-            initialValue: _filter,
-            onSelected: (v) => setState(() => _filter = v),
-            itemBuilder: (_) => [
-              PopupMenuItem(value: 'all', child: Text(L('الكل', 'All'))),
-              PopupMenuItem(value: 'open', child: Text(L('قيد المراجعة', 'Open'))),
-              PopupMenuItem(value: 'resolved', child: Text(L('تم الحل', 'Resolved'))),
-            ],
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: Colors.white),
+            onPressed: () => _renameDialog(context, store, current),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            onPressed: () async {
+              final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+                backgroundColor: const Color(0xFF1A1A1A),
+                title: Text(L('حذف القائمة؟', 'Delete List?'),
+                  style: const TextStyle(color: Colors.white)),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context, false),
+                    child: Text(L('إلغاء', 'Cancel'), style: const TextStyle(color: Colors.grey))),
+                  TextButton(onPressed: () => Navigator.pop(context, true),
+                    child: const Text('حذف', style: TextStyle(color: Colors.red))),
+                ],
+              ));
+              if (ok == true) { store.deleteList(current.id); Navigator.pop(context); }
+            },
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _filtered.isEmpty
-              ? Center(child: Text(L('لا توجد رسائل', 'No messages'), style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  itemCount: _filtered.length,
-                  itemBuilder: (ctx, i) {
-                    final f = _filtered[i];
-                    return ListTile(
-                      title: Text(f.message, style: TextStyle(color: Colors.white)),
-                      subtitle: Text('${f.displayName} - ${f.formattedDate}', style: TextStyle(color: Colors.grey)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(f.status == 'resolved' ? L('محلول', 'Resolved') : L('مفتوح', 'Open'), style: TextStyle(color: f.status == 'resolved' ? Colors.green : Colors.orange)),
-                          IconButton(
-                            icon: Icon(Icons.check_circle, color: f.status == 'resolved' ? Colors.green : Colors.grey),
-                            onPressed: () async {
-                              final newStatus = f.status == 'resolved' ? 'open' : 'resolved';
-                              await SupabaseManager.shared.updateFeedbackStatus(f.id, newStatus);
-                              _load();
-                            },
-                          ),
-                        ],
+      body: current.items.isEmpty
+          ? Center(child: Text(L('القائمة فارغة', 'List is empty'),
+              style: const TextStyle(color: Colors.white38)))
+          : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 150, childAspectRatio: 120 / 220,
+                crossAxisSpacing: 14, mainAxisSpacing: 16),
+              itemCount: current.items.length,
+              itemBuilder: (_, i) {
+                final item = current.items[i];
+                return GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => DetailsScreen(itemId: item.id))),
+                  onLongPress: () => store.removeItem(item.id, current.id),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: CachedNetworkImage(
+                        imageUrl: item.imageUrl, fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(color: Colors.white12),
+                        errorWidget: (_, __, ___) => Container(color: Colors.white12,
+                          child: const Icon(Icons.movie, color: Colors.white24)),
                       ),
-                    );
-                  },
-                ),
+                    )),
+                    const SizedBox(height: 6),
+                    Text(item.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ]),
+                );
+              },
+            ),
+    );
+  }
+
+  void _renameDialog(BuildContext ctx, WatchListStore store, WatchList current) {
+    final ctrl = TextEditingController(text: current.name);
+    showDialog(context: ctx, builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      title: Text(L('إعادة تسمية', 'Rename'), style: const TextStyle(color: Colors.white)),
+      content: TextField(controller: ctrl, style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: utRed())),
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: utRed())),
+        )),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+          child: Text(L('إلغاء', 'Cancel'), style: const TextStyle(color: Colors.grey))),
+        TextButton(
+          onPressed: () { store.renameList(current.id, ctrl.text.trim()); Navigator.pop(ctx); },
+          child: Text(L('حفظ', 'Save'), style: TextStyle(color: utRed())),
+        ),
+      ],
+    ));
+  }
+}
+""")
+
+# ─── lib/screens/downloads_screen.dart ───────────────────────────────────────
+w("lib/screens/downloads_screen.dart", r"""import 'package:flutter/material.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+
+class DownloadsScreen extends StatelessWidget {
+  const DownloadsScreen({super.key});
+  @override Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: appBg(),
+      appBar: AppBar(
+        backgroundColor: appBg(), elevation: 0,
+        title: Text(L('التنزيلات', 'Downloads'), style: appFontStyle(20, bold: true)),
+      ),
+      body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.download_rounded, size: 80, color: Colors.white12),
+        const SizedBox(height: 20),
+        Text(L('لا توجد تنزيلات', 'No downloads yet'),
+          style: const TextStyle(color: Colors.white38, fontSize: 16)),
+        const SizedBox(height: 10),
+        Text(L('يمكنك تحميل المحتوى لمشاهدته دون اتصال', 'Download content to watch offline'),
+          style: const TextStyle(color: Colors.white24, fontSize: 13), textAlign: TextAlign.center),
+      ])),
     );
   }
 }
-"""
-with open("UTan_Flutter/lib/views/account_view.dart", "w", encoding="utf-8") as f:
-    f.write(account_view_dart)
+""")
 
-print("✅ تم إنشاء مشروع Flutter كامل باسم UTan_Flutter مع جميع الميزات المطلوبة.")
-print("   - كل ميزات تطبيق iOS تم نقلها حرفياً.")
-print("   - آلية بروكسي تعمل كـ fallback عند فشل الاتصال المباشر.")
-print("   - إعدادات الترجمة، التشغيل التلقائي، المفضلة، القوائم، السجل، التعليقات، الشكاوى، لوحة الإدارة.")
-print("   - جميع الملفات كاملة وغير منقوصة.")
-print("   - التعليقات والتنزيلات والمشاركة حقيقية.")
-print("   - تم إصلاح جميع أخطاء البناء.")
-print("   - قم بتشغيل الأمر: flutter pub get && flutter run")
+print("✅ admin + list_detail + downloads screens written")
+
+# ─── lib/screens/main_tab.dart ───────────────────────────────────────────────
+w("lib/screens/main_tab.dart", r"""import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../services/auth_session.dart';
+import 'home_screen.dart';
+import 'browse_screen.dart';
+import 'search_screen.dart';
+import 'downloads_screen.dart';
+import 'settings_screen.dart';
+
+class MainTabScreen extends StatefulWidget {
+  const MainTabScreen({super.key});
+  @override State<MainTabScreen> createState() => _MainTabScreenState();
+}
+
+class _MainTabScreenState extends State<MainTabScreen> {
+  int _current = 0;
+
+  static const _screens = [
+    HomeScreen(),
+    BrowseScreen(),
+    SearchScreen(),
+    DownloadsScreen(),
+    SettingsScreen(),
+  ];
+
+  @override Widget build(BuildContext context) {
+    final bg = appBg();
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: bg,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+    return Scaffold(
+      backgroundColor: bg,
+      body: IndexedStack(index: _current, children: _screens),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06), width: 1)),
+        ),
+        child: NavigationBar(
+          backgroundColor: Colors.transparent,
+          indicatorColor: utRed().withOpacity(0.15),
+          selectedIndex: _current,
+          onDestinationSelected: (i) => setState(() => _current = i),
+          destinations: [
+            _dest(Icons.home_outlined, Icons.home, L('الرئيسية', 'Home')),
+            _dest(Icons.grid_view_outlined, Icons.grid_view, L('تصفح', 'Browse')),
+            _dest(Icons.search_outlined, Icons.search, L('بحث', 'Search')),
+            _dest(Icons.download_outlined, Icons.download, L('تنزيل', 'Downloads')),
+            _dest(Icons.more_horiz_outlined, Icons.more_horiz, L('المزيد', 'More')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  NavigationDestination _dest(IconData icon, IconData selected, String label) =>
+      NavigationDestination(
+        icon: Icon(icon, color: Colors.white38),
+        selectedIcon: Icon(selected, color: utRed()),
+        label: label,
+      );
+}
+""")
+
+# ─── lib/main.dart ───────────────────────────────────────────────────────────
+w("lib/main.dart", r"""import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'app_settings.dart';
+import 'app_colors.dart';
+import 'services/scraper.dart';
+import 'services/auth_session.dart';
+import 'providers/favorites_store.dart';
+import 'providers/watch_progress_store.dart';
+import 'providers/watchlist_store.dart';
+import 'screens/main_tab.dart';
+import 'widgets/ut_loader.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  final settings = AppSettings.instance;
+  await settings.init();
+  await AuthSession.instance.init();
+  await FavoritesStore.instance.init();
+  await WatchProgressStore.instance.init();
+  await WatchListStore.instance.init();
+  runApp(const UTanApp());
+}
+
+class UTanApp extends StatelessWidget {
+  const UTanApp({super.key});
+
+  @override Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppSettings.instance),
+        ChangeNotifierProvider(create: (_) => AuthSession.instance),
+        ChangeNotifierProvider(create: (_) => MovieScraper()),
+        ChangeNotifierProvider(create: (_) => FavoritesStore.instance),
+        ChangeNotifierProvider(create: (_) => WatchProgressStore.instance),
+        ChangeNotifierProvider(create: (_) => WatchListStore.instance),
+      ],
+      child: Consumer<AppSettings>(builder: (_, settings, __) {
+        return MaterialApp(
+          title: 'UTan',
+          debugShowCheckedModeBanner: false,
+          theme: _buildTheme(settings),
+          home: const _SplashGate(),
+        );
+      }),
+    );
+  }
+
+  ThemeData _buildTheme(AppSettings s) {
+    final accent = utRed();
+    final bg = appBg();
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: bg,
+      colorScheme: ColorScheme.dark(
+        primary: accent,
+        secondary: accent,
+        surface: bg,
+        background: bg,
+      ),
+      fontFamily: 'ExpoArabic',
+      appBarTheme: AppBarTheme(
+        backgroundColor: bg,
+        elevation: 0,
+        titleTextStyle: TextStyle(
+          fontFamily: 'ExpoArabic', fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        indicatorColor: accent.withOpacity(0.15),
+        labelTextStyle: MaterialStateProperty.all(
+          const TextStyle(fontFamily: 'ExpoArabic', fontSize: 11, color: Colors.white)),
+      ),
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(fontFamily: 'ExpoArabic', color: Colors.white),
+        bodyMedium: TextStyle(fontFamily: 'ExpoArabic', color: Colors.white70),
+        titleMedium: TextStyle(fontFamily: 'ExpoArabic', fontWeight: FontWeight.w700, color: Colors.white),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: accent, foregroundColor: Colors.white,
+          textStyle: const TextStyle(fontFamily: 'ExpoArabic', fontWeight: FontWeight.w700),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: accent, thumbColor: accent,
+        inactiveTrackColor: Colors.white24, trackHeight: 3,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: MaterialStateProperty.resolveWith((s) => s.contains(MaterialState.selected) ? accent : null),
+        trackColor: MaterialStateProperty.resolveWith((s) => s.contains(MaterialState.selected) ? accent.withOpacity(0.4) : null),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: accent),
+      popupMenuTheme: PopupMenuThemeData(
+        color: const Color(0xFF1A1A1A), textStyle: const TextStyle(color: Colors.white)),
+    );
+  }
+}
+
+class _SplashGate extends StatefulWidget {
+  const _SplashGate();
+  @override State<_SplashGate> createState() => _SplashGateState();
+}
+
+class _SplashGateState extends State<_SplashGate> {
+  bool _done = false;
+
+  @override void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _done = true);
+    });
+  }
+
+  @override Widget build(BuildContext context) {
+    if (!_done) return const UTanLoader();
+    return Directionality(
+      textDirection: AppSettings.instance.appLanguage == 'ar'
+          ? TextDirection.rtl : TextDirection.ltr,
+      child: const MainTabScreen(),
+    );
+  }
+}
+""")
+
+print("✅ main.dart + main_tab.dart written")
+
+# ─── android/app/src/main/AndroidManifest.xml patch helper ─────────────────
+w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+
+    <application
+        android:label="UTan"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"/>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2"/>
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="https"/>
+        </intent>
+    </queries>
+</manifest>
+""")
+
+# ─── android/app/build.gradle ───────────────────────────────────────────────
+w("android/app/build.gradle", r"""plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
+def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
+
+android {
+    namespace "com.utan.flutter"
+    compileSdk flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        applicationId "com.utan.flutter"
+        minSdkVersion 21
+        targetSdkVersion flutter.targetSdkVersion
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        multiDexEnabled true
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
+""")
+
+# ─── android/build.gradle ───────────────────────────────────────────────────
+w("android/build.gradle", r"""allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
+""")
+
+# ─── android/settings.gradle ────────────────────────────────────────────────
+w("android/settings.gradle", r"""pluginManagement {
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    includeBuild("${flutterSdkPath}/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "dev.flutter.flutter-gradle-plugin" version "1.0.0" apply false
+}
+
+include ":app"
+""")
+
+# ─── android/gradle.properties ──────────────────────────────────────────────
+w("android/gradle.properties", r"""org.gradle.jvmargs=-Xmx4G
+android.useAndroidX=true
+android.enableJetifier=true
+""")
+
+# ─── android/app/src/main/kotlin/MainActivity.kt ────────────────────────────
+os.makedirs(os.path.join(BASE, "android/app/src/main/kotlin/com/utan/flutter"), exist_ok=True)
+w("android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt", r"""package com.utan.flutter
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity: FlutterActivity()
+""")
+
+print("✅ Android project files written")
+
+# ─── android res: styles, colors, drawables ─────────────────────────────────
+os.makedirs(os.path.join(BASE, "android/app/src/main/res/values"), exist_ok=True)
+os.makedirs(os.path.join(BASE, "android/app/src/main/res/drawable"), exist_ok=True)
+os.makedirs(os.path.join(BASE, "android/app/src/main/res/drawable-v21"), exist_ok=True)
+
+w("android/app/src/main/res/values/styles.xml", r"""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>
+""")
+
+w("android/app/src/main/res/drawable/launch_background.xml", r"""<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/black"/>
+</layer-list>
+""")
+
+w("android/app/src/main/res/drawable-v21/launch_background.xml", r"""<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/black"/>
+</layer-list>
+""")
+
+# ─── analysis_options.yaml ──────────────────────────────────────────────────
+w("analysis_options.yaml", r"""include: package:flutter_lints/flutter.yaml
+linter:
+  rules:
+    avoid_print: false
+    prefer_const_constructors: true
+    use_key_in_widget_constructors: true
+""")
+
+# ─── README.md ───────────────────────────────────────────────────────────────
+open(os.path.join(BASE, "..", "README.md"), "w", encoding="utf-8").write(r"""# UTan Flutter
+
+Arabic/English video streaming app – Flutter port of the original Swift/SwiftUI application.
+
+## Structure
+```
+UTan_Flutter/
+├── assets/
+│   ├── fonts/     # Cairo, Rubik, IBMPlexArabic, ExpoArabic
+│   └── images/    # logo.png + category images
+└── lib/
+    ├── main.dart
+    ├── app_colors.dart
+    ├── app_settings.dart
+    ├── models/
+    ├── services/
+    ├── providers/
+    ├── screens/
+    ├── widgets/
+    └── player/
+```
+
+## Setup
+```bash
+cd UTan_Flutter
+flutter pub get
+flutter run
+```
+
+## Build APK
+```bash
+flutter build apk --release
+```
+""")
+
+print("\n" + "═" * 60)
+print("✅ DONE! Flutter project generated inside UTan_Flutter/")
+print("═" * 60)
+print("\nNext steps:")
+print("  1. cd UTan_Flutter")
+print("  2. flutter pub get")
+print("  3. flutter run     (or 'flutter build apk --release')")
+print("\nFonts + images must exist at:")
+print("  UTan_Flutter/assets/fonts/")
+print("  UTan_Flutter/assets/images/")
