@@ -134,7 +134,7 @@ IconData categoryIcon(String nameEn) {
   if (n.contains('kids') || n.contains('cartoon')) return Icons.child_care;
   if (n.contains('action')) return Icons.bolt;
   if (n.contains('korean') || n.contains('asian')) return Icons.language;
-  if (n.contains('netflix')) return Icons.n_mobiledata;
+  if (n.contains('netflix')) return Icons.live_tv;
   if (n.contains('disney')) return Icons.waving_hand;
   if (n.contains('document')) return Icons.article;
   if (n.contains('turkish')) return Icons.nightlight;
@@ -3804,7 +3804,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                         fontWeight: _selectedSeason == s ? FontWeight.w700 : FontWeight.w400,
                       )),
                     ),
-                  )).toList(),
+                  )).toList()),
               ),
             const SizedBox(height: 14),
 
