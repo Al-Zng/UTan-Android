@@ -298,6 +298,8 @@ w("lib/models/episode_item.dart", r"""class EpisodeItem {
   final String url4k;
   final String subtitleUrl;
   final String subtitleVttUrl;
+  final String season;
+  final String imageUrl;
 
   const EpisodeItem({
     required this.id,
@@ -309,19 +311,12 @@ w("lib/models/episode_item.dart", r"""class EpisodeItem {
     this.url4k = '',
     this.subtitleUrl = '',
     this.subtitleVttUrl = '',
+    this.season = '',
+    this.imageUrl = '',
   });
 
-  String get season {
-    final rx = RegExp(r'(S\d+|\u0645\u0648\u0633\u0645 \d+)', caseSensitive: false);
-    final m = rx.firstMatch(title);
-    if (m != null) {
-      return m.group(0)!.replaceAll(RegExp(r'[Ss]'), '\u0627\u0644\u0645\u0648\u0633\u0645 ');
-    }
-    return '\u0627\u0644\u0645\u0648\u0633\u0645 1';
-  }
-
   int? get episodeNumber {
-    final rx = RegExp(r'E(\d+)', caseSensitive: false);
+    final rx = RegExp(r'(\d+)');
     final m = rx.firstMatch(title);
     if (m != null) return int.tryParse(m.group(1)!);
     return null;
@@ -668,28 +663,103 @@ print("✅ All model files written")
 
 # ─── lib/services/scraper.dart ───────────────────────────────────────────────
 w("lib/services/scraper.dart", r"""import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/video_item.dart';
 import '../models/media_details.dart';
 import '../models/episode_item.dart';
 
-const String _baseUrl = 'https://movie.vodu.me/';
-const String _userAgent =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-    '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+const String _ceeBase  = 'https://cee.buzz/api/android/';
+const String _ceeCdn   = 'https://cnth2.cee.buzz/vascin-poster-images/';
+const int    _ceeLevel = 1;
 
-String _optimizeImageUrl(String url, {int w = 400, int h = 600}) {
-  if (url.contains('w=750') || url.contains('h=388')) return url;
-  final sep = url.contains('?') ? '&' : '?';
-  return '$url${sep}w=$w&h=$h&crop-to-fit';
+// ── helpers ────────────────────────────────────────────────────────────────
+
+String _img(dynamic v) {
+  if (v == null) return '';
+  final s = v.toString().trim();
+  if (s.isEmpty) return '';
+  if (s.startsWith('http')) return s;
+  return '$_ceeCdn$s';
 }
 
-String _fixUrl(String u) {
-  if (u.isEmpty) return '';
-  if (u.startsWith('http')) return u;
-  return '${_baseUrl}$u';
+String _str(dynamic v) => v?.toString().trim() ?? '';
+
+dynamic _pick(Map<String, dynamic> m, List<String> keys) {
+  for (final k in keys) { if (m.containsKey(k)) return m[k]; }
+  return null;
 }
+
+VideoItem? _toItem(dynamic raw) {
+  if (raw is! Map<String, dynamic>) return null;
+  final id = _str(_pick(raw, ['id', 'videoId', 'video_id']));
+  if (id.isEmpty) return null;
+  final title = _str(_pick(raw, ['title', 'titleAr', 'name', 'videoTitle']));
+  final poster = _pick(raw, ['poster', 'posterImage', 'image', 'thumbnail', 'cover', 'banner']);
+  final kind   = _str(_pick(raw, ['kind', 'videoKind', 'type']));
+  final type   = (kind == '2' || kind == 'series') ? 'series' : 'movies';
+  return VideoItem(id: id, title: title, imageUrl: _img(poster), type: type);
+}
+
+List<VideoItem> _toItems(dynamic raw) {
+  if (raw is! List) return [];
+  return raw.map(_toItem).whereType<VideoItem>().toList();
+}
+
+String _bestUrl(List<dynamic> files, {String prefer = ''}) {
+  if (files.isEmpty) return '';
+  String q360 = '', q480 = '', q720 = '', q1080 = '', q4k = '', first = '';
+  for (final f in files) {
+    if (f is! Map<String, dynamic>) continue;
+    final url = _str(_pick(f, ['url', 'file', 'src', 'path', 'link']));
+    if (url.isEmpty) continue;
+    if (first.isEmpty) first = url;
+    final q = _str(_pick(f, ['quality', 'resolution', 'label'])).toLowerCase();
+    if (q.contains('4k') || q.contains('2160')) q4k = url;
+    else if (q.contains('1080')) q1080 = url;
+    else if (q.contains('720'))  q720  = url;
+    else if (q.contains('480'))  q480  = url;
+    else if (q.contains('360'))  q360  = url;
+  }
+  if (prefer == '1080' && q1080.isNotEmpty) return q1080;
+  if (prefer == '720'  && q720.isNotEmpty)  return q720;
+  if (prefer == '360'  && q360.isNotEmpty)  return q360;
+  if (prefer == '4k'   && q4k.isNotEmpty)   return q4k;
+  return q720.isNotEmpty ? q720 : (q480.isNotEmpty ? q480 : (q360.isNotEmpty ? q360 : (q1080.isNotEmpty ? q1080 : first)));
+}
+
+Future<List<dynamic>> _getFiles(String id) async {
+  try {
+    final r = await http.get(Uri.parse('${_ceeBase}transcoddedFiles/id/$id'))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode == 200) {
+      final body = jsonDecode(utf8.decode(r.bodyBytes));
+      if (body is List) return body;
+      if (body is Map) return (body['files'] ?? body['data'] ?? body['streams'] ?? []) as List;
+    }
+  } catch (_) {}
+  return [];
+}
+
+Future<String> _getSubtitle(String id) async {
+  try {
+    final r = await http.get(Uri.parse('${_ceeBase}translationFiles/id/$id'))
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode == 200) {
+      final body = jsonDecode(utf8.decode(r.bodyBytes));
+      List<dynamic> subs = body is List ? body : ((body is Map ? (body['data'] ?? body['files'] ?? []) : []) as List);
+      for (final s in subs) {
+        if (s is! Map) continue;
+        final url = _str(_pick(s, ['url', 'file', 'path']));
+        if (url.isNotEmpty) return url;
+      }
+    }
+  } catch (_) {}
+  return '';
+}
+
+// ── MovieScraper ───────────────────────────────────────────────────────────
 
 class MovieScraper extends ChangeNotifier {
   List<VideoItem> heroItems = [];
@@ -701,17 +771,50 @@ class MovieScraper extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      final resp = await http.get(
-        Uri.parse('${_baseUrl}index.php'),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        final html = resp.body;
-        final result = await compute(_parseHomePage, html);
-        heroItems = result.$1;
-        final filtered = result.$2.where((s) => s.name.toLowerCase() != 'featured').toList();
-        categories = filtered;
-        allItemsPool = filtered.expand((s) => s.items).toList();
+      // 1. Banner / hero
+      final bannerResp = await http.get(
+        Uri.parse('${_ceeBase}banner/level/$_ceeLevel'),
+      ).timeout(const Duration(seconds: 15));
+      if (bannerResp.statusCode == 200) {
+        final bd = jsonDecode(utf8.decode(bannerResp.bodyBytes));
+        final list = bd is List ? bd : (bd is Map ? (bd['data'] ?? bd['items'] ?? bd['videos'] ?? []) : []);
+        heroItems = _toItems(list);
+      }
+
+      // 2. Video groups (sections)
+      final groupResp = await http.get(
+        Uri.parse('${_ceeBase}videoGroups/lang/ar/level/$_ceeLevel'),
+      ).timeout(const Duration(seconds: 15));
+      if (groupResp.statusCode == 200) {
+        final gd = jsonDecode(utf8.decode(groupResp.bodyBytes));
+        final groups = gd is List ? gd : (gd is Map ? (gd['data'] ?? gd['groups'] ?? []) : []) as List;
+        final secs = <({String name, List<VideoItem> items, int tagId})>[];
+        for (final g in groups) {
+          if (g is! Map<String, dynamic>) continue;
+          final name = _str(_pick(g, ['title', 'titleAr', 'name', 'groupTitle']));
+          final gid  = int.tryParse(_str(_pick(g, ['id', 'groupId', 'groupID']))) ?? -1;
+          final raw  = _pick(g, ['videos', 'items', 'data', 'results']);
+          final items = _toItems(raw);
+          if (name.isNotEmpty && items.isNotEmpty) {
+            secs.add((name: name, items: items, tagId: gid));
+            if (heroItems.isEmpty && items.length >= 4) {
+              heroItems = items.take(8).toList();
+            }
+          }
+        }
+        categories = secs;
+        allItemsPool = secs.expand((s) => s.items).toList();
+      }
+
+      // 3. Fallback hero
+      if (heroItems.isEmpty) {
+        final lr = await http.get(
+          Uri.parse('${_ceeBase}latestMovies/level/$_ceeLevel/itemsPerPage/8/page/1/'),
+        ).timeout(const Duration(seconds: 15));
+        if (lr.statusCode == 200) {
+          final ld = jsonDecode(utf8.decode(lr.bodyBytes));
+          heroItems = _toItems(ld is List ? ld : (ld is Map ? (ld['data'] ?? ld['items'] ?? []) : []));
+        }
       }
     } catch (_) {}
     isLoading = false;
@@ -727,27 +830,31 @@ class MovieScraper extends ChangeNotifier {
     String sort = 'date',
     String? genre,
   }) async {
-    final pageParam = page > 1 ? '&page=$page' : '';
-    var urlStr = useTag
-        ? '${_baseUrl}index.php?do=list&tag=$typeId$pageParam'
-        : '${_baseUrl}index.php?do=list&type=$typeId$pageParam';
-    if (sort.isNotEmpty) urlStr += '&sort=$sort';
-    if (genre != null && genre.isNotEmpty) urlStr += '&genre=$genre';
     try {
-      final resp = await http.get(
-        Uri.parse(urlStr),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        return await compute(_parseListPage, resp.body);
+      Uri uri;
+      if (useTag) {
+        uri = Uri.parse(
+          '${_ceeBase}video/V/2/itemsPerPage/30/level/$_ceeLevel'
+          '/videoKind/$typeId/sortParam/$sort/pageNumber/${page - 1}',
+        );
+      } else {
+        uri = Uri.parse(
+          '${_ceeBase}videosByCategory?categoryID=$typeId'
+          '&orderby=$sort&videoKind=0&offset=${(page - 1) * 30}&level=$_ceeLevel',
+        );
+      }
+      final r = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (r.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(r.bodyBytes));
+        final items = body is List ? body
+            : (body is Map ? (body['data'] ?? body['items'] ?? body['videos'] ?? []) : []);
+        return _toItems(items);
       }
     } catch (_) {}
     return [];
   }
 
-  Future<bool> hasMorePages(String html, int currentPage) async {
-    return compute(_detectHasMore, (html, currentPage));
-  }
+  Future<bool> hasMorePages(String html, int currentPage) async => true;
 
   Future<List<VideoItem>> advancedSearch({
     String? title,
@@ -758,195 +865,146 @@ class MovieScraper extends ChangeNotifier {
     String? director,
     String? imdbrate,
   }) async {
-    final params = <String, String>{'do': 'list'};
-    if (title != null && title.isNotEmpty) params['title'] = title;
-    if (genre != null && genre.isNotEmpty) params['genre'] = genre;
-    if (type != null && type.isNotEmpty) params['type'] = type;
-    if (year != null && year.isNotEmpty) params['year'] = year;
-    if (language != null && language.isNotEmpty) params['language'] = language;
-    if (director != null && director.isNotEmpty) params['director'] = director;
-    if (imdbrate != null && imdbrate.isNotEmpty) params['imdbrate'] = imdbrate;
-    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
+    if (title == null || title.isEmpty) return [];
+    return searchItems(title);
+  }
+
+  Future<List<VideoItem>> searchItems(String query) async {
+    if (query.trim().isEmpty) return [];
     try {
-      final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
-          .timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        return await compute(_parseListPage, resp.body);
+      final encoded = Uri.encodeComponent(query.trim());
+      final r = await http.get(Uri.parse(
+        '${_ceeBase}video/V/2/itemsPerPage/20/video_title_search/$encoded'
+        '/itemsPerPage/12/pageNumber/0/level/$_ceeLevel',
+      )).timeout(const Duration(seconds: 20));
+      if (r.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(r.bodyBytes));
+        final items = body is List ? body
+            : (body is Map ? (body['data'] ?? body['items'] ?? body['videos'] ?? body['results'] ?? []) : []);
+        return _toItems(items);
       }
     } catch (_) {}
     return [];
   }
 
   Future<MediaDetails> fetchDetails(String id) async {
+    final d = MediaDetails();
     try {
-      final resp = await http.get(
-        Uri.parse('${_baseUrl}index.php?do=view&type=post&id=$id'),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 25));
-      if (resp.statusCode == 200) {
-        return await compute(_parseDetails, resp.body);
+      final infoResp = await http.get(
+        Uri.parse('${_ceeBase}allVideoInfo/id/$id'),
+      ).timeout(const Duration(seconds: 20));
+      if (infoResp.statusCode != 200) return d;
+
+      final info = jsonDecode(utf8.decode(infoResp.bodyBytes));
+      final Map<String, dynamic> m = info is Map<String, dynamic>
+          ? info
+          : (info is List && info.isNotEmpty ? info.first as Map<String, dynamic> : {});
+
+      d.title    = _str(_pick(m, ['title', 'titleAr', 'videoTitle', 'name']));
+      d.synopsis = _str(_pick(m, ['description', 'synopsis', 'overview', 'plot', 'story']));
+      d.year     = _str(_pick(m, ['year', 'releaseYear', 'productionYear']));
+      d.rating   = _str(_pick(m, ['imdbRating', 'rating', 'imdb', 'score']));
+      d.runtime  = _str(_pick(m, ['runtime', 'duration', 'movieRuntime']));
+
+      final poster = _pick(m, ['poster', 'posterImage', 'image', 'cover', 'thumbnail', 'banner']);
+      d.imageUrl = _img(poster);
+
+      final genreRaw = _pick(m, ['genres', 'categories', 'genre', 'tags']);
+      if (genreRaw is List) {
+        d.genre = genreRaw.map((g) {
+          if (g is Map) return _str(_pick(g as Map<String, dynamic>, ['name', 'nameAr', 'title']));
+          return g.toString();
+        }).where((s) => s.isNotEmpty).join(' | ');
+      } else {
+        d.genre = _str(genreRaw);
+      }
+
+      final kind = _str(_pick(m, ['kind', 'videoKind', 'type']));
+      final isSeries = kind == '2' || kind == 'series';
+
+      if (!isSeries) {
+        // ── Movie ──────────────────────────────────────────────────────
+        d.isMovie = true;
+        final files = await _getFiles(id);
+        d.movieUrl     = _bestUrl(files);
+        d.movieUrl720  = _bestUrl(files, prefer: '720');
+        d.movieUrl1080 = _bestUrl(files, prefer: '1080');
+        d.movieUrl360  = _bestUrl(files, prefer: '360');
+        d.movieUrl4k   = _bestUrl(files, prefer: '4k');
+        d.movieSubtitleVttUrl = await _getSubtitle(id);
+      } else {
+        // ── Series ─────────────────────────────────────────────────────
+        d.isMovie = false;
+        final seasResp = await http.get(
+          Uri.parse('${_ceeBase}videoSeason/id/$id'),
+        ).timeout(const Duration(seconds: 15));
+
+        List<dynamic> seasons = [];
+        if (seasResp.statusCode == 200) {
+          final sd = jsonDecode(utf8.decode(seasResp.bodyBytes));
+          seasons = sd is List ? sd : (sd is Map ? (sd['data'] ?? sd['seasons'] ?? []) : []) as List;
+        }
+
+        String _seasonLabel(dynamic s) {
+          if (s is! Map<String, dynamic>) return '';
+          return _str(_pick(s, ['name', 'title', 'seasonName', 'nameAr']));
+        }
+
+        final limitedSeasons = seasons.take(6).toList();
+        final seasonEpFutures = limitedSeasons.map((season) async {
+          if (season is! Map<String, dynamic>) return <EpisodeItem>[];
+          final sid    = _str(_pick(season, ['id', 'seasonId', 'season_id']));
+          if (sid.isEmpty) return <EpisodeItem>[];
+          final sLabel = _seasonLabel(season);
+          try {
+            final epResp = await http.get(
+              Uri.parse('${_ceeBase}videoSeasonNumber/id/$sid'),
+            ).timeout(const Duration(seconds: 15));
+            if (epResp.statusCode != 200) return <EpisodeItem>[];
+            final ed = jsonDecode(utf8.decode(epResp.bodyBytes));
+            final epList = ed is List ? ed : (ed is Map ? (ed['data'] ?? ed['episodes'] ?? []) : []);
+
+            final limitedEps = (epList as List).take(24).toList();
+            final epFutures = limitedEps.map((ep) async {
+              if (ep is! Map<String, dynamic>) return null;
+              final epId  = _str(_pick(ep, ['id', 'episodeId', 'episode_id']));
+              if (epId.isEmpty) return null;
+              final epNum = _str(_pick(ep, ['episodeNumber', 'episode', 'number', 'ep']));
+              var epTitle = _str(_pick(ep, ['title', 'titleAr', 'name', 'episodeTitle']));
+              if (epTitle.isEmpty) epTitle = '$sLabel الحلقة $epNum';
+              final epPoster = _pick(ep, ['poster', 'thumbnail', 'image', 'cover']);
+              final embedded = _pick(ep, ['transcoddedFiles', 'files', 'streams', 'qualities']);
+              List<dynamic> files = [];
+              if (embedded is List && embedded.isNotEmpty) {
+                files = embedded;
+              } else {
+                files = await _getFiles(epId);
+              }
+              final subUrl = await _getSubtitle(epId);
+              return EpisodeItem(
+                id: epId, title: epTitle, season: sLabel,
+                url:     _bestUrl(files),
+                url720:  _bestUrl(files, prefer: '720'),
+                url1080: _bestUrl(files, prefer: '1080'),
+                url360:  _bestUrl(files, prefer: '360'),
+                url4k:   _bestUrl(files, prefer: '4k'),
+                subtitleVttUrl: subUrl,
+                imageUrl: _img(epPoster),
+              );
+            });
+            final results = await Future.wait(epFutures);
+            return results.whereType<EpisodeItem>().toList();
+          } catch (_) {
+            return <EpisodeItem>[];
+          }
+        });
+
+        final allSeasonEps = await Future.wait(seasonEpFutures);
+        for (final eps in allSeasonEps) { d.episodes.addAll(eps); }
       }
     } catch (_) {}
-    return MediaDetails();
+    return d;
   }
-}
-
-// ─── Isolate-safe parsers ──────────────────────────────────────────────────
-
-(List<VideoItem>, List<({String name, List<VideoItem> items, int tagId})>)
-    _parseHomePage(String html) {
-  final carouselItems = <VideoItem>[];
-  final carRx = RegExp(
-    r'<a href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">'
-  );
-  for (final m in carRx.allMatches(html)) {
-    final id = m.group(1)!;
-    var img = m.group(2)!;
-    final title = m.group(3)!;
-    if (!img.startsWith('http')) img = _baseUrl + img;
-    if (!carouselItems.any((e) => e.id == id)) {
-      carouselItems.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
-    }
-  }
-
-  final sections = <({String name, List<VideoItem> items, int tagId})>[];
-  final headerRx = RegExp(r'<h2><a href="\?do=list&tag=(\d+)"[^>]*>([^<]+)</a></h2>');
-  final itemRx = RegExp(
-    r'<a href="index\.php\?do=view&type=post&id=(\d+)">\s*<img src="([^"]+)"[^>]*>\s*<div class="mytitle">([^<]*)</div>',
-    dotAll: true,
-  );
-
-  final headerMatches = headerRx.allMatches(html).toList();
-  for (int i = 0; i < headerMatches.length; i++) {
-    final hm = headerMatches[i];
-    final tagId = int.tryParse(hm.group(1)!) ?? -1;
-    final sectionName = hm.group(2)!.trim();
-    final blockStart = hm.end;
-    final blockEnd = i + 1 < headerMatches.length ? headerMatches[i + 1].start : html.length;
-    final block = html.substring(blockStart, blockEnd);
-    final items = <VideoItem>[];
-    for (final m in itemRx.allMatches(block)) {
-      final id = m.group(1)!;
-      var img = m.group(2)!;
-      final t = m.group(3)!.trim();
-      if (!img.startsWith('http')) img = _baseUrl + img;
-      img = _optimizeImageUrl(img);
-      if (!items.any((e) => e.id == id)) {
-        items.add(VideoItem(id: id, title: t, imageUrl: img, type: 'post'));
-      }
-    }
-    if (items.isNotEmpty) {
-      sections.add((name: sectionName, items: items, tagId: tagId));
-    }
-  }
-  return (carouselItems, sections);
-}
-
-List<VideoItem> _parseListPage(String html) {
-  final items = <VideoItem>[];
-  final rx = RegExp(
-    r'href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*>\s*</a>\s*<div class="mytitle">\s*<a[^>]*>([^<]+)</a>',
-    dotAll: true,
-  );
-  for (final m in rx.allMatches(html)) {
-    final id = m.group(1)!;
-    var img = m.group(2)!;
-    final title = m.group(3)!.trim();
-    if (!img.startsWith('http')) img = _baseUrl + img;
-    if (!items.any((e) => e.id == id)) {
-      items.add(VideoItem(id: id, title: title, imageUrl: _optimizeImageUrl(img), type: 'post'));
-    }
-  }
-  return items;
-}
-
-bool _detectHasMore((String, int) args) {
-  final html = args.$1;
-  final currentPage = args.$2;
-  final paginationStart = html.indexOf('<ul class="pagination">');
-  if (paginationStart == -1) return false;
-  final paginationEnd = html.indexOf('</ul>', paginationStart);
-  if (paginationEnd == -1) return false;
-  final block = html.substring(paginationStart, paginationEnd);
-  final rx = RegExp(r'page=(\d+)');
-  final pages = rx.allMatches(block)
-      .map((m) => int.tryParse(m.group(1)!) ?? 0)
-      .toList();
-  final maxPage = pages.isEmpty ? 0 : pages.reduce((a, b) => a > b ? a : b);
-  return maxPage > currentPage;
-}
-
-MediaDetails _parseDetails(String html) {
-  final d = MediaDetails();
-
-  String? first(String pattern, {bool dotAll = false}) {
-    final rx = RegExp(pattern, dotAll: dotAll);
-    final m = rx.firstMatch(html);
-    if (m != null && m.groupCount >= 1) return m.group(1)?.trim();
-    return null;
-  }
-
-  d.title = first(r'<h1>(.*?)</h1>') ?? '';
-  d.year = first(r'<span>Year:\s*</span>\s*([^<]+)') ?? '';
-  d.genre = first(r'<span>Genre:\s*</span>\s*([^<]+)') ?? '';
-  d.rating = first(r'<span>IMdB Rating:\s*</span>\s*([^<]+)') ?? '';
-  d.runtime = first(r'<span>Runtime:\s*</span>\s*([^<]+)') ?? '';
-  d.synopsis = first(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true) ?? '';
-
-  final imgM = RegExp(r'<img src="([^"]+)" class="img-responsive"').firstMatch(html);
-  if (imgM != null) {
-    var img = imgM.group(1)!;
-    if (!img.startsWith('http')) img = _baseUrl + img;
-    d.imageUrl = _optimizeImageUrl(img, w: 800, h: 1200);
-  }
-
-  final episodes = <EpisodeItem>[];
-  final epBlockRx = RegExp(r'<li class="episodeitem">(.*?)</li>', dotAll: true);
-  String extract(String pattern, String text) {
-    final m = RegExp(pattern).firstMatch(text);
-    return m?.group(1)?.trim() ?? '';
-  }
-  for (final bm in epBlockRx.allMatches(html)) {
-    final block = bm.group(1)!;
-    final epId = extract(r'data-id="(\d+)"', block);
-    if (epId.isEmpty) continue;
-    final epTitle = extract(r'data-title="([^"]*)"', block);
-    final epUrl = extract(r'data-url="([^"]*)"', block);
-    if (epUrl.isEmpty) continue;
-    episodes.add(EpisodeItem(
-      id: epId,
-      title: epTitle.isEmpty ? 'الحلقة ${episodes.length + 1}' : epTitle,
-      url: epUrl,
-      url720: extract(r'data-url720="([^"]*)"', block),
-      url1080: extract(r'data-url1080="([^"]*)"', block),
-      url360: extract(r'data-url360="([^"]*)"', block),
-      url4k: extract(r'data-url4k="([^"]*)"', block),
-      subtitleUrl: extract(r'data-srt="([^"]*)"', block),
-      subtitleVttUrl: extract(r'data-webvtt="([^"]*)"', block),
-    ));
-  }
-
-  if (episodes.isEmpty) {
-    d.isMovie = true;
-    final movieRx = RegExp(
-      r'data-url="([^"]+)"[^>]*data-url360="([^"]*)"[^>]*(?:data-url4k="([^"]*)"[^>]*)?(?:data-url720="([^"]*)"[^>]*)?data-url1080="([^"]*)"[^>]*data-srt="([^"]*)"[^>]*data-webvtt="([^"]*)"',
-      dotAll: true,
-    );
-    final mm = movieRx.firstMatch(html);
-    if (mm != null) {
-      d.movieUrl = mm.group(1) ?? '';
-      d.movieUrl360 = mm.group(2) ?? '';
-      d.movieUrl4k = mm.group(3) ?? '';
-      d.movieUrl720 = mm.group(4) ?? '';
-      d.movieUrl1080 = mm.group(5) ?? '';
-      d.movieSubtitleUrl = mm.group(6) ?? '';
-      d.movieSubtitleVttUrl = mm.group(7) ?? '';
-    }
-  } else {
-    d.isMovie = false;
-    d.episodes = episodes;
-  }
-  return d;
 }
 """)
 
@@ -954,19 +1012,28 @@ print("✅ scraper.dart written")
 
 # ─── lib/services/subtitle_parser.dart ─────────────────────────────────────
 w("lib/services/subtitle_parser.dart", r"""import 'dart:async';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/subtitle_cue.dart';
 
 class SubtitleParser {
+  // Strip subtitle format/style tags: {ut8}, {/ut8}, {bold}, <b>, \N, etc.
+  static String _clean(String t) => t
+      .replaceAll(RegExp(r'\{[^}]*\}'), '')      // {tag}
+      .replaceAll(RegExp(r'<[^>]+>'), '')          // <html>
+      .replaceAll(r'\N', '\n')                   // ass newline
+      .replaceAll(r'\n', '\n')
+      .trim();
+
   static Future<List<SubtitleCue>> parse(String url) async {
     if (url.isEmpty) return [];
-    var clean = url;
-    if (!clean.startsWith('http')) clean = 'https://movie.vodu.me/$clean';
+    if (!url.startsWith('http')) return [];
     try {
-      final resp = await http.get(Uri.parse(clean))
+      final resp = await http.get(Uri.parse(url))
           .timeout(const Duration(seconds: 15));
       if (resp.statusCode != 200) return [];
-      final text = resp.body;
+      // Force UTF-8 decode to fix Arabic garbling
+      final text = utf8.decode(resp.bodyBytes, allowMalformed: true);
       if (text.contains('WEBVTT')) return _parseWebVTT(text);
       return _parseSRT(text);
     } catch (_) {
@@ -983,9 +1050,7 @@ class SubtitleParser {
       if (lines.length < 3) continue;
       final timeLine = lines[1];
       final textParts = lines.sublist(2);
-      final text = textParts.join('\n')
-          .replaceAll(RegExp(r'<[^>]+>'), '')
-          .trim();
+      final text = _clean(textParts.join('\n'));
       if (text.isEmpty) continue;
       final times = timeLine.split(' --> ');
       if (times.length != 2) continue;
@@ -1033,9 +1098,7 @@ class SubtitleParser {
               textLines.add(lines[i].trim());
               i++;
             }
-            final text = textLines.join('\n')
-                .replaceAll(RegExp(r'<[^>]+>'), '')
-                .trim();
+            final text = _clean(textLines.join('\n'));
             if (text.isNotEmpty) {
               cues.add(SubtitleCue(startTime: start, endTime: end, text: text));
             }
@@ -1220,6 +1283,21 @@ class SupabaseManager {
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       if (resp.statusCode == 200 && body['access_token'] != null) return body;
       return {'error': body['error_description'] ?? body['msg'] ?? body['message'] ?? 'خطأ'};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>?> signInWithGoogle({required String idToken}) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/auth/v1/token?grant_type=id_token'),
+        headers: _baseHeaders(),
+        body: jsonEncode({'provider': 'google', 'id_token': idToken}),
+      ).timeout(const Duration(seconds: 20));
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode == 200 && body['access_token'] != null) return body;
+      return {'error': body['error_description'] ?? body['msg'] ?? body['message'] ?? 'Google Sign-In failed'};
     } catch (e) {
       return {'error': e.toString()};
     }
@@ -1886,20 +1964,21 @@ class PosterCard extends StatelessWidget {
 w("lib/widgets/hero_carousel.dart", r"""import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../models/video_item.dart';
+import '../providers/favorites_store.dart';
 import '../app_colors.dart';
+import '../app_settings.dart';
 
 class HeroCarousel extends StatefulWidget {
   final List<VideoItem> items;
   final void Function(String itemId) onTap;
 
   const HeroCarousel({super.key, required this.items, required this.onTap});
-
   @override State<HeroCarousel> createState() => _HeroCarouselState();
 }
 
 class _HeroCarouselState extends State<HeroCarousel> {
-  final PageController _ctrl = PageController(viewportFraction: 0.88);
   int _current = 0;
   Timer? _timer;
 
@@ -1909,66 +1988,235 @@ class _HeroCarouselState extends State<HeroCarousel> {
   }
 
   void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (widget.items.isEmpty) return;
-      final next = (_current + 1) % widget.items.length;
-      _ctrl.animateToPage(next,
-        duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+    _timer?.cancel();
+    final count = _displayCount;
+    if (count <= 1) return;
+    _timer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (!mounted) return;
+      setState(() => _current = (_current + 1) % count);
     });
   }
 
-  @override void dispose() { _timer?.cancel(); _ctrl.dispose(); super.dispose(); }
+  void _resetTimer() {
+    _timer?.cancel();
+    _startTimer();
+  }
+
+  int get _displayCount => widget.items.length.clamp(0, 8);
+
+  @override void dispose() { _timer?.cancel(); super.dispose(); }
 
   @override Widget build(BuildContext context) {
-    if (widget.items.isEmpty) return const SizedBox(height: 230);
-    return SizedBox(
-      height: 230,
-      child: PageView.builder(
-        controller: _ctrl,
-        onPageChanged: (i) => setState(() => _current = i),
-        itemCount: widget.items.length,
-        itemBuilder: (_, i) {
-          final item = widget.items[i];
-          return GestureDetector(
-            onTap: () => widget.onTap(item.id),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Stack(
-                  fit: StackFit.expand,
+    final items = widget.items.take(8).toList();
+    if (items.isEmpty) return const SizedBox(height: 380);
+    final item = items[_current.clamp(0, items.length - 1)];
+    final h = MediaQuery.of(context).size.height * 0.62;
+
+    return GestureDetector(
+      onHorizontalDragEnd: (d) {
+        final count = _displayCount;
+        if (count <= 1) return;
+        if (d.primaryVelocity != null && d.primaryVelocity! < -200) {
+          setState(() => _current = (_current + 1) % count);
+          _resetTimer();
+        } else if (d.primaryVelocity != null && d.primaryVelocity! > 200) {
+          setState(() => _current = (_current - 1 + count) % count);
+          _resetTimer();
+        }
+      },
+      child: SizedBox(
+        height: h,
+        child: Stack(
+          alignment: Alignment.bottomLeft,
+          children: [
+            // Full-bleed cinematic image
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 700),
+              child: CachedNetworkImage(
+                key: ValueKey(item.id),
+                imageUrl: item.imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: h,
+                placeholder: (_, __) => Container(color: const Color(0x0AFFFFFF)),
+                errorWidget:  (_, __, ___) => Container(color: const Color(0x0AFFFFFF)),
+              ),
+            ),
+
+            // Top vignette — protect status bar
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: Container(
+                height: 120,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.55), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+
+            // Bottom cinematic triple-fade
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(height: 80,
+                  decoration: BoxDecoration(gradient: LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.15)],
+                  )),
+                ),
+                Container(height: 120,
+                  decoration: BoxDecoration(gradient: LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.15), Colors.black.withOpacity(0.65)],
+                  )),
+                ),
+                Container(height: 100,
+                  decoration: BoxDecoration(gradient: LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.65), Colors.black],
+                  )),
+                ),
+                Container(height: 30, color: Colors.black),
+              ]),
+            ),
+
+            // Left-aligned content — Apple TV signature
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    CachedNetworkImage(
-                      imageUrl: item.imageUrl, fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(color: const Color(0x1AFFFFFF)),
-                      errorWidget: (_, __, ___) => Container(color: const Color(0x1AFFFFFF)),
-                    ),
-                    // gradient overlay
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 14, right: 14, bottom: 14,
-                      child: Text(item.title,
+                    // Type pill
+                    Row(children: [
+                      Text(
+                        item.type == 'series'
+                          ? L('مسلسل', 'SERIES') : L('فيلم', 'FILM'),
                         style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-                        ),
-                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                          fontSize: 11, fontWeight: FontWeight.w600,
+                          color: Colors.white, letterSpacing: 1.5),
                       ),
+                      const SizedBox(width: 6),
+                      Container(width: 3, height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.4), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      const Text('HD', style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w600,
+                        color: Colors.white60, letterSpacing: 1.2)),
+                      const SizedBox(width: 6),
+                      Container(width: 3, height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.4), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text(L('جديد', 'NEW'), style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w700,
+                        color: utRed(), letterSpacing: 1.5)),
+                    ]),
+                    const SizedBox(height: 10),
+
+                    // Large cinematic title
+                    Text(item.title,
+                      style: const TextStyle(
+                        fontSize: 36, fontWeight: FontWeight.w700,
+                        color: Colors.white, height: 1.15,
+                        shadows: [Shadow(blurRadius: 8, color: Colors.black54, offset: Offset(0,3))],
+                      ),
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 14),
+
+                    // Action buttons — capsule style
+                    Consumer<FavoritesStore>(builder: (ctx, favs, _) =>
+                      Row(children: [
+                        // Play button
+                        GestureDetector(
+                          onTap: () => widget.onTap(item.id),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white, borderRadius: BorderRadius.circular(50)),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 18),
+                              const SizedBox(width: 6),
+                              Text(L('تشغيل', 'Play'),
+                                style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black)),
+                            ]),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // My List button
+                        GestureDetector(
+                          onTap: () => favs.toggle(item: item),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(50),
+                              border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(favs.isFavorite(item.id) ? Icons.check : Icons.add,
+                                color: Colors.white, size: 16),
+                              const SizedBox(width: 6),
+                              Text(L('قائمتي', 'My List'),
+                                style: const TextStyle(fontSize: 14, color: Colors.white)),
+                            ]),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Details button
+                        GestureDetector(
+                          onTap: () => widget.onTap(item.id),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(50),
+                              border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.info_outline, color: Colors.white, size: 16),
+                              const SizedBox(width: 6),
+                              Text(L('تفاصيل', 'Details'),
+                                style: const TextStyle(fontSize: 14, color: Colors.white)),
+                            ]),
+                          ),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Dot indicator — animated capsule
+                    if (_displayCount > 1)
+                      Row(children: [
+                        for (int i = 0; i < _displayCount; i++)
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 350),
+                            curve: Curves.easeOutBack,
+                            margin: const EdgeInsets.only(right: 4),
+                            width:  i == _current ? 18 : 5,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: i == _current
+                                  ? Colors.white : Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                      ]),
+                    const SizedBox(height: 28),
                   ],
                 ),
               ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -2175,6 +2423,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/episode_item.dart';
 import '../models/subtitle_cue.dart';
 import '../services/subtitle_parser.dart';
@@ -2223,6 +2472,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isLocked = false;
   bool _showEpisodes = false;
   bool _showSubtitleSettings = false;
+  String _selectedDrawerSeason = '';
   bool _isSpeedMode = false;
   String? _errorMessage;
 
@@ -2292,7 +2542,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String fix(String u) {
       if (u.isEmpty) return '';
       if (u.startsWith('http')) return u;
-      return 'https://movie.vodu.me/$u';
+      return u; // URLs must be absolute from cee.buzz
     }
     switch (q) {
       case VideoQuality.q360: return fix(widget.videoUrl360.isNotEmpty ? widget.videoUrl360 : widget.videoUrl);
@@ -2404,7 +2654,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _currentEpisodeId = ep.id;
     _currentEpisodeTitle = ep.title;
     setState(() { _showEpisodes = false; _isBuffering = true; });
-    final url = ep.url.startsWith('http') ? ep.url : 'https://movie.vodu.me/${ep.url}';
+    if (ep.url.isEmpty || !ep.url.startsWith('http')) {
+      setState(() { _errorMessage = 'الرابط غير متاح'; _isBuffering = false; }); return;
+    }
+    final url = ep.url;
     _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
     try {
       await _vpc!.initialize();
@@ -2805,48 +3058,149 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildEpisodesDrawer() {
     final episodes = widget.episodes;
+    final seasons = <String>[];
+    for (final ep in episodes) {
+      if (ep.season.isNotEmpty && !seasons.contains(ep.season)) seasons.add(ep.season);
+    }
+    final hasSeason = seasons.length > 1;
+    final selSeason = _selectedDrawerSeason.isEmpty
+        ? (seasons.isNotEmpty ? seasons.first : '')
+        : _selectedDrawerSeason;
+    final filtered = hasSeason
+        ? episodes.where((e) => e.season == selSeason).toList()
+        : episodes;
+
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.9),
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(children: [
-              Text(widget.itemTitle,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => setState(() => _showEpisodes = false),
-              ),
-            ]),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Colors.black.withOpacity(0.97), Colors.black.withOpacity(0.9)],
           ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: episodes.length,
-              itemBuilder: (_, i) {
-                final ep = episodes[i];
-                final isCurrent = ep.id == _currentEpisodeId;
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isCurrent ? utRed() : Colors.white12,
-                    child: Text('${i + 1}',
-                      style: TextStyle(color: isCurrent ? Colors.white : Colors.white70, fontSize: 13)),
-                  ),
-                  title: Text(ep.title,
-                    style: TextStyle(
-                      color: isCurrent ? utRed() : Colors.white,
-                      fontSize: 14, fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
-                    )),
-                  onTap: () => _switchEpisode(ep),
-                );
-              },
+        ),
+        child: SafeArea(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+              child: Row(children: [
+                Expanded(child: Text(widget.itemTitle,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14,
+                    fontWeight: FontWeight.w600),
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70, size: 22),
+                  onPressed: () => setState(() => _showEpisodes = false),
+                ),
+              ]),
             ),
-          ),
-        ]),
+
+            // Season picker
+            if (hasSeason)
+              SizedBox(
+                height: 38,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: seasons.length,
+                  itemBuilder: (_, i) {
+                    final s = seasons[i];
+                    final active = s == selSeason;
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedDrawerSeason = s),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: active ? utRed() : Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20)),
+                        child: Text(s, style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: active ? FontWeight.w700 : FontWeight.w400,
+                          fontSize: 12)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 10),
+
+            // Horizontal episode cards — iOS style
+            SizedBox(
+              height: 130,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final ep = filtered[i];
+                  final isCurrent = ep.id == _currentEpisodeId;
+                  return GestureDetector(
+                    onTap: () => _switchEpisode(ep),
+                    child: Container(
+                      width: 130,
+                      margin: const EdgeInsets.only(right: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Stack(children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: ep.imageUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: ep.imageUrl,
+                                    width: 130, height: 73, fit: BoxFit.cover,
+                                    placeholder: (_, __) => _epThumb(),
+                                    errorWidget: (_, __, ___) => _epThumb(),
+                                  )
+                                : _epThumb(),
+                            ),
+                            if (isCurrent)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  width: 130, height: 73,
+                                  color: Colors.black.withOpacity(0.5),
+                                  alignment: Alignment.center,
+                                  child: const Icon(Icons.play_arrow_rounded,
+                                    color: Colors.white, size: 28),
+                                ),
+                              ),
+                            Positioned.fill(child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isCurrent ? utRed() : Colors.transparent,
+                                  width: 2)),
+                            )),
+                          ]),
+                          const SizedBox(height: 5),
+                          Text(ep.title,
+                            style: TextStyle(
+                              color: isCurrent
+                                ? utRed() : Colors.white.withOpacity(0.85),
+                              fontSize: 11, fontWeight: FontWeight.w500),
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        )),
       ),
     );
   }
+
+  Widget _epThumb() => Container(
+    width: 130, height: 73,
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(6)),
+    child: const Icon(Icons.movie_outlined, color: Colors.white24, size: 28));
 
   Widget _buildUpNextBanner() {
     final next = _nextEpisodeItem!;
@@ -3114,6 +3468,7 @@ import '../models/site_category.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
 import '../widgets/hero_carousel.dart';
+import '../providers/favorites_store.dart';
 import '../widgets/category_row.dart';
 import '../widgets/continue_watching_row.dart';
 import 'details_screen.dart';
@@ -3640,7 +3995,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
     String fix(String u) {
       if (u.isEmpty) return '';
       if (u.startsWith('http')) return u;
-      return 'https://movie.vodu.me/$u';
+      return u; // URLs must be absolute from cee.buzz
     }
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
       itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
@@ -3657,7 +4012,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
     String fix(String u) {
       if (u.isEmpty) return '';
       if (u.startsWith('http')) return u;
-      return 'https://movie.vodu.me/$u';
+      return u; // URLs must be absolute from cee.buzz
     }
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
       itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
@@ -4006,7 +4361,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            onPressed: () => setState(() => _showMoreSettings = true),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MoreSettingsView())),
           ),
         ],
       ),
@@ -4304,6 +4659,7 @@ print("✅ settings_screen.dart written")
 w("lib/screens/account_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_session.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../services/supabase_manager.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watch_progress_store.dart';
@@ -4417,6 +4773,50 @@ class _AccountScreenState extends State<AccountScreen>
       body: session.isLoggedIn ? _buildLoggedIn(session) : _buildAuth(),
     );
   }
+
+  Future<void> _doGoogleSignIn() async {
+    setState(() { _loading = true; _error = ''; });
+    try {
+      final gsi = GoogleSignIn(scopes: ['email', 'profile']);
+      final gUser = await gsi.signIn();
+      if (gUser == null) { setState(() => _loading = false); return; }
+      final gAuth = await gUser.authentication;
+      final idToken = gAuth.idToken;
+      if (idToken == null) {
+        setState(() { _loading = false; _error = L('فشل Google Sign-In', 'Google Sign-In failed'); });
+        return;
+      }
+      final sm = SupabaseManager.instance;
+      final result = await sm.signInWithGoogle(idToken: idToken);
+      if (!mounted) return;
+      if (result == null || result.containsKey('error')) {
+        setState(() { _loading = false; _error = result?['error'] ?? L('خطأ', 'Error'); });
+        return;
+      }
+      final userMap = (result['user'] as Map<String, dynamic>? ?? {});
+      final user = SupabaseUser(
+        id: userMap['id'] as String? ?? '',
+        email: userMap['email'] as String?,
+        userMetadata: (userMap['user_metadata'] as Map<String, dynamic>?) ?? {},
+      );
+      await AuthSession.instance.save(
+        accessToken: result['access_token'] as String,
+        refreshToken: result['refresh_token'] as String? ?? '',
+        user: user,
+      );
+      final cloudFavs = await sm.fetchFavorites();
+      if (cloudFavs.isNotEmpty && mounted) context.read<FavoritesStore>().mergeFromCloud(cloudFavs);
+      final cloudProg = await sm.fetchProgress();
+      if (cloudProg.isNotEmpty && mounted) context.read<WatchProgressStore>().mergeFromCloud(cloudProg);
+      final isAdmin = await sm.fetchIsAdmin();
+      AuthSession.instance.setAdmin(isAdmin);
+      setState(() => _loading = false);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
 
   Widget _buildLoggedIn(AuthSession session) {
     return Column(children: [
@@ -4617,6 +5017,44 @@ class _AccountScreenState extends State<AccountScreen>
             : Text(_isLogin ? L('دخول', 'Sign In') : L('إنشاء', 'Create'),
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
       )),
+
+      // ── OR divider ──────────────────────────────────────────────────
+      const SizedBox(height: 16),
+      Row(children: [
+        const Expanded(child: Divider(color: Colors.white24)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(L('أو', 'OR'),
+            style: const TextStyle(color: Colors.white38, fontSize: 13)),
+        ),
+        const Expanded(child: Divider(color: Colors.white24)),
+      ]),
+      const SizedBox(height: 16),
+
+      // ── Google Sign-In button ────────────────────────────────────────
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: _loading ? null : _doGoogleSignIn,
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Colors.white24),
+            backgroundColor: Colors.white.withOpacity(0.06),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          icon: Container(
+            width: 20, height: 20,
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+            child: const Center(
+              child: Text('G', style: TextStyle(
+                color: Color(0xFF4285F4),
+                fontSize: 13, fontWeight: FontWeight.w900)),
+            ),
+          ),
+          label: Text(L('الدخول بـ Google', 'Continue with Google'),
+            style: const TextStyle(color: Colors.white70, fontSize: 15)),
+        ),
+      ),
     ]),
   );
 
