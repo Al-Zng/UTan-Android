@@ -584,22 +584,32 @@ const List<SiteCategory> siteCategories = [
   SiteCategory(id: 102, remoteId: 2, isTag: true, nameAr: 'مسلسلات',            nameEn: 'Series'),
 
   // ── Category-ID-based (isTag=false → videosByCategoryAndLanguage) ────
-  // IDs mapped from cee.buzz (Updated from latest site data)
-  SiteCategory(id: 84  , nameAr: 'اكشن           ', nameEn: 'Action'),
-  SiteCategory(id: 80  , nameAr: 'اثارة          ', nameEn: 'Thriller'),
-  SiteCategory(id: 60  , nameAr: 'جريمة          ', nameEn: 'Crime'),
-  SiteCategory(id: 89  , nameAr: 'حياة الغرب     ', nameEn: 'Western'),
-  SiteCategory(id: 78  , nameAr: 'خيال علمي      ', nameEn: 'Sci-Fi'),
-  SiteCategory(id: 67  , nameAr: 'خيالي          ', nameEn: 'Fantasy'),
-  SiteCategory(id: 62  , nameAr: 'دراما          ', nameEn: 'Drama'),
-  SiteCategory(id: 57  , nameAr: 'رسوم متحركة    ', nameEn: 'Animation'),
-  SiteCategory(id: 70  , nameAr: 'رعب            ', nameEn: 'Horror'),
-  SiteCategory(id: 77  , nameAr: 'رومانسي        ', nameEn: 'Romance'),
-  SiteCategory(id: 79  , nameAr: 'رياضي          ', nameEn: 'Sports'),
-  SiteCategory(id: 76  , nameAr: 'غموض           ', nameEn: 'Mystery'),
-  SiteCategory(id: 59  , nameAr: 'كوميدي         ', nameEn: 'Comedy'),
-  SiteCategory(id: 56  , nameAr: 'مغامرة         ', nameEn: 'Adventure'),
-  SiteCategory(id: 61  , nameAr: 'وثائقي         ', nameEn: 'Documentary'),
+  // IDs mapped from cee.buzz mainCategories API (standard Arabic streaming categories)
+  SiteCategory(id: 1,   nameAr: 'مسلسلات أجنبية',      nameEn: 'Foreign Series'),
+  SiteCategory(id: 2,   nameAr: 'مسلسلات عربية',       nameEn: 'Arabic Series'),
+  SiteCategory(id: 3,   nameAr: 'أنمي مدبلج عربي',     nameEn: 'Arabic Dubbed Anime'),
+  SiteCategory(id: 4,   nameAr: 'أنمي مترجم',          nameEn: 'Subbed Anime'),
+  SiteCategory(id: 5,   nameAr: 'أفلام بوليوود',       nameEn: 'Bollywood Movies'),
+  SiteCategory(id: 6,   nameAr: 'مسلسلات هندية',       nameEn: 'Indian Series'),
+  SiteCategory(id: 7,   nameAr: 'أفلام عربية',         nameEn: 'Arabic Movies'),
+  SiteCategory(id: 8,   nameAr: 'مسلسلات بوليوود',     nameEn: 'Bollywood Series'),
+  SiteCategory(id: 9,   nameAr: 'أفلام أنمي',          nameEn: 'Anime Movies'),
+  SiteCategory(id: 10,  nameAr: 'أفلام مكتب الصندوق',  nameEn: 'US Box Office'),
+  SiteCategory(id: 13,  nameAr: 'سينما عربية',         nameEn: 'Arabic Cinemas'),
+  SiteCategory(id: 14,  nameAr: 'أفلام تركية',         nameEn: 'Turkish Movies'),
+  SiteCategory(id: 15,  nameAr: 'مسلسلات تركية',       nameEn: 'Turkish Series'),
+  SiteCategory(id: 16,  nameAr: 'أفلام كرتون',         nameEn: 'Cartoon Movies'),
+  SiteCategory(id: 17,  nameAr: 'مسلسلات كرتون',       nameEn: 'Cartoon Series'),
+  SiteCategory(id: 18,  nameAr: 'أفلام أجنبية',        nameEn: 'Foreign Movies'),
+  SiteCategory(id: 20,  nameAr: 'مسلسلات مدبلجة عربي', nameEn: 'Arabic Dubbed Series'),
+  SiteCategory(id: 21,  nameAr: 'أفلام مدبلجة عربي',   nameEn: 'Arabic Dubbed Movies'),
+  SiteCategory(id: 44,  nameAr: 'نيتفلكس',             nameEn: 'Netflix'),
+  SiteCategory(id: 72,  nameAr: 'ديزني+',              nameEn: 'Disney+'),
+  SiteCategory(id: 73,  nameAr: 'HBO Max',             nameEn: 'HBO Max'),
+  SiteCategory(id: 1014,nameAr: 'أفلام كردية',         nameEn: 'Kurdish Movies'),
+  SiteCategory(id: 1015,nameAr: 'مسلسلات كردية',       nameEn: 'Kurdish Series'),
+  SiteCategory(id: 1022,nameAr: 'أنمي عربي',           nameEn: 'Arabic Anime'),
+  SiteCategory(id: 1029,nameAr: 'أنمي مدبلج إنجليزي',  nameEn: 'English Dubbed Anime'),
 ];
 """)
 
@@ -665,11 +675,58 @@ import '../models/video_item.dart';
 import '../models/media_details.dart';
 import '../models/episode_item.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Content metadata source (listing, search, details)
 const String _ceeBase  = 'https://cee.buzz/api/android/';
 const String _ceeCdn   = 'https://cnth2.cee.buzz/vascin-poster-images/';
 const int    _ceeLevel = 1;
 
-// ── helpers ────────────────────────────────────────────────────────────────
+/// VidBox streaming source (video server resolution)
+const String _vidboxBase = 'https://vidbox.dev';
+
+/// Proxy fallback – append original URL after the '?url=' parameter
+const String _proxyBase = 'https://proxy.kuro-pq9.workers.dev/?url=';
+
+/// OpenSubtitles REST API v1
+const String _osBase    = 'https://api.opensubtitles.com/api/v1';
+const String _osApiKey  = 'srt7890uio12345';   // ← replace with your real key
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PROXY-AWARE HTTP HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// GET with automatic proxy fallback on any failure / timeout.
+Future<http.Response?> _get(
+  String url, {
+  Map<String, String>? headers,
+  Duration timeout = const Duration(seconds: 18),
+}) async {
+  // 1. Direct attempt
+  try {
+    final r = await http
+        .get(Uri.parse(url), headers: headers)
+        .timeout(timeout);
+    if (r.statusCode < 500) return r;
+  } catch (_) {}
+
+  // 2. Proxy fallback
+  try {
+    final proxied = '$_proxyBase${Uri.encodeComponent(url)}';
+    final r = await http
+        .get(Uri.parse(proxied), headers: headers)
+        .timeout(timeout);
+    return r;
+  } catch (_) {}
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CEE.BUZZ HELPERS  (metadata only – unchanged logic)
+// ─────────────────────────────────────────────────────────────────────────────
 
 String _img(dynamic v) {
   if (v == null) return '';
@@ -690,7 +747,7 @@ VideoItem? _toItem(dynamic raw) {
   if (raw is! Map<String, dynamic>) return null;
   final id = _str(_pick(raw, ['id', 'videoId', 'video_id']));
   if (id.isEmpty) return null;
-  final title = _str(_pick(raw, ['title', 'titleAr', 'name', 'videoTitle']));
+  final title  = _str(_pick(raw, ['title', 'titleAr', 'name', 'videoTitle']));
   final poster = _pick(raw, ['poster', 'posterImage', 'image', 'thumbnail', 'cover', 'banner']);
   final kind   = _str(_pick(raw, ['kind', 'videoKind', 'type']));
   final type   = (kind == '2' || kind == 'series') ? 'series' : 'movies';
@@ -702,7 +759,368 @@ List<VideoItem> _toItems(dynamic raw) {
   return raw.map(_toItem).whereType<VideoItem>().toList();
 }
 
-String _bestUrl(List<dynamic> files, {String prefer = ''}) {
+// ─────────────────────────────────────────────────────────────────────────────
+//  VIDBOX STREAM RESOLUTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Holds one streaming server entry returned by VidBox.
+class VidboxServer {
+  final String name;
+  final String embedUrl;
+  VidboxServer({required this.name, required this.embedUrl});
+}
+
+/// Holds the resolved stream URLs for a single piece of content.
+class VidboxResult {
+  final String url;
+  final String url720;
+  final String url1080;
+  final String url360;
+  final String url4k;
+  final List<VidboxServer> servers;
+
+  const VidboxResult({
+    this.url = '',
+    this.url720 = '',
+    this.url1080 = '',
+    this.url360 = '',
+    this.url4k = '',
+    this.servers = const [],
+  });
+}
+
+/// Fetch movie stream sources from VidBox.
+/// [tmdbId] is the TMDB / VidBox content ID.
+Future<VidboxResult> fetchVidboxMovie(String tmdbId) async {
+  if (tmdbId.isEmpty) return const VidboxResult();
+
+  // ── Try the VidBox JSON API first ──────────────────────────────────────
+  final apiUrl = '$_vidboxBase/api/movie?id=$tmdbId';
+  final apiResp = await _get(apiUrl, headers: {
+    'Referer': '$_vidboxBase/',
+    'Origin' : _vidboxBase,
+    'Accept' : 'application/json, text/plain, */*',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+  });
+
+  if (apiResp != null && apiResp.statusCode == 200) {
+    final result = _parseVidboxApiResponse(apiResp.body);
+    if (result.url.isNotEmpty || result.servers.isNotEmpty) return result;
+  }
+
+  // ── Fallback: scrape the embed page ────────────────────────────────────
+  final embedUrl = '$_vidboxBase/embed/movie/$tmdbId';
+  return _scrapeVidboxEmbedPage(embedUrl);
+}
+
+/// Fetch TV episode stream sources from VidBox.
+Future<VidboxResult> fetchVidboxEpisode(
+    String tmdbId, int season, int episode) async {
+  if (tmdbId.isEmpty) return const VidboxResult();
+
+  // ── Try the VidBox JSON API first ──────────────────────────────────────
+  final apiUrl =
+      '$_vidboxBase/api/episodes?id=$tmdbId&s=$season&e=$episode';
+  final apiResp = await _get(apiUrl, headers: {
+    'Referer': '$_vidboxBase/',
+    'Origin' : _vidboxBase,
+    'Accept' : 'application/json, text/plain, */*',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+  });
+
+  if (apiResp != null && apiResp.statusCode == 200) {
+    final result = _parseVidboxApiResponse(apiResp.body);
+    if (result.url.isNotEmpty || result.servers.isNotEmpty) return result;
+  }
+
+  // ── Fallback: scrape embed page ─────────────────────────────────────────
+  final embedUrl = '$_vidboxBase/embed/tv/$tmdbId/$season/$episode';
+  return _scrapeVidboxEmbedPage(embedUrl);
+}
+
+/// Parse JSON API response from VidBox into a [VidboxResult].
+VidboxResult _parseVidboxApiResponse(String body) {
+  try {
+    final dynamic json = jsonDecode(body);
+    if (json is! Map<String, dynamic>) return const VidboxResult();
+
+    // Extract sources array
+    final dynamic rawSources =
+        json['sources'] ?? json['streams'] ?? json['data'];
+    final List<dynamic> sourceList =
+        rawSources is List ? rawSources : <dynamic>[];
+
+    // Extract server list (embed iframes)
+    final dynamic rawServers =
+        json['servers'] ?? json['embeds'] ?? json['players'];
+    final List<dynamic> serverList =
+        rawServers is List ? rawServers : <dynamic>[];
+
+    final servers = serverList
+        .whereType<Map>()
+        .map((s) {
+          final sm = Map<String, dynamic>.from(s);
+          return VidboxServer(
+            name:     _str(_pick(sm, ['name', 'server', 'title', 'provider'])),
+            embedUrl: _str(_pick(sm, ['url', 'embed', 'link', 'embedUrl', 'src'])),
+          );
+        })
+        .where((s) => s.embedUrl.isNotEmpty)
+        .toList();
+
+    // Pick best direct URL from sources
+    final result = _pickBestSourceUrls(sourceList);
+
+    return VidboxResult(
+      url:     result['auto']  ?? '',
+      url720:  result['720']   ?? '',
+      url1080: result['1080']  ?? '',
+      url360:  result['360']   ?? '',
+      url4k:   result['4k']    ?? '',
+      servers: servers,
+    );
+  } catch (_) {
+    return const VidboxResult();
+  }
+}
+
+/// Pick the best direct-stream URL per quality level from a sources list.
+Map<String, String> _pickBestSourceUrls(List<dynamic> sources) {
+  String q360 = '', q480 = '', q720 = '', q1080 = '', q4k = '', first = '';
+  for (final s in sources) {
+    if (s is! Map) continue;
+    final sm = Map<String, dynamic>.from(s);
+    final url = _str(_pick(sm, ['url', 'file', 'src', 'link', 'path']));
+    if (url.isEmpty) continue;
+    if (first.isEmpty) first = url;
+    final q = _str(_pick(sm, ['quality', 'resolution', 'label', 'size'])).toLowerCase();
+    if (q.contains('4k') || q.contains('2160'))      q4k   = url;
+    else if (q.contains('1080'))                      q1080 = url;
+    else if (q.contains('720'))                       q720  = url;
+    else if (q.contains('480'))                       q480  = url;
+    else if (q.contains('360'))                       q360  = url;
+  }
+  final auto = q720.isNotEmpty  ? q720
+             : q480.isNotEmpty  ? q480
+             : q360.isNotEmpty  ? q360
+             : q1080.isNotEmpty ? q1080
+             : first;
+  return {
+    'auto': auto,
+    '720' : q720,
+    '1080': q1080,
+    '360' : q360,
+    '4k'  : q4k,
+  };
+}
+
+/// Scrape the VidBox embed page HTML to extract stream sources.
+Future<VidboxResult> _scrapeVidboxEmbedPage(String embedUrl) async {
+  final resp = await _get(embedUrl, headers: {
+    'Referer'   : '$_vidboxBase/',
+    'Origin'    : _vidboxBase,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+  });
+  if (resp == null || resp.statusCode != 200) return const VidboxResult();
+
+  final html = utf8.decode(resp.bodyBytes);
+
+  // Pattern 1 – window.__NUXT__ / window.app JSON blob
+  final jsonBlobs = RegExp(r'(?:window\.__(?:NUXT|APP|DATA)__|var\s+(?:sources|streams|data)\s*=)\s*(\{.+?\});', dotAll: true)
+      .allMatches(html)
+      .map((m) => m.group(1) ?? '')
+      .where((s) => s.isNotEmpty);
+
+  for (final blob in jsonBlobs) {
+    try {
+      final dynamic parsed = jsonDecode(blob);
+      if (parsed is Map<String, dynamic>) {
+        final result = _parseVidboxApiResponse(jsonEncode(parsed));
+        if (result.url.isNotEmpty || result.servers.isNotEmpty) return result;
+      }
+    } catch (_) {}
+  }
+
+  // Pattern 2 – <script type="application/json"> blocks
+  final scriptJsons = RegExp(r'<script[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>', dotAll: true)
+      .allMatches(html)
+      .map((m) => m.group(1)?.trim() ?? '');
+
+  for (final blob in scriptJsons) {
+    if (blob.isEmpty) continue;
+    try {
+      final dynamic parsed = jsonDecode(blob);
+      if (parsed is Map<String, dynamic>) {
+        final result = _parseVidboxApiResponse(jsonEncode(parsed));
+        if (result.url.isNotEmpty || result.servers.isNotEmpty) return result;
+      }
+    } catch (_) {}
+  }
+
+  // Pattern 3 – look for inline source arrays like:  sources:[{file:"...",label:"720"}]
+  final inlineSourcesMatch = RegExp(r'sources\s*:\s*(\[.+?\])', dotAll: true)
+      .firstMatch(html);
+  if (inlineSourcesMatch != null) {
+    try {
+      final dynamic arr = jsonDecode(inlineSourcesMatch.group(1)!);
+      if (arr is List) {
+        final picked = _pickBestSourceUrls(arr);
+        if (picked['auto']?.isNotEmpty == true) {
+          return VidboxResult(
+            url:     picked['auto']  ?? '',
+            url720:  picked['720']   ?? '',
+            url1080: picked['1080']  ?? '',
+            url360:  picked['360']   ?? '',
+            url4k:   picked['4k']    ?? '',
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Pattern 4 – collect iframe src attributes as server list
+  final iframeSrcs = RegExp(r'<iframe[^>]+src=["\']([^"\']+)["\']', caseSensitive: false)
+      .allMatches(html)
+      .map((m) => m.group(1) ?? '')
+      .where((u) => u.startsWith('http'))
+      .toList();
+
+  if (iframeSrcs.isNotEmpty) {
+    final servers = iframeSrcs
+        .asMap()
+        .entries
+        .map((e) => VidboxServer(name: 'Server ${e.key + 1}', embedUrl: e.value))
+        .toList();
+    return VidboxResult(servers: servers);
+  }
+
+  return const VidboxResult();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  OPENSUBTITLES ARABIC SUBTITLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Fetch the best Arabic subtitle URL for a movie given its IMDb ID.
+/// Returns a .vtt or .srt URL, or empty string on failure.
+Future<String> fetchArabicSubtitle(
+  String imdbId, {
+  int? seasonNumber,
+  int? episodeNumber,
+}) async {
+  if (imdbId.isEmpty) return '';
+
+  // Clean IMDb ID to numeric-only part expected by OS API (e.g. "0213338")
+  final numericId = imdbId.replaceAll(RegExp(r'[^0-9]'), '');
+  if (numericId.isEmpty) return '';
+
+  final params = <String, String>{
+    'imdb_id'  : numericId,
+    'languages': 'ar',
+    'order_by' : 'download_count',
+  };
+  if (seasonNumber  != null) params['season_number']  = '$seasonNumber';
+  if (episodeNumber != null) params['episode_number'] = '$episodeNumber';
+
+  final searchUrl =
+      '$_osBase/subtitles?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
+
+  final resp = await _get(searchUrl, headers: {
+    'Api-Key'   : _osApiKey,
+    'Content-Type': 'application/json',
+    'User-Agent': 'UTanApp v1.0',
+  });
+
+  if (resp == null || resp.statusCode != 200) return '';
+
+  try {
+    final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    final data = json['data'];
+    if (data is! List || data.isEmpty) return '';
+
+    // Pick the first subtitle entry
+    final entry = data.first as Map<String, dynamic>;
+    final attrs  = entry['attributes'] as Map<String, dynamic>?;
+    if (attrs == null) return '';
+
+    final files = attrs['files'] as List<dynamic>?;
+    if (files == null || files.isEmpty) return '';
+
+    final fileId = (files.first as Map<String, dynamic>)['file_id'];
+    if (fileId == null) return '';
+
+    // Download link request
+    return await _openSubtitlesDownloadUrl(fileId.toString());
+  } catch (_) {}
+  return '';
+}
+
+/// Request a direct download URL from the OpenSubtitles /download endpoint.
+Future<String> _openSubtitlesDownloadUrl(String fileId) async {
+  const downloadUrl = '$_osBase/download';
+  try {
+    final body = jsonEncode({'file_id': int.parse(fileId), 'sub_format': 'vtt'});
+    http.Response? resp;
+
+    // Direct attempt
+    try {
+      resp = await http.post(
+        Uri.parse(downloadUrl),
+        headers: {
+          'Api-Key'     : _osApiKey,
+          'Content-Type': 'application/json',
+          'User-Agent'  : 'UTanApp v1.0',
+        },
+        body: body,
+      ).timeout(const Duration(seconds: 15));
+    } catch (_) {}
+
+    // Proxy fallback
+    if (resp == null || resp.statusCode != 200) {
+      try {
+        resp = await http.post(
+          Uri.parse('$_proxyBase${Uri.encodeComponent(downloadUrl)}'),
+          headers: {
+            'Api-Key'     : _osApiKey,
+            'Content-Type': 'application/json',
+            'User-Agent'  : 'UTanApp v1.0',
+          },
+          body: body,
+        ).timeout(const Duration(seconds: 18));
+      } catch (_) {}
+    }
+
+    if (resp != null && resp.statusCode == 200) {
+      final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      final link = json['link'] as String?;
+      if (link != null && link.isNotEmpty) return link;
+    }
+  } catch (_) {}
+  return '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CEE.BUZZ METADATA HELPERS  (unchanged from original)
+// ─────────────────────────────────────────────────────────────────────────────
+
+Future<List<dynamic>> _getCeeFiles(String id) async {
+  try {
+    final r = await _get('${_ceeBase}transcoddedFiles/id/$id');
+    if (r != null && r.statusCode == 200) {
+      final body = jsonDecode(utf8.decode(r.bodyBytes));
+      if (body is List) return body;
+      if (body is Map) {
+        return (body['files'] ?? body['data'] ?? body['streams'] ?? []) as List;
+      }
+    }
+  } catch (_) {}
+  return [];
+}
+
+String _ceeBestUrl(List<dynamic> files, {String prefer = ''}) {
   if (files.isEmpty) return '';
   String q360 = '', q480 = '', q720 = '', q1080 = '', q4k = '', first = '';
   for (final f in files) {
@@ -711,11 +1129,11 @@ String _bestUrl(List<dynamic> files, {String prefer = ''}) {
     if (url.isEmpty) continue;
     if (first.isEmpty) first = url;
     final q = _str(_pick(f, ['quality', 'resolution', 'label'])).toLowerCase();
-    if (q.contains('4k') || q.contains('2160')) q4k = url;
-    else if (q.contains('1080')) q1080 = url;
-    else if (q.contains('720'))  q720  = url;
-    else if (q.contains('480'))  q480  = url;
-    else if (q.contains('360'))  q360  = url;
+    if (q.contains('4k') || q.contains('2160')) q4k   = url;
+    else if (q.contains('1080'))                q1080 = url;
+    else if (q.contains('720'))                 q720  = url;
+    else if (q.contains('480'))                 q480  = url;
+    else if (q.contains('360'))                 q360  = url;
   }
   if (prefer == '1080' && q1080.isNotEmpty) return q1080;
   if (prefer == '720'  && q720.isNotEmpty)  return q720;
@@ -724,38 +1142,9 @@ String _bestUrl(List<dynamic> files, {String prefer = ''}) {
   return q720.isNotEmpty ? q720 : (q480.isNotEmpty ? q480 : (q360.isNotEmpty ? q360 : (q1080.isNotEmpty ? q1080 : first)));
 }
 
-Future<List<dynamic>> _getFiles(String id) async {
-  try {
-    final r = await http.get(Uri.parse('${_ceeBase}transcoddedFiles/id/$id'))
-        .timeout(const Duration(seconds: 15));
-    if (r.statusCode == 200) {
-      final body = jsonDecode(utf8.decode(r.bodyBytes));
-      if (body is List) return body;
-      if (body is Map) return (body['files'] ?? body['data'] ?? body['streams'] ?? []) as List;
-    }
-  } catch (_) {}
-  return [];
-}
-
-Future<String> _getSubtitle(String id) async {
-  try {
-    final r = await http.get(Uri.parse('${_ceeBase}translationFiles/id/$id'))
-        .timeout(const Duration(seconds: 10));
-    if (r.statusCode == 200) {
-      final body = jsonDecode(utf8.decode(r.bodyBytes));
-      List<dynamic> subs = body is List ? body : ((body is Map ? (body['data'] ?? body['files'] ?? []) : []) as List);
-      for (final s in subs) {
-        if (s is! Map) continue;
-        final sm = Map<String, dynamic>.from(s as Map);
-        final url = _str(_pick(sm, ['url', 'file', 'path']));
-        if (url.isNotEmpty) return url;
-      }
-    }
-  } catch (_) {}
-  return '';
-}
-
-// ── MovieScraper ───────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  MOVIE SCRAPER  (home / search / category – metadata from cee.buzz)
+// ─────────────────────────────────────────────────────────────────────────────
 
 class MovieScraper extends ChangeNotifier {
   List<VideoItem> heroItems = [];
@@ -768,26 +1157,27 @@ class MovieScraper extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      // 0. Fetch real category IDs from cee.buzz
       await _fetchDynamicCategories();
 
-      // 1. Banner / hero
-      final bannerResp = await http.get(
-        Uri.parse('${_ceeBase}banner/level/$_ceeLevel'),
-      ).timeout(const Duration(seconds: 15));
-      if (bannerResp.statusCode == 200) {
+      final bannerResp = await _get(
+        '${_ceeBase}banner/level/$_ceeLevel',
+      );
+      if (bannerResp != null && bannerResp.statusCode == 200) {
         final bd = jsonDecode(utf8.decode(bannerResp.bodyBytes));
-        final list = bd is List ? bd : (bd is Map ? (bd['data'] ?? bd['items'] ?? bd['videos'] ?? []) : []);
+        final list = bd is List
+            ? bd
+            : (bd is Map ? (bd['data'] ?? bd['items'] ?? bd['videos'] ?? []) : []);
         heroItems = _toItems(list);
       }
 
-      // 2. Video groups (sections)
-      final groupResp = await http.get(
-        Uri.parse('${_ceeBase}videoGroups/lang/ar/level/$_ceeLevel'),
-      ).timeout(const Duration(seconds: 15));
-      if (groupResp.statusCode == 200) {
+      final groupResp = await _get(
+        '${_ceeBase}videoGroups/lang/ar/level/$_ceeLevel',
+      );
+      if (groupResp != null && groupResp.statusCode == 200) {
         final gd = jsonDecode(utf8.decode(groupResp.bodyBytes));
-        final groups = gd is List ? gd : (gd is Map ? (gd['data'] ?? gd['groups'] ?? []) : []) as List;
+        final groups = gd is List
+            ? gd
+            : (gd is Map ? (gd['data'] ?? gd['groups'] ?? []) : []) as List;
         final secs = <({String name, List<VideoItem> items, int tagId})>[];
         for (final g in groups) {
           if (g is! Map<String, dynamic>) continue;
@@ -806,14 +1196,14 @@ class MovieScraper extends ChangeNotifier {
         allItemsPool = secs.expand((s) => s.items).toList();
       }
 
-      // 3. Fallback hero
       if (heroItems.isEmpty) {
-        final lr = await http.get(
-          Uri.parse('${_ceeBase}latestMovies/level/$_ceeLevel/itemsPerPage/8/page/1/'),
-        ).timeout(const Duration(seconds: 15));
-        if (lr.statusCode == 200) {
+        final lr = await _get(
+          '${_ceeBase}latestMovies/level/$_ceeLevel/itemsPerPage/8/page/1/',
+        );
+        if (lr != null && lr.statusCode == 200) {
           final ld = jsonDecode(utf8.decode(lr.bodyBytes));
-          heroItems = _toItems(ld is List ? ld : (ld is Map ? (ld['data'] ?? ld['items'] ?? []) : []));
+          heroItems = _toItems(
+              ld is List ? ld : (ld is Map ? (ld['data'] ?? ld['items'] ?? []) : []));
         }
       }
     } catch (_) {}
@@ -825,25 +1215,26 @@ class MovieScraper extends ChangeNotifier {
 
   Future<void> _fetchDynamicCategories() async {
     try {
-      final r = await http.get(
-        Uri.parse('${_ceeBase}mainCategories?lang=ar'),
-      ).timeout(const Duration(seconds: 12));
-      if (r.statusCode == 200) {
+      final r = await _get('${_ceeBase}mainCategories?lang=ar');
+      if (r != null && r.statusCode == 200) {
         final raw = jsonDecode(utf8.decode(r.bodyBytes));
-        final list = raw is List ? raw
-            : (raw is Map ? (raw['data'] ?? raw['categories'] ?? raw['items'] ?? []) : []) as List;
+        final list = raw is List
+            ? raw
+            : (raw is Map
+                ? (raw['data'] ?? raw['categories'] ?? raw['items'] ?? [])
+                : []) as List;
         dynamicCategories = list
-          .whereType<Map>()
-          .map((m) {
-            final mm = Map<String, dynamic>.from(m);
-            return (
-              id: int.tryParse(_str(_pick(mm, ['id', 'categoryId', 'category_id']))) ?? 0,
-              nameAr: _str(_pick(mm, ['nameAr', 'name', 'titleAr', 'title', 'nameArabe'])),
-              nameEn: _str(_pick(mm, ['nameEn', 'nameEnglish', 'titleEn'])),
-            );
-          })
-          .where((c) => c.id > 0 && c.nameAr.isNotEmpty)
-          .toList();
+            .whereType<Map>()
+            .map((m) {
+              final mm = Map<String, dynamic>.from(m);
+              return (
+                id: int.tryParse(_str(_pick(mm, ['id', 'categoryId', 'category_id']))) ?? 0,
+                nameAr: _str(_pick(mm, ['nameAr', 'name', 'titleAr', 'title', 'nameArabe'])),
+                nameEn: _str(_pick(mm, ['nameEn', 'nameEnglish', 'titleEn'])),
+              );
+            })
+            .where((c) => c.id > 0 && c.nameAr.isNotEmpty)
+            .toList();
         notifyListeners();
       }
     } catch (_) {}
@@ -869,11 +1260,14 @@ class MovieScraper extends ChangeNotifier {
           '&orderby=$sort&videoKind=0&offset=${(page - 1) * 30}&level=$_ceeLevel',
         );
       }
-      final r = await http.get(uri).timeout(const Duration(seconds: 20));
-      if (r.statusCode == 200) {
+      final r = await _get(uri.toString());
+      if (r != null && r.statusCode == 200) {
         final body = jsonDecode(utf8.decode(r.bodyBytes));
-        final items = body is List ? body
-            : (body is Map ? (body['data'] ?? body['items'] ?? body['videos'] ?? []) : []);
+        final items = body is List
+            ? body
+            : (body is Map
+                ? (body['data'] ?? body['items'] ?? body['videos'] ?? [])
+                : []);
         return _toItems(items);
       }
     } catch (_) {}
@@ -899,32 +1293,39 @@ class MovieScraper extends ChangeNotifier {
     if (query.trim().isEmpty) return [];
     try {
       final encoded = Uri.encodeComponent(query.trim());
-      final r = await http.get(Uri.parse(
+      final r = await _get(
         '${_ceeBase}video/V/2/itemsPerPage/20/video_title_search/$encoded'
         '/itemsPerPage/12/pageNumber/0/level/$_ceeLevel',
-      )).timeout(const Duration(seconds: 20));
-      if (r.statusCode == 200) {
+      );
+      if (r != null && r.statusCode == 200) {
         final body = jsonDecode(utf8.decode(r.bodyBytes));
-        final items = body is List ? body
-            : (body is Map ? (body['data'] ?? body['items'] ?? body['videos'] ?? body['results'] ?? []) : []);
+        final items = body is List
+            ? body
+            : (body is Map
+                ? (body['data'] ?? body['items'] ?? body['videos'] ??
+                    body['results'] ?? [])
+                : []);
         return _toItems(items);
       }
     } catch (_) {}
     return [];
   }
 
+  // ── Full detail fetch: metadata from cee.buzz + streams from VidBox ──────
+
   Future<MediaDetails> fetchDetails(String id) async {
     final d = MediaDetails();
     try {
-      final infoResp = await http.get(
-        Uri.parse('${_ceeBase}allVideoInfo/id/$id'),
-      ).timeout(const Duration(seconds: 20));
-      if (infoResp.statusCode != 200) return d;
+      // ── 1. Metadata from cee.buzz ────────────────────────────────────────
+      final infoResp = await _get('${_ceeBase}allVideoInfo/id/$id');
+      if (infoResp == null || infoResp.statusCode != 200) return d;
 
       final info = jsonDecode(utf8.decode(infoResp.bodyBytes));
       final Map<String, dynamic> m = info is Map<String, dynamic>
           ? info
-          : (info is List && info.isNotEmpty ? info.first as Map<String, dynamic> : {});
+          : (info is List && info.isNotEmpty
+              ? info.first as Map<String, dynamic>
+              : {});
 
       d.title    = _str(_pick(m, ['title', 'titleAr', 'videoTitle', 'name']));
       d.synopsis = _str(_pick(m, ['description', 'synopsis', 'overview', 'plot', 'story']));
@@ -938,37 +1339,64 @@ class MovieScraper extends ChangeNotifier {
       final genreRaw = _pick(m, ['genres', 'categories', 'genre', 'tags']);
       if (genreRaw is List) {
         d.genre = genreRaw.map((g) {
-          if (g is Map) return _str(_pick(g as Map<String, dynamic>, ['name', 'nameAr', 'title']));
+          if (g is Map) {
+            return _str(_pick(g as Map<String, dynamic>, ['name', 'nameAr', 'title']));
+          }
           return g.toString();
         }).where((s) => s.isNotEmpty).join(' | ');
       } else {
         d.genre = _str(genreRaw);
       }
 
-      final kind = _str(_pick(m, ['kind', 'videoKind', 'type']));
+      // Extract IMDb ID for subtitle lookup
+      final imdbId = _str(_pick(m, ['imdb', 'imdbId', 'imdb_id', 'imdbCode', 'tt']));
+      // Extract TMDB ID (VidBox uses TMDB IDs)
+      final tmdbId = _str(_pick(m, ['tmdbId', 'tmdb_id', 'tmdb', 'externalId']));
+      // VidBox ID: prefer tmdbId, fall back to cee id
+      final vidboxId = tmdbId.isNotEmpty ? tmdbId : id;
+
+      final kind     = _str(_pick(m, ['kind', 'videoKind', 'type']));
       final isSeries = kind == '2' || kind == 'series';
 
       if (!isSeries) {
-        // ── Movie ──────────────────────────────────────────────────────
+        // ── Movie ────────────────────────────────────────────────────────
         d.isMovie = true;
-        final files = await _getFiles(id);
-        d.movieUrl     = _bestUrl(files);
-        d.movieUrl720  = _bestUrl(files, prefer: '720');
-        d.movieUrl1080 = _bestUrl(files, prefer: '1080');
-        d.movieUrl360  = _bestUrl(files, prefer: '360');
-        d.movieUrl4k   = _bestUrl(files, prefer: '4k');
-        d.movieSubtitleVttUrl = await _getSubtitle(id);
-      } else {
-        // ── Series ─────────────────────────────────────────────────────
-        d.isMovie = false;
-        final seasResp = await http.get(
-          Uri.parse('${_ceeBase}videoSeason/id/$id'),
-        ).timeout(const Duration(seconds: 15));
 
+        // Fetch streams from VidBox (with proxy fallback built-in)
+        final vidboxResult = await fetchVidboxMovie(vidboxId);
+
+        if (vidboxResult.url.isNotEmpty) {
+          d.movieUrl     = vidboxResult.url;
+          d.movieUrl720  = vidboxResult.url720;
+          d.movieUrl1080 = vidboxResult.url1080;
+          d.movieUrl360  = vidboxResult.url360;
+          d.movieUrl4k   = vidboxResult.url4k;
+        } else {
+          // Fallback to cee.buzz direct files if VidBox returns nothing
+          final files = await _getCeeFiles(id);
+          d.movieUrl     = _ceeBestUrl(files);
+          d.movieUrl720  = _ceeBestUrl(files, prefer: '720');
+          d.movieUrl1080 = _ceeBestUrl(files, prefer: '1080');
+          d.movieUrl360  = _ceeBestUrl(files, prefer: '360');
+          d.movieUrl4k   = _ceeBestUrl(files, prefer: '4k');
+        }
+
+        // ── Arabic subtitle via OpenSubtitles ───────────────────────────
+        if (imdbId.isNotEmpty) {
+          d.movieSubtitleVttUrl = await fetchArabicSubtitle(imdbId);
+        }
+
+      } else {
+        // ── Series ──────────────────────────────────────────────────────
+        d.isMovie = false;
+
+        final seasResp = await _get('${_ceeBase}videoSeason/id/$id');
         List<dynamic> seasons = [];
-        if (seasResp.statusCode == 200) {
+        if (seasResp != null && seasResp.statusCode == 200) {
           final sd = jsonDecode(utf8.decode(seasResp.bodyBytes));
-          seasons = sd is List ? sd : (sd is Map ? (sd['data'] ?? sd['seasons'] ?? []) : []) as List;
+          seasons = sd is List
+              ? sd
+              : (sd is Map ? (sd['data'] ?? sd['seasons'] ?? []) : []) as List;
         }
 
         String _seasonLabel(dynamic s) {
@@ -976,48 +1404,94 @@ class MovieScraper extends ChangeNotifier {
           return _str(_pick(s, ['name', 'title', 'seasonName', 'nameAr']));
         }
 
+        // Parse season numbers for VidBox requests
+        int _parseSeason(dynamic s) {
+          if (s is! Map<String, dynamic>) return 1;
+          final num = _str(_pick(s, ['seasonNumber', 'number', 'num', 'season']));
+          return int.tryParse(num) ?? 1;
+        }
+
         final limitedSeasons = seasons.take(6).toList();
         final seasonEpFutures = limitedSeasons.map((season) async {
           if (season is! Map<String, dynamic>) return <EpisodeItem>[];
           final sid    = _str(_pick(season, ['id', 'seasonId', 'season_id']));
           if (sid.isEmpty) return <EpisodeItem>[];
-          final sLabel = _seasonLabel(season);
+          final sLabel  = _seasonLabel(season);
+          final sNumber = _parseSeason(season);
+
           try {
-            final epResp = await http.get(
-              Uri.parse('${_ceeBase}videoSeasonNumber/id/$sid'),
-            ).timeout(const Duration(seconds: 15));
-            if (epResp.statusCode != 200) return <EpisodeItem>[];
+            final epResp = await _get('${_ceeBase}videoSeasonNumber/id/$sid');
+            if (epResp == null || epResp.statusCode != 200) return <EpisodeItem>[];
             final ed = jsonDecode(utf8.decode(epResp.bodyBytes));
-            final epList = ed is List ? ed : (ed is Map ? (ed['data'] ?? ed['episodes'] ?? []) : []);
+            final epList = ed is List
+                ? ed
+                : (ed is Map ? (ed['data'] ?? ed['episodes'] ?? []) : []);
 
             final limitedEps = (epList as List).take(24).toList();
-            final epFutures = limitedEps.map((ep) async {
+            final epFutures = limitedEps.asMap().entries.map((entry) async {
+              final epIndex = entry.key;
+              final ep      = entry.value;
               if (ep is! Map<String, dynamic>) return null;
+
               final epId  = _str(_pick(ep, ['id', 'episodeId', 'episode_id']));
               if (epId.isEmpty) return null;
-              final epNum = _str(_pick(ep, ['episodeNumber', 'episode', 'number', 'ep']));
-              var epTitle = _str(_pick(ep, ['title', 'titleAr', 'name', 'episodeTitle']));
-              if (epTitle.isEmpty) epTitle = '$sLabel الحلقة $epNum';
+              final epNumStr = _str(_pick(ep, ['episodeNumber', 'episode', 'number', 'ep']));
+              final epNumber = int.tryParse(epNumStr) ?? (epIndex + 1);
+              var   epTitle  = _str(_pick(ep, ['title', 'titleAr', 'name', 'episodeTitle']));
+              if (epTitle.isEmpty) epTitle = '$sLabel الحلقة $epNumber';
               final epPoster = _pick(ep, ['poster', 'thumbnail', 'image', 'cover']);
-              final embedded = _pick(ep, ['transcoddedFiles', 'files', 'streams', 'qualities']);
-              List<dynamic> files = [];
-              if (embedded is List && embedded.isNotEmpty) {
-                files = embedded;
-              } else {
-                files = await _getFiles(epId);
+
+              // ── Stream URLs from VidBox ──────────────────────────────
+              VidboxResult vidResult = await fetchVidboxEpisode(
+                vidboxId, sNumber, epNumber,
+              );
+
+              String epUrl     = vidResult.url;
+              String epUrl720  = vidResult.url720;
+              String epUrl1080 = vidResult.url1080;
+              String epUrl360  = vidResult.url360;
+              String epUrl4k   = vidResult.url4k;
+
+              // Fallback to cee.buzz episode files
+              if (epUrl.isEmpty) {
+                final embedded = _pick(ep, ['transcoddedFiles', 'files', 'streams', 'qualities']);
+                List<dynamic> files = [];
+                if (embedded is List && embedded.isNotEmpty) {
+                  files = embedded;
+                } else {
+                  files = await _getCeeFiles(epId);
+                }
+                epUrl     = _ceeBestUrl(files);
+                epUrl720  = _ceeBestUrl(files, prefer: '720');
+                epUrl1080 = _ceeBestUrl(files, prefer: '1080');
+                epUrl360  = _ceeBestUrl(files, prefer: '360');
+                epUrl4k   = _ceeBestUrl(files, prefer: '4k');
               }
-              final subUrl = await _getSubtitle(epId);
+
+              // ── Arabic subtitle via OpenSubtitles ────────────────────
+              String subUrl = '';
+              if (imdbId.isNotEmpty) {
+                subUrl = await fetchArabicSubtitle(
+                  imdbId,
+                  seasonNumber:  sNumber,
+                  episodeNumber: epNumber,
+                );
+              }
+
               return EpisodeItem(
-                id: epId, title: epTitle, season: sLabel,
-                url:     _bestUrl(files),
-                url720:  _bestUrl(files, prefer: '720'),
-                url1080: _bestUrl(files, prefer: '1080'),
-                url360:  _bestUrl(files, prefer: '360'),
-                url4k:   _bestUrl(files, prefer: '4k'),
+                id:     epId,
+                title:  epTitle,
+                season: sLabel,
+                url:     epUrl,
+                url720:  epUrl720,
+                url1080: epUrl1080,
+                url360:  epUrl360,
+                url4k:   epUrl4k,
                 subtitleVttUrl: subUrl,
                 imageUrl: _img(epPoster),
               );
             });
+
             final results = await Future.wait(epFutures);
             return results.whereType<EpisodeItem>().toList();
           } catch (_) {
@@ -1026,7 +1500,9 @@ class MovieScraper extends ChangeNotifier {
         });
 
         final allSeasonEps = await Future.wait(seasonEpFutures);
-        for (final eps in allSeasonEps) { d.episodes.addAll(eps); }
+        for (final eps in allSeasonEps) {
+          d.episodes.addAll(eps);
+        }
       }
     } catch (_) {}
     return d;
@@ -1035,6 +1511,7 @@ class MovieScraper extends ChangeNotifier {
 """)
 
 print("✅ scraper.dart written")
+
 
 # ─── lib/services/subtitle_parser.dart ─────────────────────────────────────
 w("lib/services/subtitle_parser.dart", r"""import 'dart:async';
@@ -2568,7 +3045,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String fix(String u) {
       if (u.isEmpty) return '';
       if (u.startsWith('http')) return u;
-      return u; // URLs must be absolute from cee.buzz
+      return u; // URLs are absolute (VidBox / cee.buzz fallback)
     }
     switch (q) {
       case VideoQuality.q360: return fix(widget.videoUrl360.isNotEmpty ? widget.videoUrl360 : widget.videoUrl);
@@ -4029,38 +4506,91 @@ class _DetailsScreenState extends State<DetailsScreen> {
       if (d.sortedSeasons.isNotEmpty) _selectedSeason = d.sortedSeasons.first; });
   }
 
+  // ── Open server-picker bottom sheet before playing a movie ─────────────
   void _playMovie(MediaDetails d) {
-    String fix(String u) {
-      if (u.isEmpty) return '';
-      if (u.startsWith('http')) return u;
-      return u; // URLs must be absolute from cee.buzz
+    // If a direct stream URL is available, go straight to the player.
+    // Otherwise show a server-selection sheet (VidBox multi-server support).
+    if (d.movieUrl.isNotEmpty) {
+      _launchPlayer(
+        videoUrl:     d.movieUrl,
+        videoUrl720:  d.movieUrl720,
+        videoUrl1080: d.movieUrl1080,
+        videoUrl360:  d.movieUrl360,
+        videoUrl4k:   d.movieUrl4k,
+        // Prefer the VTT subtitle fetched from OpenSubtitles
+        subtitleVttUrl: d.movieSubtitleVttUrl.isNotEmpty
+            ? d.movieSubtitleVttUrl
+            : d.movieSubtitleUrl,
+        episodeId:    widget.itemId,
+        episodeTitle: d.title,
+        isMovie:      true,
+        imageUrl:     d.imageUrl,
+        title:        d.title,
+      );
+    } else {
+      // No direct URL – show an error or open VidBox in WebView fallback
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد رابط مباشر متاح حالياً')),
+      );
     }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
-      itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
-      isMovie: true,
-      videoUrl: fix(d.movieUrl), videoUrl720: fix(d.movieUrl720),
-      videoUrl1080: fix(d.movieUrl1080), videoUrl360: fix(d.movieUrl360),
-      videoUrl4k: fix(d.movieUrl4k),
-      subtitleUrl: d.movieSubtitleUrl, subtitleVttUrl: d.movieSubtitleVttUrl,
-      episodeId: widget.itemId, episodeTitle: d.title,
-    )));
   }
 
   void _playEpisode(MediaDetails d, EpisodeItem ep) {
-    String fix(String u) {
-      if (u.isEmpty) return '';
-      if (u.startsWith('http')) return u;
-      return u; // URLs must be absolute from cee.buzz
+    if (ep.url.isNotEmpty) {
+      _launchPlayer(
+        videoUrl:     ep.url,
+        videoUrl720:  ep.url720,
+        videoUrl1080: ep.url1080,
+        videoUrl360:  ep.url360,
+        videoUrl4k:   ep.url4k,
+        // Prefer VTT from OpenSubtitles (stored in subtitleVttUrl by scraper)
+        subtitleVttUrl: ep.subtitleVttUrl.isNotEmpty
+            ? ep.subtitleVttUrl
+            : ep.subtitleUrl,
+        episodeId:    ep.id,
+        episodeTitle: ep.title,
+        isMovie:      false,
+        imageUrl:     d.imageUrl,
+        title:        d.title,
+        episodes:     d.episodes,
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد رابط مباشر لهذه الحلقة')),
+      );
     }
+  }
+
+  void _launchPlayer({
+    required String videoUrl,
+    required String videoUrl720,
+    required String videoUrl1080,
+    required String videoUrl360,
+    required String videoUrl4k,
+    required String subtitleVttUrl,
+    required String episodeId,
+    required String episodeTitle,
+    required bool   isMovie,
+    required String imageUrl,
+    required String title,
+    List<EpisodeItem> episodes = const [],
+  }) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
-      itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
-      isMovie: false,
-      videoUrl: fix(ep.url), videoUrl720: fix(ep.url720),
-      videoUrl1080: fix(ep.url1080), videoUrl360: fix(ep.url360),
-      videoUrl4k: fix(ep.url4k),
-      subtitleUrl: ep.subtitleUrl, subtitleVttUrl: ep.subtitleVttUrl,
-      episodeId: ep.id, episodeTitle: ep.title,
-      episodes: d.episodes,
+      itemId:       widget.itemId,
+      itemTitle:    title,
+      itemImageUrl: imageUrl,
+      isMovie:      isMovie,
+      videoUrl:     videoUrl,
+      videoUrl720:  videoUrl720,
+      videoUrl1080: videoUrl1080,
+      videoUrl360:  videoUrl360,
+      videoUrl4k:   videoUrl4k,
+      // Inject Arabic subtitle track directly into the player
+      subtitleUrl:    subtitleVttUrl,
+      subtitleVttUrl: subtitleVttUrl,
+      episodeId:    episodeId,
+      episodeTitle: episodeTitle,
+      episodes:     episodes,
     )));
   }
 
