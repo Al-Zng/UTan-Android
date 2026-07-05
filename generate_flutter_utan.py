@@ -10,7 +10,6 @@ DIRS = [
     f"{BASE}/lib/player",
     f"{BASE}/assets/fonts",
     f"{BASE}/assets/images",
-    ".github/workflows",
 ]
 for d in DIRS:
     os.makedirs(d, exist_ok=True)
@@ -23,102 +22,6 @@ def w(rel_path, content):
 
 print("✅ Directories created")
 
-# ─── .github/workflows/main.yml ─────────────────────────────────────────────
-w(".github/workflows/main.yml", """name: Build UTan Flutter APK
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-jobs:
-  build-android:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: UTan_Flutter
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.0'
-          channel: stable
-      - run: flutter pub get
-      - run: flutter build apk --release --no-shrink
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: UTan_Flutter/build/app/outputs/flutter-apk/app-release.apk
-""")
-
-# ─── pubspec.yaml ───────────────────────────────────────────────────────────
-w("pubspec.yaml", """name: utan_flutter
-description: UTan Video Streaming App – Arabic/English
-publish_to: 'none'
-version: 5.0.0+5
-
-environment:
-  sdk: '>=3.2.0 <4.0.0'
-  flutter: '>=3.22.0'
-
-dependencies:
-  flutter:
-    sdk: flutter
-  provider: ^6.1.2
-  http: ^1.2.1
-  cached_network_image: ^3.3.1
-  shared_preferences: ^2.3.0
-  video_player: ^2.8.6
-  chewie: ^1.8.1
-  intl: ^0.19.0
-  wakelock_plus: ^1.2.8
-  url_launcher: ^6.3.0
-  path_provider: ^2.1.3
-  flutter_cache_manager: ^3.4.1
-  supabase_flutter: ^2.5.3
-  google_sign_in: ^6.2.1
-  rxdart: ^0.28.0
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^4.0.0
-
-flutter:
-  uses-material-design: true
-
-  assets:
-    - assets/images/
-
-  fonts:
-    - family: Cairo
-      fonts:
-        - asset: assets/fonts/Cairo.ttf
-          weight: 400
-        - asset: assets/fonts/Cairo-Bold-1.ttf
-          weight: 700
-    - family: Rubik
-      fonts:
-        - asset: assets/fonts/Rubik.ttf
-          weight: 400
-        - asset: assets/fonts/Rubik-Bold.ttf
-          weight: 700
-    - family: IBMPlexArabic
-      fonts:
-        - asset: assets/fonts/Ibm.ttf
-          weight: 400
-        - asset: assets/fonts/IBMPlexArabic-Bold.ttf
-          weight: 700
-    - family: ExpoArabic
-      fonts:
-        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.ttf
-          weight: 700
-""")
-
-print("✅ pubspec.yaml + workflow written")
 
 # ─── lib/app_colors.dart ────────────────────────────────────────────────────
 w("lib/app_colors.dart", r"""import 'package:flutter/material.dart';
