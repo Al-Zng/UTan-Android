@@ -44,7 +44,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'   # Dart 3.4 – satisfies >=3.2.0 <4.0.0
+          flutter-version: '3.22.0'
           channel: 'stable'
 
       - name: Create base Flutter project
@@ -53,50 +53,72 @@ jobs:
       - name: Copy generated code + assets
         run: |
           rm -rf build_project/lib/*
-          cp -r UTan_Flutter/lib/*    build_project/lib/
-          cp    UTan_Flutter/pubspec.yaml build_project/pubspec.yaml
+          cp -r UTan_Flutter/lib/*         build_project/lib/
+          cp    UTan_Flutter/pubspec.yaml  build_project/pubspec.yaml
           mkdir -p build_project/assets
-          cp -r UTan_Flutter/assets/* build_project/assets/
+          cp -r UTan_Flutter/assets/*      build_project/assets/
 
+      # ── Patch build.gradle: line-by-line, no cross-line regex ──────────
       - name: Patch android/app/build.gradle
         run: |
           python3 - << 'PYEOF'
-          import re, pathlib
+          import pathlib
+
           p = pathlib.Path('build_project/android/app/build.gradle')
-          t = p.read_text()
-          t = re.sub(r'minSdkVersion\s+\S+',     'minSdkVersion 21',  t)
-          t = re.sub(r'compileSdkVersion\s+\S+',  'compileSdkVersion 34', t)
-          t = re.sub(r'targetSdkVersion\s+\S+',   'targetSdkVersion 34',  t)
-          p.write_text(t)
-          print("build.gradle patched OK")
+          lines = p.read_text().splitlines(keepends=True)
+          out = []
+          for line in lines:
+              stripped = line.strip()
+              # minSdk – must be 21+ for video_player
+              if stripped.startswith('minSdk') and ('flutter.minSdkVersion' in line or 'minSdkVersion' in line):
+                  indent = line[: len(line) - len(line.lstrip())]
+                  out.append(f'{indent}minSdk 21\n')
+              # compileSdk
+              elif stripped.startswith('compileSdk') and 'flutter.compileSdkVersion' in line and 'ndk' not in line.lower():
+                  indent = line[: len(line) - len(line.lstrip())]
+                  out.append(f'{indent}compileSdk 34\n')
+              # targetSdk
+              elif stripped.startswith('targetSdk') and 'flutter.targetSdkVersion' in line:
+                  indent = line[: len(line) - len(line.lstrip())]
+                  out.append(f'{indent}targetSdk 34\n')
+              else:
+                  out.append(line)
+          p.write_text(''.join(out))
+          print('build.gradle patched:')
+          for l in out:
+              if any(k in l for k in ('minSdk', 'compileSdk', 'targetSdk')):
+                  print(' ', l.rstrip())
           PYEOF
 
+      # ── Widen Dart SDK constraint so pub get never fails ───────────────
       - name: Patch pubspec SDK constraint
         run: |
           python3 - << 'PYEOF'
-          import pathlib
+          import pathlib, re
           p = pathlib.Path('build_project/pubspec.yaml')
           t = p.read_text()
-          # Widen the Dart SDK floor so it works on Flutter 3.16+ too
-          t = t.replace("sdk: '>=3.3.0 <4.0.0'", "sdk: '>=3.2.0 <4.0.0'")
-          t = t.replace('sdk: ">=3.3.0 <4.0.0"', "sdk: '>=3.2.0 <4.0.0'")
+          # Replace any >=3.x.y floor with >=3.2.0 so it works on Dart 3.2+
+          t = re.sub(r"sdk:\s*['\"]>=3\.\d+\.\d+ <4\.0\.0['\"]",
+                     "sdk: '>=3.2.0 <4.0.0'", t)
           p.write_text(t)
-          print("pubspec SDK constraint patched OK")
+          print('pubspec SDK constraint:',
+                [l for l in t.splitlines() if 'sdk' in l.lower()])
           PYEOF
 
-      - name: Add internet permission to AndroidManifest
+      # ── Ensure INTERNET permission is present ──────────────────────────
+      - name: Patch AndroidManifest – INTERNET permission
         run: |
           python3 - << 'PYEOF'
-          import pathlib, re
+          import pathlib
           p = pathlib.Path('build_project/android/app/src/main/AndroidManifest.xml')
           t = p.read_text()
           perm = '<uses-permission android:name="android.permission.INTERNET"/>'
           if perm not in t:
               t = t.replace('<application', f'{perm}\n    <application', 1)
               p.write_text(t)
-              print("INTERNET permission added")
+              print('INTERNET permission injected')
           else:
-              print("INTERNET permission already present")
+              print('INTERNET permission already present')
           PYEOF
 
       - name: flutter pub get
