@@ -10,76 +10,105 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # ===== التعديل الأول: تمكين Git LFS =====
       - uses: actions/checkout@v4
         with:
           lfs: true
           fetch-depth: 0
-      
+
       - name: Set up Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
-      
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Generate Flutter project
         run: python generate_flutter_utan.py
 
-      - name: Debug - List generated files
+      - name: Debug – list generated files
         run: |
-          echo "Checking for UTan_Flutter directory:"
+          echo "=== Root ==="
           ls -la
           if [ -d "UTan_Flutter" ]; then
-            echo "Contents of UTan_Flutter:"
-            find UTan_Flutter -type f
+            echo "=== UTan_Flutter/lib ==="
+            find UTan_Flutter/lib -type f | sort
           else
-            echo "UTan_Flutter directory not found!"
+            echo "UTan_Flutter directory NOT found!"
+            exit 1
           fi
-      
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0'
+          flutter-version: '3.22.0'   # Dart 3.4 – satisfies >=3.2.0 <4.0.0
           channel: 'stable'
-      
-      - name: Create fresh Flutter project
-        run: flutter create --project-name utan_app build_project
-      
-      # ===== التعديل الثاني: نسخ مجلد assets أيضاً =====
-      - name: Copy generated code
+
+      - name: Create base Flutter project
+        run: flutter create --project-name utan_flutter build_project
+
+      - name: Copy generated code + assets
         run: |
           rm -rf build_project/lib/*
-          cp -r UTan_Flutter/lib/* build_project/lib/
-          cp UTan_Flutter/pubspec.yaml build_project/
-          cp -r UTan_Flutter/assets build_project/
-      
-      - name: Fix Android build configuration
+          cp -r UTan_Flutter/lib/*    build_project/lib/
+          cp    UTan_Flutter/pubspec.yaml build_project/pubspec.yaml
+          mkdir -p build_project/assets
+          cp -r UTan_Flutter/assets/* build_project/assets/
+
+      - name: Patch android/app/build.gradle
         run: |
-          cat > fix_gradle.py << 'EOF'
-          import re
-          gradle_file = 'build_project/android/app/build.gradle'
-          with open(gradle_file, 'r') as f:
-              content = f.read()
-          content = re.sub(r'minSdkVersion\s+.*', 'minSdkVersion 21', content)
-          content = re.sub(r'compileSdkVersion\s+.*', 'compileSdkVersion 34', content)
-          content = re.sub(r'targetSdkVersion\s+.*', 'targetSdkVersion 34', content)
-          with open(gradle_file, 'w') as f:
-              f.write(content)
-          EOF
-          python fix_gradle.py
-      
-      - name: Build APK (fat APK)
+          python3 - << 'PYEOF'
+          import re, pathlib
+          p = pathlib.Path('build_project/android/app/build.gradle')
+          t = p.read_text()
+          t = re.sub(r'minSdkVersion\s+\S+',     'minSdkVersion 21',  t)
+          t = re.sub(r'compileSdkVersion\s+\S+',  'compileSdkVersion 34', t)
+          t = re.sub(r'targetSdkVersion\s+\S+',   'targetSdkVersion 34',  t)
+          p.write_text(t)
+          print("build.gradle patched OK")
+          PYEOF
+
+      - name: Patch pubspec SDK constraint
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib
+          p = pathlib.Path('build_project/pubspec.yaml')
+          t = p.read_text()
+          # Widen the Dart SDK floor so it works on Flutter 3.16+ too
+          t = t.replace("sdk: '>=3.3.0 <4.0.0'", "sdk: '>=3.2.0 <4.0.0'")
+          t = t.replace('sdk: ">=3.3.0 <4.0.0"', "sdk: '>=3.2.0 <4.0.0'")
+          p.write_text(t)
+          print("pubspec SDK constraint patched OK")
+          PYEOF
+
+      - name: Add internet permission to AndroidManifest
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, re
+          p = pathlib.Path('build_project/android/app/src/main/AndroidManifest.xml')
+          t = p.read_text()
+          perm = '<uses-permission android:name="android.permission.INTERNET"/>'
+          if perm not in t:
+              t = t.replace('<application', f'{perm}\n    <application', 1)
+              p.write_text(t)
+              print("INTERNET permission added")
+          else:
+              print("INTERNET permission already present")
+          PYEOF
+
+      - name: flutter pub get
         working-directory: ./build_project
-        run: |
-          flutter pub get
-          flutter build apk --release
-      
-      - uses: actions/upload-artifact@v4
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: ./build_project
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: build_project/build/app/outputs/flutter-apk/app-release.apk
