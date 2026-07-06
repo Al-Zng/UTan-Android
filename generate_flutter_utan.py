@@ -428,6 +428,11 @@ w("lib/models/watch_progress.dart", r"""class WatchProgress {
   final String subtitleVttUrl;
   final bool isMovie;
 
+  double get percent {
+    if (durationSeconds <= 0) return 0;
+    return (progressSeconds / durationSeconds * 100).clamp(0, 100);
+  }
+
   const WatchProgress({
     required this.itemId,
     required this.title,
@@ -1613,6 +1618,9 @@ class WatchProgressStore extends ChangeNotifier {
     return matches.firstOrNull;
   }
 
+    List<WatchProgress> get all => _all.values.toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
   List<WatchProgress> get recent {
     final latest = <String, WatchProgress>{};
     for (final p in _all.values) {
@@ -2797,42 +2805,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!settings.subtitlesEnabled && _activeSub.isEmpty && _activeTopSub.isEmpty) {
       return const SizedBox.shrink();
     }
-    return IgnorePointer(
+    return Consumer<AppSettings>(builder: (_, s, __) => IgnorePointer(
       child: Stack(children: [
         if (_activeTopSub.isNotEmpty)
           Positioned(
             top: 54, left: 20, right: 20,
-            child: Center(child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(settings.subtitleBgOpacity),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(_activeTopSub,
-                style: subtitleFontStyle(settings.subtitleFontName, settings.subtitleFontSize,
-                  color: colorFromHex(settings.subtitleColorHex)),
-                textAlign: TextAlign.center,
-              ),
+            child: Center(child: _SubText(
+              text: _activeTopSub,
+              fontName: s.subtitleFontName,
+              fontSize: s.subtitleFontSize,
+              color: colorFromHex(s.subtitleColorHex),
+              bgOpacity: s.subtitleBgOpacity,
             )),
           ),
         if (_activeSub.isNotEmpty)
           Positioned(
-            bottom: settings.subtitleBottomPad, left: 20, right: 20,
-            child: Center(child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(settings.subtitleBgOpacity),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(_activeSub,
-                style: subtitleFontStyle(settings.subtitleFontName, settings.subtitleFontSize,
-                  color: colorFromHex(settings.subtitleColorHex)),
-                textAlign: TextAlign.center,
-              ),
+            bottom: s.subtitleBottomPad, left: 20, right: 20,
+            child: Center(child: _SubText(
+              text: _activeSub,
+              fontName: s.subtitleFontName,
+              fontSize: s.subtitleFontSize,
+              color: colorFromHex(s.subtitleColorHex),
+              bgOpacity: s.subtitleBgOpacity,
             )),
           ),
       ]),
-    );
+    ));
   }
 
   Widget _buildControls() {
@@ -3402,13 +3400,56 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {}
   }
 }
+
+
+class _SubText extends StatelessWidget {
+  final String text;
+  final String fontName;
+  final double fontSize;
+  final Color color;
+  final double bgOpacity;
+  const _SubText({required this.text, required this.fontName,
+    required this.fontSize, required this.color, required this.bgOpacity});
+
+  @override Widget build(BuildContext context) {
+    final base = subtitleFontStyle(fontName, fontSize, color: color);
+    final stroke = base.copyWith(
+      foreground: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = Colors.black,
+      color: null,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(bgOpacity > 0 ? bgOpacity : 0),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Stack(children: [
+        // Stroke layer
+        Text(text, style: stroke, textAlign: TextAlign.center),
+        // Fill layer with shadow
+        Text(text,
+          style: base.copyWith(shadows: [
+            const Shadow(blurRadius: 4, color: Colors.black, offset: Offset(1, 1)),
+            const Shadow(blurRadius: 8, color: Colors.black, offset: Offset(-1, -1)),
+          ]),
+          textAlign: TextAlign.center,
+        ),
+      ]),
+    );
+  }
+}
 """)
 
 print("✅ player_screen.dart written")
 
 # ─── lib/screens/home_screen.dart ───────────────────────────────────────────
 w("lib/screens/home_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/scraper.dart';
 import '../providers/watch_progress_store.dart';
 import '../models/video_item.dart';
@@ -3439,49 +3480,40 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override Widget build(BuildContext context) {
-    final scraper = context.watch<MovieScraper>();
+    // Transparent status bar so hero goes edge-to-edge
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ));
+
+    final scraper       = context.watch<MovieScraper>();
     final progressStore = context.watch<WatchProgressStore>();
     final recentlyWatched = progressStore.recent;
-    final progressMap = {
-      for (final p in recentlyWatched) p.itemId: p,
-    };
-    final settings = AppSettings.instance;
+    final progressMap = { for (final p in recentlyWatched) p.itemId: p };
+    final settings      = AppSettings.instance;
 
     return Scaffold(
       backgroundColor: appBg(),
+      extendBodyBehindAppBar: true,
       body: scraper.isLoading && scraper.categories.isEmpty
           ? Center(child: CircularProgressIndicator(color: utRed()))
           : RefreshIndicator(
               onRefresh: scraper.refreshHome,
               color: utRed(),
               child: CustomScrollView(slivers: [
-                SliverAppBar(
-                  backgroundColor: appBg(),
-                  floating: true,
-                  title: Image.asset('assets/images/logo.png', height: 36,
-                    errorBuilder: (_, __, ___) => Text('UTan',
-                      style: appFontStyle(22, bold: true, color: utRed()))),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications_none, color: Colors.white),
-                      onPressed: () {},
-                    ),
-                  ],
-                ),
                 SliverToBoxAdapter(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Hero carousel
-                    if (scraper.heroItems.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                    // ── Hero (edge-to-edge, no top bar) ──────────────────
+                    if (scraper.heroItems.isNotEmpty)
                       HeroCarousel(
                         items: scraper.heroItems.take(10).toList(),
                         onTap: (id) => _openDetails(context, id),
                       ),
-                      const SizedBox(height: 24),
-                    ],
 
-                    // Continue watching
+                    const SizedBox(height: 24),
+
+                    // ── Continue Watching ─────────────────────────────────
                     if (recentlyWatched.isNotEmpty) ...[
                       ContinueWatchingRow(
                         items: recentlyWatched,
@@ -3492,11 +3524,150 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 24),
                     ],
 
-                    // Category rows
+                    // ── Trending Today (numbered) ─────────────────────────
+                    if (scraper.heroItems.length >= 5) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+                        child: Row(children: [
+                          Container(width: 3, height: 18,
+                            decoration: BoxDecoration(color: utRed(),
+                              borderRadius: BorderRadius.circular(2))),
+                          const SizedBox(width: 8),
+                          Text(L('الأكثر مشاهدة اليوم', 'Trending Today'),
+                            style: appFontStyle(17, bold: true)),
+                        ]),
+                      ),
+                      SizedBox(
+                        height: 185,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: scraper.heroItems.take(10).length,
+                          itemBuilder: (_, i) {
+                            final item = scraper.heroItems[i];
+                            return GestureDetector(
+                              onTap: () => _openDetails(context, item.id),
+                              child: SizedBox(
+                                width: 110,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Positioned(
+                                      left: 22, top: 0, right: 0, bottom: 20,
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: CachedNetworkImage(
+                                          imageUrl: item.imageUrl,
+                                          fit: BoxFit.cover,
+                                          placeholder: (_, __) => Container(color: Colors.white10),
+                                          errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      left: 0, bottom: 0,
+                                      child: Text('${i + 1}',
+                                        style: TextStyle(
+                                          fontSize: 88, fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                          height: 1,
+                                          shadows: [
+                                            Shadow(blurRadius: 4, color: Colors.black87,
+                                              offset: const Offset(2, 2)),
+                                          ],
+                                          foreground: Paint()
+                                            ..style = PaintingStyle.stroke
+                                            ..strokeWidth = 3
+                                            ..color = Colors.black54,
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      left: 0, bottom: 0,
+                                      child: Text('${i + 1}',
+                                        style: const TextStyle(
+                                          fontSize: 88, fontWeight: FontWeight.w900,
+                                          color: Colors.white, height: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                    ],
+
+                    // ── Browse by Genre ───────────────────────────────────
+                    if (scraper.categories.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+                        child: Row(children: [
+                          Container(width: 3, height: 18,
+                            decoration: BoxDecoration(color: utRed(),
+                              borderRadius: BorderRadius.circular(2))),
+                          const SizedBox(width: 8),
+                          Text(L('تصفح بالتصنيف', 'Browse by Genre'),
+                            style: appFontStyle(17, bold: true)),
+                        ]),
+                      ),
+                      SizedBox(
+                        height: 88,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: scraper.categories.take(12).length,
+                          itemBuilder: (_, i) {
+                            final cat = scraper.categories.take(12).toList()[i];
+                            final color = _genreColor(i);
+                            return GestureDetector(
+                              onTap: () => Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => CategoryListScreen(
+                                  category: SiteCategory(
+                                    id: cat.tagId, remoteId: cat.tagId,
+                                    isTag: true, nameAr: cat.name, nameEn: cat.name,
+                                  ),
+                                ),
+                              )),
+                              child: Container(
+                                width: 130,
+                                margin: const EdgeInsets.only(right: 10),
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Stack(children: [
+                                  Positioned(
+                                    right: -10, bottom: -10,
+                                    child: Icon(Icons.play_circle_outline,
+                                      size: 70, color: Colors.white.withOpacity(0.12)),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Text(cat.name,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14),
+                                      maxLines: 2),
+                                  ),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                    ],
+
+                    // ── Category rows from scraper ────────────────────────
                     ...scraper.categories.map((cat) => Padding(
                       padding: const EdgeInsets.only(bottom: 24),
                       child: CategoryRow(
-                        title: settings.appLanguage == 'en' ? cat.name : cat.name,
+                        title: cat.name,
                         items: cat.items,
                         tagId: cat.tagId,
                         progressMap: progressMap,
@@ -3511,7 +3682,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         )),
                       ),
                     )),
-                    const SizedBox(height: 80),
+                    const SizedBox(height: 100),
                   ],
                 )),
               ]),
@@ -3519,11 +3690,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Color _genreColor(int i) {
+    const colors = [
+      Color(0xFF6441A5), Color(0xFF0070CC), Color(0xFFE50914),
+      Color(0xFF1DB954), Color(0xFFF5A623), Color(0xFFFF6B6B),
+      Color(0xFF17A589), Color(0xFF8E44AD), Color(0xFF2980B9),
+      Color(0xFFE74C3C), Color(0xFF27AE60), Color(0xFFD35400),
+    ];
+    return colors[i % colors.length];
+  }
+
   void _openDetails(BuildContext ctx, String id) {
     Navigator.push(ctx, MaterialPageRoute(builder: (_) => DetailsScreen(itemId: id)));
   }
 }
 """)
+
 
 # ─── lib/screens/browse_screen.dart ─────────────────────────────────────────
 w("lib/screens/browse_screen.dart", r"""import 'package:flutter/material.dart';
@@ -3910,7 +4092,7 @@ import '../models/video_item.dart';
 import '../models/episode_item.dart';
 import '../providers/watch_progress_store.dart';
 import '../providers/favorites_store.dart';
-import '../providers/watchlist_store.dart';
+
 import '../app_colors.dart';
 import '../app_settings.dart';
 import '../player/player_screen.dart';
@@ -4278,7 +4460,7 @@ print("✅ details_screen.dart written")
 w("lib/screens/settings_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/favorites_store.dart';
-import '../providers/watchlist_store.dart';
+
 import '../providers/watch_progress_store.dart';
 import '../services/auth_session.dart';
 import '../app_colors.dart';
@@ -4608,8 +4790,12 @@ w("lib/screens/account_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_session.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/supabase_manager.dart';
 import '../providers/favorites_store.dart';
+import '../providers/watch_progress_store.dart';
+
+import 'details_screen.dart';
 import '../providers/watch_progress_store.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
@@ -4767,152 +4953,205 @@ class _AccountScreenState extends State<AccountScreen>
 
 
   Widget _buildLoggedIn(AuthSession session) {
-    return Column(children: [
-      // Profile header
-      Container(
-        padding: const EdgeInsets.all(20),
-        child: Row(children: [
-          CircleAvatar(radius: 36, backgroundColor: utRed().withOpacity(0.18),
-            child: Text(session.user!.displayName[0].toUpperCase(),
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: utRed()))),
-          const SizedBox(width: 16),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(session.user!.displayName, style: appFontStyle(18, bold: true)),
-            Text(session.user!.email ?? '', style: const TextStyle(color: Colors.white54, fontSize: 13)),
-          ])),
-          TextButton.icon(
-            icon: const Icon(Icons.logout, color: Colors.red, size: 18),
-            label: Text(L('خروج', 'Sign Out'), style: const TextStyle(color: Colors.red)),
-            onPressed: () async {
-              await AuthSession.instance.signOut();
-              if (mounted) Navigator.pop(context);
-            },
+    final favs     = context.watch<FavoritesStore>();
+    final progress = context.watch<WatchProgressStore>();
+    final watchlist = favs; // My List uses favorites
+    final name     = session.user?.displayName ?? session.user?.email?.split('@').first ?? 'User';
+    final email    = session.user?.email ?? '';
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+
+    return SingleChildScrollView(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SizedBox(height: 28),
+
+        // ── Avatar + name ──────────────────────────────────────────────
+        Center(child: Column(children: [
+          Stack(children: [
+            CircleAvatar(
+              radius: 48,
+              backgroundColor: utRed().withOpacity(0.15),
+              child: Text(initials,
+                style: TextStyle(fontSize: 38, fontWeight: FontWeight.w700,
+                  color: utRed())),
+            ),
+            Positioned(bottom: 0, right: 0,
+              child: Container(
+                width: 26, height: 26,
+                decoration: BoxDecoration(
+                  color: Colors.green, shape: BoxShape.circle,
+                  border: Border.all(color: appBg(), width: 2)),
+                child: const Icon(Icons.person, color: Colors.white, size: 14),
+              )),
+          ]),
+          const SizedBox(height: 12),
+          Text(name, style: appFontStyle(20, bold: true)),
+          const SizedBox(height: 4),
+          Text(email, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+          const SizedBox(height: 14),
+          OutlinedButton(
+            onPressed: () {},
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.white30),
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8)),
+            child: Text(L('تعديل الملف الشخصي', 'Edit Profile'),
+              style: const TextStyle(color: Colors.white)),
           ),
-        ]),
-      ),
-      // Tabs
-      TabBar(
-        controller: _tab, indicatorColor: utRed(), labelColor: utRed(),
-        unselectedLabelColor: Colors.white54,
-        tabs: [
-          Tab(text: L('الملف الشخصي', 'Profile')),
-          Tab(text: L('الشكاوى', 'Feedback')),
-          Tab(text: L('ملاحظاتي', 'My Reports')),
-        ],
-      ),
-      Expanded(child: TabBarView(controller: _tab, children: [
-        // Profile tab
-        ListView(padding: const EdgeInsets.all(16), children: [
-          _infoTile(Icons.person_outline, L('الاسم', 'Name'), session.user!.displayName),
-          _infoTile(Icons.email_outlined, L('البريد', 'Email'), session.user!.email ?? '-'),
-          if (session.isAdmin) _infoTile(Icons.admin_panel_settings, L('الصلاحية', 'Role'), 'Admin'),
+        ])),
+
+        const SizedBox(height: 24),
+        const Divider(color: Colors.white12, height: 1),
+
+        // ── Stats row ─────────────────────────────────────────────────
+        Row(children: [
+          _statCell(favs.items.length.toString(),     L('المفضلة', 'Favorites')),
+          Container(width: 1, height: 40, color: Colors.white12),
+          _statCell(progress.recent.length.toString(), L('المشاهدة', 'Watched')),
+          Container(width: 1, height: 40, color: Colors.white12),
+          _statCell(favs.items.length.toString(), L('قائمتي', 'My List')),
         ]),
 
-        // Feedback tab
-        StatefulBuilder(builder: (_, setSt) => Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(L('نوع الرسالة', 'Type'), style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            const SizedBox(height: 8),
-            Row(children: [
-              _fbTypeChip('suggestion', L('اقتراح', 'Suggestion'), setSt),
-              const SizedBox(width: 8),
-              _fbTypeChip('complaint', L('شكوى', 'Complaint'), setSt),
-              const SizedBox(width: 8),
-              _fbTypeChip('bug', L('خطأ', 'Bug'), setSt),
-            ]),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _fbMsgCtrl, maxLines: 5,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: L('اكتب رسالتك...', 'Write your message...'),
-                hintStyle: const TextStyle(color: Colors.grey),
-                filled: true, fillColor: Colors.white.withOpacity(0.07),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
+        const Divider(color: Colors.white12, height: 1),
+        const SizedBox(height: 24),
+
+
+
+        // ── Favorites ────────────────────────────────────────────────
+        if (favs.items.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(L('المفضلة', 'Favorites'), style: appFontStyle(16, bold: true)),
+                Text('${favs.items.length} ${L("عناصر", "items")}',
+                  style: const TextStyle(color: Colors.white38, fontSize: 13)),
+              ]),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 110,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              itemCount: favs.items.length,
+              itemBuilder: (_, i) {
+                final item = favs.items[i];
+                return GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => DetailsScreen(itemId: item.id))),
+                  child: Container(
+                    width: 72, margin: const EdgeInsets.only(right: 10),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: item.imageUrl, fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(color: Colors.white10),
+                        errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        // ── History ──────────────────────────────────────────────────
+        ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(L('السجل', 'History'), style: appFontStyle(16, bold: true)),
+                if (progress.all.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {},
+                    child: Text(
+                      '${L("عرض الكل", "See All")} (${progress.recent.length}) ›',
+                      style: TextStyle(color: utRed(), fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                  ),
+              ]),
+          ),
+          const SizedBox(height: 12),
+          if (progress.recent.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Text(L('لا يوجد سجل', 'No history yet'),
+                style: const TextStyle(color: Colors.white38)),
+            )
+          else
+            SizedBox(
+              height: 110,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                itemCount: progress.recent.length,
+                itemBuilder: (_, i) {
+                  final p = progress.recent[i];
+                  return GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => DetailsScreen(itemId: p.itemId))),
+                    child: Container(
+                      width: 72, margin: const EdgeInsets.only(right: 10),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Stack(fit: StackFit.expand, children: [
+                          CachedNetworkImage(
+                            imageUrl: p.imageUrl, fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(color: Colors.white10),
+                            errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                          ),
+                          if (p.percent > 0)
+                            Positioned(
+                              bottom: 0, left: 0, right: 0,
+                              child: LinearProgressIndicator(
+                                value: p.percent / 100,
+                                backgroundColor: Colors.black45,
+                                valueColor: AlwaysStoppedAnimation<Color>(utRed()),
+                                minHeight: 3,
+                              ),
+                            ),
+                        ]),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 14),
-            SizedBox(width: double.infinity, child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: utRed(),
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-              onPressed: () async {
-                final msg = _fbMsgCtrl.text.trim();
-                if (msg.isEmpty) return;
-                final ok = await SupabaseManager.instance.submitFeedback(
-                  type: _fbType, message: msg);
-                _fbMsgCtrl.clear();
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(ok ? L('تم الإرسال', 'Sent!') : L('فشل الإرسال', 'Failed'))));
-                if (ok) _loadFeedback();
-              },
-              child: Text(L('إرسال', 'Send'), style: const TextStyle(fontSize: 16)),
-            )),
-          ]),
-        )),
+        ],
 
-        // My Reports tab
-        _feedbackLoading
-            ? Center(child: CircularProgressIndicator(color: utRed()))
-            : _myFeedback.isEmpty
-                ? Center(child: Text(L('لا توجد رسائل', 'No messages'),
-                    style: const TextStyle(color: Colors.white38)))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _myFeedback.length,
-                    itemBuilder: (_, i) {
-                      final fb = _myFeedback[i];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12)),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: fb.type == 'complaint' ? Colors.red.withOpacity(0.18)
-                                    : utRed().withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(6)),
-                              child: Text(fb.type,
-                                style: TextStyle(fontSize: 11, color: utRed())),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: fb.status == 'open' ? Colors.orange.withOpacity(0.18)
-                                    : Colors.green.withOpacity(0.18),
-                                borderRadius: BorderRadius.circular(6)),
-                              child: Text(fb.status,
-                                style: TextStyle(fontSize: 11,
-                                  color: fb.status == 'open' ? Colors.orange : Colors.green)),
-                            ),
-                          ]),
-                          const SizedBox(height: 8),
-                          Text(fb.message, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                        ]),
-                      );
-                    }),
-      ])),
-    ]);
+        const SizedBox(height: 30),
+
+        // ── Sign out ─────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: TextButton.icon(
+            onPressed: () async {
+              await session.signOut();
+              if (mounted) setState(() {});
+            },
+            icon: const Icon(Icons.logout, color: Colors.red),
+            label: Text(L('تسجيل الخروج', 'Sign Out'),
+              style: const TextStyle(color: Colors.red)),
+          ),
+        ),
+        const SizedBox(height: 80),
+      ]),
+    );
   }
 
-  Widget _fbTypeChip(String type, String label, StateSetter setSt) =>
-    GestureDetector(
-      onTap: () => setSt(() => _fbType = type),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: _fbType == type ? utRed() : Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(20)),
-        child: Text(label, style: TextStyle(
-          color: Colors.white, fontWeight: _fbType == type ? FontWeight.w700 : FontWeight.w400)),
-      ),
-    );
+  Widget _statCell(String value, String label) => Expanded(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(children: [
+        Text(value, style: appFontStyle(22, bold: true)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      ]),
+    ),
+  );
 
   Widget _buildAuth() => SingleChildScrollView(
     padding: const EdgeInsets.all(24),
@@ -5159,7 +5398,7 @@ w("lib/screens/list_detail_screen.dart", r"""import 'package:flutter/material.da
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/watch_list.dart';
-import '../providers/watchlist_store.dart';
+
 import '../app_colors.dart';
 import '../app_settings.dart';
 import 'details_screen.dart';
