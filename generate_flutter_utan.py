@@ -4090,6 +4090,8 @@ import '../models/video_item.dart';
 import '../models/episode_item.dart';
 import '../providers/watch_progress_store.dart';
 import '../providers/favorites_store.dart';
+import '../providers/watchlist_store.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_colors.dart';
 import '../app_settings.dart';
@@ -4251,6 +4253,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
             const SizedBox(width: 8),
             _actionIconBtn(Icons.playlist_add, L('قائمة', 'List'),
               () => _showAddToListDialog(context, item)),
+            const SizedBox(width: 8),
+            _actionIconBtn(Icons.download_outlined, L('تحميل', 'Download'),
+              () => _downloadUrl(d.isMovie ? d.movieUrl : (d.episodes.isNotEmpty ? d.episodes.first.url : ''))),
           ]),
           const SizedBox(height: 20),
 
@@ -4340,6 +4345,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
               ),
             ],
           ])),
+          GestureDetector(
+            onTap: () => _downloadUrl(ep.url),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Icon(Icons.download_outlined, color: Colors.white54, size: 20),
+            ),
+          ),
           const Icon(Icons.chevron_right, color: Colors.white38),
         ]),
       ),
@@ -4366,6 +4378,15 @@ class _DetailsScreenState extends State<DetailsScreen> {
         Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
       ]),
     );
+
+  Future<void> _downloadUrl(String url) async {
+    if (url.isEmpty) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   void _showAddToListDialog(BuildContext ctx, VideoItem item) {
     showModalBottomSheet(
@@ -4458,6 +4479,7 @@ print("✅ details_screen.dart written")
 w("lib/screens/settings_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/favorites_store.dart';
+import '../providers/watchlist_store.dart';
 
 import '../providers/watch_progress_store.dart';
 import '../services/auth_session.dart';
@@ -5396,6 +5418,7 @@ w("lib/screens/list_detail_screen.dart", r"""import 'package:flutter/material.da
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/watch_list.dart';
+import '../providers/watchlist_store.dart';
 
 import '../app_colors.dart';
 import '../app_settings.dart';
