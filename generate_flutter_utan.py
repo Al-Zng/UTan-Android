@@ -225,6 +225,11 @@ class AppSettings extends ChangeNotifier {
   bool get downloadOverWifiOnly => _prefs.getBool('download_wifi_only') ?? false;
   set downloadOverWifiOnly(bool v) { _prefs.setBool('download_wifi_only', v); notifyListeners(); }
 
+  // ── Download open mode ───────────────────────────────────────────
+  // 'internal' = open in app player, 'external' = system browser/downloader
+  String get downloadOpenMode => _prefs.getString('download_open_mode') ?? 'internal';
+  set downloadOpenMode(String v) { _prefs.setString('download_open_mode', v); notifyListeners(); }
+
   // ── Language ────────────────────────────────────────────────────
   String get appLanguage => _prefs.getString('app_language') ?? 'ar';
   set appLanguage(String v) { _prefs.setString('app_language', v); notifyListeners(); }
@@ -1098,9 +1103,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SupabaseUser {
   final String id;
   final String? email;
-  final Map<String, dynamic> userMetadata;
+  Map<String, dynamic> userMetadata;
+  String avatarUrl;
 
-  SupabaseUser({required this.id, this.email, required this.userMetadata});
+  SupabaseUser({required this.id, this.email, required this.userMetadata, this.avatarUrl = ''});
 
   String get displayName {
     final v = userMetadata['display_name'] as String?;
@@ -1108,14 +1114,19 @@ class SupabaseUser {
     return email?.split('@').first ?? 'مستخدم';
   }
 
+  void updateDisplayName(String name) {
+    userMetadata = Map.from(userMetadata)..['display_name'] = name;
+  }
+
   factory SupabaseUser.fromJson(Map<String, dynamic> j) => SupabaseUser(
     id: j['id'] as String? ?? '',
     email: j['email'] as String?,
     userMetadata: (j['user_metadata'] as Map<String, dynamic>?) ?? {},
+    avatarUrl: j['avatar_url'] as String? ?? '',
   );
 
   Map<String, dynamic> toJson() => {
-    'id': id, 'email': email, 'user_metadata': userMetadata,
+    'id': id, 'email': email, 'user_metadata': userMetadata, 'avatar_url': avatarUrl,
   };
 }
 
@@ -1162,6 +1173,25 @@ class AuthSession extends ChangeNotifier {
   }
 
   void setAdmin(bool v) { _isAdmin = v; notifyListeners(); }
+
+  Future<void> updateAvatarUrl(String url) async {
+    if (_user == null) return;
+    _user = SupabaseUser(
+      id: _user!.id, email: _user!.email,
+      userMetadata: _user!.userMetadata, avatarUrl: url,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ut_user', jsonEncode(_user!.toJson()));
+    notifyListeners();
+  }
+
+  Future<void> updateDisplayNameLocal(String name) async {
+    if (_user == null) return;
+    _user!.updateDisplayName(name);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ut_user', jsonEncode(_user!.toJson()));
+    notifyListeners();
+  }
 
   Future<void> signOut() async {
     _user = null;
@@ -1449,6 +1479,136 @@ class SupabaseManager {
     } catch (_) { return false; }
   }
 
+  // ── Watchlists ─────────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> fetchWatchlists() async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/user_watchlists?user_id=eq.$userId&select=*&order=created_at.desc'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(resp.body) as List);
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<Map<String, dynamic>>> fetchWatchlistItems(String listId) async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null) return [];
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/user_watchlist_items?list_id=eq.$listId&select=*&order=added_at.desc'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(resp.body) as List);
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> upsertWatchlist(String id, String name, bool isPrivate) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/user_watchlists'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'resolution=merge-duplicates'},
+        body: jsonEncode({
+          'id': id, 'user_id': userId, 'name': name,
+          'is_private': isPrivate, 'updated_at': DateTime.now().toIso8601String(),
+        }),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> deleteWatchlistRemote(String listId) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_supabaseUrl/rest/v1/user_watchlists?id=eq.$listId&user_id=eq.$userId'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> upsertWatchlistItem(String listId, Map<String, dynamic> item) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final resp = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/user_watchlist_items'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'resolution=merge-duplicates'},
+        body: jsonEncode({...item, 'list_id': listId, 'user_id': userId}),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> deleteWatchlistItem(String listId, String itemId) async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null) return false;
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_supabaseUrl/rest/v1/user_watchlist_items?list_id=eq.$listId&item_id=eq.$itemId'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
+  // ── Profile ────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> fetchProfile() async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/profiles?id=eq.$userId&select=*'),
+        headers: _baseHeaders(token: token),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode == 200) {
+        final rows = jsonDecode(resp.body) as List<dynamic>;
+        if (rows.isNotEmpty) return rows.first as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<bool> updateProfile({String? displayName, String? avatarUrl}) async {
+    final token = AuthSession.instance.accessToken;
+    final userId = AuthSession.instance.user?.id;
+    if (token == null || userId == null) return false;
+    try {
+      final body = <String, dynamic>{};
+      if (displayName != null) body['display_name'] = displayName;
+      if (avatarUrl != null) body['avatar_url'] = avatarUrl;
+      if (body.isEmpty) return true;
+      // Update profiles table
+      final resp = await http.patch(
+        Uri.parse('$_supabaseUrl/rest/v1/profiles?id=eq.$userId'),
+        headers: {..._baseHeaders(token: token), 'Prefer': 'return=representation'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && displayName != null) {
+        // Also update auth user_metadata
+        await http.put(
+          Uri.parse('$_supabaseUrl/auth/v1/user'),
+          headers: _baseHeaders(token: token),
+          body: jsonEncode({'data': {'display_name': displayName}}),
+        ).timeout(const Duration(seconds: 15));
+        AuthSession.instance.user?.updateDisplayName(displayName);
+      }
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) { return false; }
+  }
+
   // ── Admin check ────────────────────────────────────────────────────────
   Future<bool> fetchIsAdmin() async {
     final token = AuthSession.instance.accessToken;
@@ -1713,6 +1873,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/watch_list.dart';
 import '../models/video_item.dart';
+import '../services/auth_session.dart';
+import '../services/supabase_manager.dart';
 
 class WatchlistStore extends ChangeNotifier {
   static final WatchlistStore instance = WatchlistStore._();
@@ -1733,40 +1895,103 @@ class WatchlistStore extends ChangeNotifier {
       } catch (_) {}
     }
     notifyListeners();
+    // Sync cloud if logged in
+    if (AuthSession.instance.isLoggedIn) unawaited(fetchFromCloud());
   }
 
+  // ── Cloud sync ─────────────────────────────────────────────────
+  Future<void> fetchFromCloud() async {
+    try {
+      final sm = SupabaseManager.instance;
+      final rawLists = await sm.fetchWatchlists();
+      final cloudLists = <WatchList>[];
+      for (final r in rawLists) {
+        final rawItems = await sm.fetchWatchlistItems(r['id'] as String);
+        final items = rawItems.map((i) => WatchListItem(
+          id: i['item_id'] as String,
+          title: i['title'] as String? ?? '',
+          imageUrl: i['image_url'] as String? ?? '',
+          type: i['type'] as String? ?? 'post',
+          addedAt: DateTime.tryParse(i['added_at'] as String? ?? '') ?? DateTime.now(),
+        )).toList();
+        cloudLists.add(WatchList(
+          id: r['id'] as String,
+          name: r['name'] as String,
+          isPrivate: r['is_private'] as bool? ?? true,
+          items: items,
+          createdAt: DateTime.tryParse(r['created_at'] as String? ?? '') ?? DateTime.now(),
+        ));
+      }
+      // Merge: cloud wins on conflict (same id)
+      for (final cl in cloudLists) {
+        final idx = _lists.indexWhere((l) => l.id == cl.id);
+        if (idx == -1) { _lists.add(cl); } else { _lists[idx] = cl; }
+      }
+      await _persist(); notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> _syncListToCloud(WatchList list) async {
+    if (!AuthSession.instance.isLoggedIn) return;
+    try {
+      final sm = SupabaseManager.instance;
+      await sm.upsertWatchlist(list.id, list.name, list.isPrivate);
+      for (final item in list.items) {
+        await sm.upsertWatchlistItem(list.id, {
+          'item_id': item.id, 'title': item.title,
+          'image_url': item.imageUrl, 'type': item.type,
+          'added_at': item.addedAt.toIso8601String(),
+        });
+      }
+    } catch (_) {}
+  }
+
+  // ── Local + cloud mutations ─────────────────────────────────────
   void createList(String name, {bool isPrivate = true}) {
-    _lists.insert(0, WatchList(
+    final list = WatchList(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name, isPrivate: isPrivate,
-    ));
+    );
+    _lists.insert(0, list);
     _persist(); notifyListeners();
+    unawaited(_syncListToCloud(list));
   }
 
   void deleteList(String id) {
     _lists.removeWhere((l) => l.id == id);
     _persist(); notifyListeners();
+    if (AuthSession.instance.isLoggedIn) {
+      unawaited(SupabaseManager.instance.deleteWatchlistRemote(id));
+    }
   }
 
   void renameList(String id, String name) {
     final idx = _lists.indexWhere((l) => l.id == id);
-    if (idx != -1) {
-      _lists[idx] = WatchList(
-        id: _lists[idx].id, name: name,
-        isPrivate: _lists[idx].isPrivate,
-        items: _lists[idx].items,
-        createdAt: _lists[idx].createdAt,
-      );
-      _persist(); notifyListeners();
-    }
+    if (idx == -1) return;
+    _lists[idx] = WatchList(
+      id: _lists[idx].id, name: name,
+      isPrivate: _lists[idx].isPrivate,
+      items: _lists[idx].items,
+      createdAt: _lists[idx].createdAt,
+    );
+    _persist(); notifyListeners();
+    unawaited(SupabaseManager.instance.upsertWatchlist(id, name, _lists[idx].isPrivate));
   }
 
   void addItem(VideoItem item, String listId) {
     final idx = _lists.indexWhere((l) => l.id == listId);
     if (idx == -1) return;
     if (_lists[idx].items.any((i) => i.id == item.id)) return;
-    _lists[idx].items.insert(0, WatchListItem.fromVideo(item));
+    final wItem = WatchListItem.fromVideo(item);
+    _lists[idx].items.insert(0, wItem);
     _persist(); notifyListeners();
+    if (AuthSession.instance.isLoggedIn) {
+      unawaited(SupabaseManager.instance.upsertWatchlistItem(listId, {
+        'item_id': wItem.id, 'title': wItem.title,
+        'image_url': wItem.imageUrl, 'type': wItem.type,
+        'added_at': wItem.addedAt.toIso8601String(),
+      }));
+    }
   }
 
   void removeItem(String itemId, String listId) {
@@ -1774,6 +1999,9 @@ class WatchlistStore extends ChangeNotifier {
     if (idx == -1) return;
     _lists[idx].items.removeWhere((i) => i.id == itemId);
     _persist(); notifyListeners();
+    if (AuthSession.instance.isLoggedIn) {
+      unawaited(SupabaseManager.instance.deleteWatchlistItem(listId, itemId));
+    }
   }
 
   bool isInAnyList(String itemId) =>
@@ -1787,6 +2015,9 @@ class WatchlistStore extends ChangeNotifier {
     await prefs.setString(_key, jsonEncode(_lists.map((l) => l.toJson()).toList()));
   }
 }
+
+// Helper to fire-and-forget without lint warning
+void unawaited(Future<void> f) => f.ignore();
 """)
 
 print("✅ Providers written")
@@ -4346,7 +4577,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             ],
           ])),
           GestureDetector(
-            onTap: () => _downloadUrl(ep.url),
+            onTap: () => _downloadUrl(ep.url, ep: ep),
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 6),
               child: Icon(Icons.download_outlined, color: Colors.white54, size: 20),
@@ -4379,12 +4610,34 @@ class _DetailsScreenState extends State<DetailsScreen> {
       ]),
     );
 
-  Future<void> _downloadUrl(String url) async {
+  Future<void> _downloadUrl(String url, {EpisodeItem? ep}) async {
     if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final mode = AppSettings.instance.downloadOpenMode;
+    final d = _details;
+    if (mode == 'internal' && d != null) {
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+        itemId: widget.itemId,
+        itemTitle: d.title,
+        itemImageUrl: d.imageUrl,
+        isMovie: ep == null,
+        videoUrl: url,
+        videoUrl720: ep?.url720 ?? d.movieUrl720,
+        videoUrl1080: ep?.url1080 ?? d.movieUrl1080,
+        videoUrl360: ep?.url360 ?? d.movieUrl360,
+        videoUrl4k: ep?.url4k ?? d.movieUrl4k,
+        subtitleUrl: ep?.subtitleUrl ?? d.movieSubtitleUrl,
+        subtitleVttUrl: ep?.subtitleVttUrl ?? d.movieSubtitleVttUrl,
+        episodeId: ep?.id ?? widget.itemId,
+        episodeTitle: ep?.title ?? d.title,
+        episodes: ep != null ? d.episodes : const [],
+      )));
+    } else {
+      final uri = Uri.tryParse(url);
+      if (uri == null) return;
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     }
   }
 
@@ -4756,6 +5009,19 @@ class MoreSettingsView extends StatelessWidget {
               ]),
             ),
           ]),
+          _section(L('التنزيل / الفتح', 'Download / Open'), [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(L('فتح الفيديو عبر', 'Open video via'),
+                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            ),
+            _picker(
+              ['internal', 'external'],
+              [L('مشغل التطبيق', 'App Player'), L('مشغل خارجي', 'External')],
+              s.downloadOpenMode,
+              (v) { s.downloadOpenMode = v; setSt(() {}); },
+            ),
+          ]),
           _section(L('البيانات', 'Data'), [
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
@@ -4814,9 +5080,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/supabase_manager.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watch_progress_store.dart';
+import '../providers/watchlist_store.dart';
 
 import 'details_screen.dart';
-import '../providers/watch_progress_store.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
 import '../models/feedback_item.dart';
@@ -4844,10 +5110,26 @@ class _AccountScreenState extends State<AccountScreen>
   final _fbMsgCtrl = TextEditingController();
   String _fbType = 'suggestion';
 
+  // Profile
+  String _avatarUrl = '';
+
   @override void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
     _loadFeedback();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    if (!AuthSession.instance.isLoggedIn) return;
+    final cached = AuthSession.instance.user?.avatarUrl ?? '';
+    if (cached.isNotEmpty && mounted) setState(() => _avatarUrl = cached);
+    final profile = await SupabaseManager.instance.fetchProfile();
+    if (profile != null && mounted) {
+      final url = profile['avatar_url'] as String? ?? '';
+      setState(() => _avatarUrl = url);
+      await AuthSession.instance.updateAvatarUrl(url);
+    }
   }
 
   @override void dispose() {
@@ -4903,6 +5185,9 @@ class _AccountScreenState extends State<AccountScreen>
     // Check admin
     final isAdmin = await SupabaseManager.instance.fetchIsAdmin();
     AuthSession.instance.setAdmin(isAdmin);
+    // Sync watchlists + profile
+    if (mounted) context.read<WatchlistStore>().fetchFromCloud();
+    _loadProfile();
     setState(() => _loading = false);
     if (mounted) Navigator.pop(context);
   }
@@ -4964,6 +5249,8 @@ class _AccountScreenState extends State<AccountScreen>
       if (cloudProg.isNotEmpty && mounted) context.read<WatchProgressStore>().mergeFromCloud(cloudProg);
       final isAdmin = await sm.fetchIsAdmin();
       AuthSession.instance.setAdmin(isAdmin);
+      if (mounted) context.read<WatchlistStore>().fetchFromCloud();
+      _loadProfile();
       setState(() => _loading = false);
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -4990,17 +5277,23 @@ class _AccountScreenState extends State<AccountScreen>
             CircleAvatar(
               radius: 48,
               backgroundColor: utRed().withOpacity(0.15),
-              child: Text(initials,
-                style: TextStyle(fontSize: 38, fontWeight: FontWeight.w700,
-                  color: utRed())),
+              backgroundImage: _avatarUrl.isNotEmpty
+                  ? CachedNetworkImageProvider(_avatarUrl) : null,
+              child: _avatarUrl.isEmpty
+                  ? Text(initials, style: TextStyle(fontSize: 38,
+                      fontWeight: FontWeight.w700, color: utRed()))
+                  : null,
             ),
             Positioned(bottom: 0, right: 0,
-              child: Container(
-                width: 26, height: 26,
-                decoration: BoxDecoration(
-                  color: Colors.green, shape: BoxShape.circle,
-                  border: Border.all(color: appBg(), width: 2)),
-                child: const Icon(Icons.person, color: Colors.white, size: 14),
+              child: GestureDetector(
+                onTap: () => _showEditProfileSheet(context, name),
+                child: Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: utRed(), shape: BoxShape.circle,
+                    border: Border.all(color: appBg(), width: 2)),
+                  child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                ),
               )),
           ]),
           const SizedBox(height: 12),
@@ -5009,7 +5302,7 @@ class _AccountScreenState extends State<AccountScreen>
           Text(email, style: const TextStyle(color: Colors.white54, fontSize: 13)),
           const SizedBox(height: 14),
           OutlinedButton(
-            onPressed: () {},
+            onPressed: () => _showEditProfileSheet(context, name),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.white30),
               shape: const StadiumBorder(),
@@ -5160,6 +5453,113 @@ class _AccountScreenState extends State<AccountScreen>
         const SizedBox(height: 80),
       ]),
     );
+  }
+
+  Future<void> _showEditProfileSheet(BuildContext ctx, String currentName) async {
+    final nameCtrl = TextEditingController(text: currentName);
+    final avatarCtrl = TextEditingController(text: _avatarUrl);
+    bool saving = false;
+    String err = '';
+
+    await showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1C1C1C),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (bCtx) => StatefulBuilder(
+        builder: (bCtx, setSt) => Padding(
+          padding: EdgeInsets.only(
+            left: 20, right: 20, top: 20,
+            bottom: MediaQuery.of(bCtx).viewInsets.bottom + 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24,
+                borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            Text(L('تعديل الملف الشخصي', 'Edit Profile'),
+              style: appFontStyle(18, bold: true)),
+            const SizedBox(height: 20),
+            // Avatar preview
+            Center(child: Stack(alignment: Alignment.center, children: [
+              CircleAvatar(
+                radius: 44,
+                backgroundColor: utRed().withOpacity(0.15),
+                backgroundImage: avatarCtrl.text.isNotEmpty
+                    ? CachedNetworkImageProvider(avatarCtrl.text) : null,
+                child: avatarCtrl.text.isEmpty
+                    ? Text(nameCtrl.text.isNotEmpty ? nameCtrl.text[0].toUpperCase() : '?',
+                        style: TextStyle(fontSize: 34, color: utRed(), fontWeight: FontWeight.w700))
+                    : null,
+              ),
+            ])),
+            const SizedBox(height: 16),
+            // Avatar URL field
+            TextField(
+              controller: avatarCtrl,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              onChanged: (_) => setSt(() {}),
+              decoration: InputDecoration(
+                hintText: L('رابط الصورة (URL)', 'Avatar image URL'),
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                prefixIcon: const Icon(Icons.image_outlined, color: Colors.white38),
+                filled: true, fillColor: Colors.white.withOpacity(0.07),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Display name field
+            TextField(
+              controller: nameCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: L('الاسم المعروض', 'Display name'),
+                hintStyle: const TextStyle(color: Colors.white38),
+                prefixIcon: const Icon(Icons.person_outline, color: Colors.white38),
+                filled: true, fillColor: Colors.white.withOpacity(0.07),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
+            if (err.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(err, style: const TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+            const SizedBox(height: 20),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: utRed(),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              onPressed: saving ? null : () async {
+                setSt(() { saving = true; err = ''; });
+                final newName = nameCtrl.text.trim();
+                final newAvatar = avatarCtrl.text.trim();
+                final ok = await SupabaseManager.instance.updateProfile(
+                  displayName: newName.isNotEmpty ? newName : null,
+                  avatarUrl: newAvatar,
+                );
+                if (ok) {
+                  if (newName.isNotEmpty) await AuthSession.instance.updateDisplayNameLocal(newName);
+                  await AuthSession.instance.updateAvatarUrl(newAvatar);
+                  if (mounted) setState(() => _avatarUrl = newAvatar);
+                  if (bCtx.mounted) Navigator.pop(bCtx);
+                } else {
+                  setSt(() { saving = false; err = L('فشل الحفظ', 'Save failed'); });
+                }
+              },
+              child: saving
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(L('حفظ', 'Save'),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            )),
+          ]),
+        ),
+      ),
+    );
+    nameCtrl.dispose(); avatarCtrl.dispose();
   }
 
   Widget _statCell(String value, String label) => Expanded(
