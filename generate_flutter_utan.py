@@ -1618,10 +1618,7 @@ class WatchProgressStore extends ChangeNotifier {
     return matches.firstOrNull;
   }
 
-    List<WatchProgress> get all => _all.values.toList()
-    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-  List<WatchProgress> get recent {
+    List<WatchProgress> get recent {
     final latest = <String, WatchProgress>{};
     for (final p in _all.values) {
       final ex = latest[p.itemId];
@@ -1717,9 +1714,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/watch_list.dart';
 import '../models/video_item.dart';
 
-class WatchListStore extends ChangeNotifier {
-  static final WatchListStore instance = WatchListStore._();
-  WatchListStore._();
+class WatchlistStore extends ChangeNotifier {
+  static final WatchlistStore instance = WatchlistStore._();
+  WatchlistStore._();
 
   static const _key = 'UTanWatchLists_v1';
   final List<WatchList> _lists = [];
@@ -2383,6 +2380,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../models/episode_item.dart';
 import '../models/subtitle_cue.dart';
 import '../services/subtitle_parser.dart';
@@ -4170,7 +4168,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
 
   Widget _buildBody(MediaDetails d) {
     final favStore = context.watch<FavoritesStore>();
-    final listStore = context.watch<WatchListStore>();
+    final listStore = context.watch<WatchlistStore>();
     final isFav = favStore.isFavorite(widget.itemId);
     final item = VideoItem(
       id: widget.itemId, title: d.title, imageUrl: d.imageUrl, type: 'post');
@@ -4388,7 +4386,7 @@ class _AddToListSheet extends StatefulWidget {
 
 class _AddToListSheetState extends State<_AddToListSheet> {
   @override Widget build(BuildContext context) {
-    final store = context.watch<WatchListStore>();
+    final store = context.watch<WatchlistStore>();
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -4442,7 +4440,7 @@ class _AddToListSheetState extends State<_AddToListSheet> {
           onPressed: () {
             final n = ctrl.text.trim();
             if (n.isNotEmpty) {
-              ctx.read<WatchListStore>().createList(n);
+              ctx.read<WatchlistStore>().createList(n);
               Navigator.pop(ctx);
             }
           },
@@ -4479,7 +4477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override Widget build(BuildContext context) {
     final session = context.watch<AuthSession>();
     final favStore = context.watch<FavoritesStore>();
-    final listStore = context.watch<WatchListStore>();
+    final listStore = context.watch<WatchlistStore>();
     final progStore = context.watch<WatchProgressStore>();
     final settings = AppSettings.instance;
 
@@ -4662,7 +4660,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextButton(
           onPressed: () {
             final n = ctrl.text.trim();
-            if (n.isNotEmpty) { ctx.read<WatchListStore>().createList(n); Navigator.pop(ctx); }
+            if (n.isNotEmpty) { ctx.read<WatchlistStore>().createList(n); Navigator.pop(ctx); }
           },
           child: Text(L('إنشاء', 'Create'), style: TextStyle(color: utRed())),
         ),
@@ -5408,7 +5406,7 @@ class ListDetailScreen extends StatelessWidget {
   const ListDetailScreen({super.key, required this.list});
 
   @override Widget build(BuildContext context) {
-    final store = context.watch<WatchListStore>();
+    final store = context.watch<WatchlistStore>();
     final current = store.lists.firstWhere((l) => l.id == list.id, orElse: () => list);
 
     return Scaffold(
@@ -5476,7 +5474,7 @@ class ListDetailScreen extends StatelessWidget {
     );
   }
 
-  void _renameDialog(BuildContext ctx, WatchListStore store, WatchList current) {
+  void _renameDialog(BuildContext ctx, WatchlistStore store, WatchList current) {
     final ctrl = TextEditingController(text: current.name);
     showDialog(context: ctx, builder: (_) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
@@ -5622,7 +5620,7 @@ void main() async {
   await AuthSession.instance.init();
   await FavoritesStore.instance.init();
   await WatchProgressStore.instance.init();
-  await WatchListStore.instance.init();
+  await WatchlistStore.instance.init();
   runApp(const UTanApp());
 }
 
@@ -5637,7 +5635,7 @@ class UTanApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MovieScraper()),
         ChangeNotifierProvider(create: (_) => FavoritesStore.instance),
         ChangeNotifierProvider(create: (_) => WatchProgressStore.instance),
-        ChangeNotifierProvider(create: (_) => WatchListStore.instance),
+        ChangeNotifierProvider(create: (_) => WatchlistStore.instance),
       ],
       child: Consumer<AppSettings>(builder: (_, settings, __) {
         return MaterialApp(
