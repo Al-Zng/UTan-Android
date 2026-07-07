@@ -23,7 +23,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  http_parser: ^4.0.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
@@ -198,8 +198,14 @@ class AppSettings extends ChangeNotifier {
   double get subtitleBgOpacity => _prefs.getDouble('sub_bgOpacity') ?? 0.6;
   set subtitleBgOpacity(double v) { _prefs.setDouble('sub_bgOpacity', v); notifyListeners(); }
 
-  double get subtitleBottomPad => _prefs.getDouble('sub_bottomPad') ?? 60.0;
+  double get subtitleBottomPad => _prefs.getDouble('sub_bottomPad') ?? 20.0;
   set subtitleBottomPad(double v) { _prefs.setDouble('sub_bottomPad', v); notifyListeners(); }
+
+  bool get subtitleShowShadow => _prefs.getBool('sub_shadow') ?? true;
+  set subtitleShowShadow(bool v) { _prefs.setBool('sub_shadow', v); notifyListeners(); }
+
+  bool get subtitleShowStroke => _prefs.getBool('sub_stroke') ?? true;
+  set subtitleShowStroke(bool v) { _prefs.setBool('sub_stroke', v); notifyListeners(); }
 
   bool get subtitlesEnabled => _prefs.getBool('sub_enabled') ?? true;
   set subtitlesEnabled(bool v) { _prefs.setBool('sub_enabled', v); notifyListeners(); }
@@ -1212,6 +1218,7 @@ print("✅ subtitle_parser + auth_session written")
 # ─── lib/services/supabase_manager.dart ─────────────────────────────────────
 w("lib/services/supabase_manager.dart", r"""import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../models/video_item.dart';
 import '../models/watch_progress.dart';
 import '../models/feedback_item.dart';
@@ -1622,6 +1629,33 @@ class SupabaseManager {
       }
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (_) { return false; }
+  }
+
+  Future<String?> uploadAvatar(String userId, List<int> bytes, String ext) async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null) return null;
+    try {
+      final path = 'avatars/$userId.$ext';
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_supabaseUrl/storage/v1/object/$path'),
+      )
+        ..headers.addAll({
+          'Authorization': 'Bearer $token',
+          'apikey': _anonKey,
+          'x-upsert': 'true',
+        })
+        ..files.add(http.MultipartFile.fromBytes(
+          'file', bytes,
+          filename: '$userId.$ext',
+          contentType: MediaType('image', ext == 'jpg' ? 'jpeg' : ext),
+        ));
+      final resp = await request.send().timeout(const Duration(seconds: 30));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return '$_supabaseUrl/storage/v1/object/public/$path';
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── Admin check ────────────────────────────────────────────────────────
@@ -3060,6 +3094,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               fontSize: s.subtitleFontSize,
               color: colorFromHex(s.subtitleColorHex),
               bgOpacity: s.subtitleBgOpacity,
+              showStroke: s.subtitleShowStroke,
+              showShadow: s.subtitleShowShadow,
             )),
           ),
         if (_activeSub.isNotEmpty)
@@ -3071,6 +3107,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               fontSize: s.subtitleFontSize,
               color: colorFromHex(s.subtitleColorHex),
               bgOpacity: s.subtitleBgOpacity,
+              showStroke: s.subtitleShowStroke,
+              showShadow: s.subtitleShowShadow,
             )),
           ),
       ]),
@@ -3109,6 +3147,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
               icon: const Icon(Icons.subtitles, color: Colors.white),
               onPressed: () => setState(() => _showSubtitleSettings = !_showSubtitleSettings),
             ),
+            if (!widget.isMovie && widget.episodes.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.list, color: Colors.white),
+                onPressed: () => setState(() { _showEpisodes = true; _showControls = false; }),
+              ),
             PopupMenuButton<VideoQuality>(
               icon: const Icon(Icons.hd, color: Colors.white),
               color: const Color(0xFF1A1A1A),
@@ -3219,7 +3262,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _buildEpisodeHandle() => Positioned(
     bottom: 0, left: 0, right: 0,
     child: GestureDetector(
-      onTap: () => setState(() => _showEpisodes = true),
+      onVerticalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) < -100) setState(() => _showEpisodes = true);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
@@ -3238,7 +3283,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             const Icon(Icons.expand_less, color: Colors.white70, size: 14),
             const SizedBox(width: 4),
-            Text(L('قائمة الحلقات', 'Episodes'),
+            Text(L('اسحب لأعلى للحلقات', 'Swipe up for Episodes'),
               style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
           ]),
         ]),
@@ -3567,8 +3612,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
               s.subtitleDelay = v; setSt(() {}); }),
             _subSlider(L('حجم الخط', 'Font Size'), s.subtitleFontSize, 12, 36, (v) {
               s.subtitleFontSize = v; setSt(() {}); }),
+            _subSlider(L('الموضع من الأسفل', 'Position from bottom'), s.subtitleBottomPad, 0, 200, (v) {
+              s.subtitleBottomPad = v; setSt(() {}); setState(() {}); }),
             _subSlider(L('شفافية الخلفية', 'BG Opacity'), s.subtitleBgOpacity, 0, 1, (v) {
               s.subtitleBgOpacity = v; setSt(() {}); }),
+            const SizedBox(height: 4),
+            Row(children: [
+              Expanded(child: SwitchListTile(
+                dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(L('ظل النص', 'Shadow'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                value: s.subtitleShowShadow, activeColor: utRed(),
+                onChanged: (v) { s.subtitleShowShadow = v; setSt(() {}); setState(() {}); },
+              )),
+              Expanded(child: SwitchListTile(
+                dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(L('حد النص', 'Stroke'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                value: s.subtitleShowStroke, activeColor: utRed(),
+                onChanged: (v) { s.subtitleShowStroke = v; setSt(() {}); setState(() {}); },
+              )),
+            ]),
             const SizedBox(height: 8),
             Wrap(spacing: 8, children: [
               '#FFFFFF', '#FFFF00', '#00FFFF', '#FF69B4', '#FF4444', '#44FF44', '#4444FF',
@@ -3652,8 +3716,11 @@ class _SubText extends StatelessWidget {
   final double fontSize;
   final Color color;
   final double bgOpacity;
+  final bool showStroke;
+  final bool showShadow;
   const _SubText({required this.text, required this.fontName,
-    required this.fontSize, required this.color, required this.bgOpacity});
+    required this.fontSize, required this.color, required this.bgOpacity,
+    this.showStroke = true, this.showShadow = true});
 
   @override Widget build(BuildContext context) {
     final base = subtitleFontStyle(fontName, fontSize, color: color);
@@ -3664,24 +3731,20 @@ class _SubText extends StatelessWidget {
         ..color = Colors.black,
       color: null,
     );
+    final filled = showShadow ? base.copyWith(shadows: [
+      const Shadow(blurRadius: 4, color: Colors.black, offset: Offset(1, 1)),
+      const Shadow(blurRadius: 8, color: Colors.black, offset: Offset(-1, -1)),
+    ]) : base;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(bgOpacity > 0 ? bgOpacity : 0),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Stack(children: [
-        // Stroke layer
+      child: showStroke ? Stack(children: [
         Text(text, style: stroke, textAlign: TextAlign.center),
-        // Fill layer with shadow
-        Text(text,
-          style: base.copyWith(shadows: [
-            const Shadow(blurRadius: 4, color: Colors.black, offset: Offset(1, 1)),
-            const Shadow(blurRadius: 8, color: Colors.black, offset: Offset(-1, -1)),
-          ]),
-          textAlign: TextAlign.center,
-        ),
-      ]),
+        Text(text, style: filled, textAlign: TextAlign.center),
+      ]) : Text(text, style: filled, textAlign: TextAlign.center),
     );
   }
 }
@@ -4338,6 +4401,9 @@ import '../providers/watch_progress_store.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watchlist_store.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../models/comment_item.dart';
+import '../services/supabase_manager.dart';
+import '../services/auth_session.dart';
 
 import '../app_colors.dart';
 import '../app_settings.dart';
@@ -4353,6 +4419,16 @@ class _DetailsScreenState extends State<DetailsScreen> {
   MediaDetails? _details;
   bool _loading = true;
   String _selectedSeason = '';
+  // Comments
+  List<CommentItem> _comments = [];
+  bool _commentsLoaded = false;
+  final _commentCtrl = TextEditingController();
+  bool _postingComment = false;
+
+  @override void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
   bool _showAddToList = false;
 
   @override void initState() {
@@ -4550,9 +4626,130 @@ class _DetailsScreenState extends State<DetailsScreen> {
               return eps.map((ep) => _episodeTile(d, ep)).toList();
             })(),
           ],
+
+          // ── Comments ───────────────────────────────────────────────
+          const SizedBox(height: 28),
+          _buildCommentsSection(),
         ]),
       )),
     ]);
+  }
+
+  Future<void> _loadComments() async {
+    if (_commentsLoaded) return;
+    setState(() => _commentsLoaded = true);
+    final list = await SupabaseManager.instance.fetchComments(widget.itemId);
+    if (mounted) setState(() => _comments = list);
+  }
+
+  Widget _buildCommentsSection() {
+    final isLoggedIn = AuthSession.instance.isLoggedIn;
+    if (!_commentsLoaded) _loadComments();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Text(L('التعليقات', 'Comments'),
+          style: appFontStyle(16, bold: true)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: utRed().withOpacity(0.15),
+            borderRadius: BorderRadius.circular(10)),
+          child: Text('${_comments.length}',
+            style: TextStyle(color: utRed(), fontSize: 12, fontWeight: FontWeight.w700)),
+        ),
+      ]),
+      const SizedBox(height: 14),
+      // Input box
+      if (isLoggedIn) Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(child: TextField(
+          controller: _commentCtrl,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          maxLines: 3, minLines: 1,
+          decoration: InputDecoration(
+            hintText: L('اكتب تعليقاً...', 'Write a comment...'),
+            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+            filled: true, fillColor: Colors.white.withOpacity(0.07),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        )),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: _postingComment ? null : () async {
+            final text = _commentCtrl.text.trim();
+            if (text.isEmpty) return;
+            setState(() => _postingComment = true);
+            final ok = await SupabaseManager.instance.postComment(widget.itemId, text);
+            if (ok) {
+              _commentCtrl.clear();
+              final list = await SupabaseManager.instance.fetchComments(widget.itemId);
+              if (mounted) setState(() { _comments = list; _postingComment = false; });
+            } else {
+              if (mounted) setState(() => _postingComment = false);
+            }
+          },
+          child: Container(
+            width: 42, height: 42,
+            decoration: BoxDecoration(color: utRed(), shape: BoxShape.circle),
+            child: _postingComment
+                ? const Padding(padding: EdgeInsets.all(10),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.send, color: Colors.white, size: 20),
+          ),
+        ),
+      ]) else Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Text(L('سجّل الدخول للتعليق', 'Sign in to comment'),
+          style: const TextStyle(color: Colors.white38, fontSize: 13)),
+      ),
+      const SizedBox(height: 16),
+      // Comments list
+      if (_comments.isEmpty && _commentsLoaded)
+        Center(child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Text(L('لا توجد تعليقات بعد', 'No comments yet'),
+            style: const TextStyle(color: Colors.white38, fontSize: 14)),
+        ))
+      else
+        ..._comments.map((c) => _commentTile(c)),
+    ]);
+  }
+
+  Widget _commentTile(CommentItem c) {
+    final isOwn = AuthSession.instance.user?.id == c.userId;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: utRed().withOpacity(0.2),
+            child: Text(c.displayName.isNotEmpty ? c.displayName[0].toUpperCase() : '?',
+              style: TextStyle(fontSize: 12, color: utRed(), fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(c.displayName,
+            style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600))),
+          if (isOwn) GestureDetector(
+            onTap: () async {
+              final ok = await SupabaseManager.instance.deleteComment(c.id);
+              if (ok && mounted) setState(() => _comments.removeWhere((x) => x.id == c.id));
+            },
+            child: const Icon(Icons.delete_outline, color: Colors.red, size: 16),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text(c.text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
+      ]),
+    );
   }
 
   Widget _episodeTile(MediaDetails d, EpisodeItem ep) {
@@ -4626,33 +4823,23 @@ class _DetailsScreenState extends State<DetailsScreen> {
     );
 
   Future<void> _downloadUrl(String url, {EpisodeItem? ep}) async {
-    if (url.isEmpty) return;
-    final mode = AppSettings.instance.downloadOpenMode;
     final d = _details;
-    if (mode == 'internal' && d != null) {
+    if (d == null) return;
+    final mode = AppSettings.instance.downloadOpenMode;
+    if (mode == 'internal') {
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
-        itemId: widget.itemId,
-        itemTitle: d.title,
-        itemImageUrl: d.imageUrl,
-        isMovie: ep == null,
-        videoUrl: url,
-        videoUrl720: ep?.url720 ?? d.movieUrl720,
-        videoUrl1080: ep?.url1080 ?? d.movieUrl1080,
-        videoUrl360: ep?.url360 ?? d.movieUrl360,
-        videoUrl4k: ep?.url4k ?? d.movieUrl4k,
-        subtitleUrl: ep?.subtitleUrl ?? d.movieSubtitleUrl,
-        subtitleVttUrl: ep?.subtitleVttUrl ?? d.movieSubtitleVttUrl,
-        episodeId: ep?.id ?? widget.itemId,
-        episodeTitle: ep?.title ?? d.title,
-        episodes: ep != null ? d.episodes : const [],
-      )));
-    } else {
-      final uri = Uri.tryParse(url);
-      if (uri == null) return;
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
+      if (ep != null) { _playEpisode(d, ep); } else { _playMovie(d); }
+      return;
+    }
+    if (url.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(L('رابط التحميل غير متاح', 'Download URL not available'))));
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -5087,11 +5274,14 @@ class MoreSettingsView extends StatelessWidget {
 print("✅ settings_screen.dart written")
 
 # ─── lib/screens/account_screen.dart ────────────────────────────────────────
-w("lib/screens/account_screen.dart", r"""import 'package:flutter/material.dart';
+w("lib/screens/account_screen.dart", r"""import 'dart:typed_data';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_session.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/supabase_manager.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watch_progress_store.dart';
@@ -5181,6 +5371,33 @@ class _AccountScreenState extends State<AccountScreen>
       setState(() { _loading = false; _error = result!['error'] as String; });
       return;
     }
+    // Email confirmation required
+    if (result.containsKey('needsConfirmation')) {
+      setState(() => _loading = false);
+      if (!mounted) return;
+      showDialog(context: context, builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.mark_email_read_outlined, color: utRed()),
+          const SizedBox(width: 10),
+          Text(L('تحقق من بريدك', 'Verify your email'),
+            style: const TextStyle(color: Colors.white, fontSize: 16)),
+        ]),
+        content: Text(
+          L('تم إنشاء حسابك بنجاح! تم إرسال رسالة تأكيد إلى بريدك الإلكتروني. يرجى النقر على الرابط في الرسالة لتفعيل حسابك ثم تسجيل الدخول.',
+            'Account created! A confirmation email has been sent. Please click the link in the email to verify your account, then sign in.'),
+          style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+        actions: [
+          TextButton(
+            onPressed: () { Navigator.pop(context); setState(() => _isLogin = true); },
+            child: Text(L('حسناً، انتقل لتسجيل الدخول', 'OK, go to sign in'),
+              style: TextStyle(color: utRed())),
+          ),
+        ],
+      ));
+      return;
+    }
     final userMap = result['user'] as Map<String, dynamic>? ?? {};
     final user = SupabaseUser(
       id: userMap['id'] as String? ?? '',
@@ -5231,41 +5448,14 @@ class _AccountScreenState extends State<AccountScreen>
   Future<void> _doGoogleSignIn() async {
     setState(() { _loading = true; _error = ''; });
     try {
-      final gsi = GoogleSignIn(scopes: ['email', 'profile']);
-      final gUser = await gsi.signIn();
-      if (gUser == null) { setState(() => _loading = false); return; }
-      final gAuth = await gUser.authentication;
-      final idToken = gAuth.idToken;
-      if (idToken == null) {
-        setState(() { _loading = false; _error = L('فشل Google Sign-In', 'Google Sign-In failed'); });
+      final url = SupabaseManager.instance.getOAuthUrl('google');
+      final uri = Uri.parse(url);
+      if (!await canLaunchUrl(uri)) {
+        setState(() { _loading = false; _error = L('تعذر فتح المتصفح', 'Cannot open browser'); });
         return;
       }
-      final sm = SupabaseManager.instance;
-      final result = await sm.signInWithGoogle(idToken: idToken);
-      if (!mounted) return;
-      if (result == null || result.containsKey('error')) {
-        setState(() { _loading = false; _error = result?['error'] ?? L('خطأ', 'Error'); });
-        return;
-      }
-      final userMap = (result['user'] as Map<String, dynamic>? ?? {});
-      final user = SupabaseUser(
-        id: userMap['id'] as String? ?? '',
-        email: userMap['email'] as String?,
-        userMetadata: (userMap['user_metadata'] as Map<String, dynamic>?) ?? {},
-      );
-      await AuthSession.instance.save(
-        accessToken: result['access_token'] as String,
-        refreshToken: result['refresh_token'] as String? ?? '',
-        user: user,
-      );
-      final cloudFavs = await sm.fetchFavorites();
-      if (cloudFavs.isNotEmpty && mounted) context.read<FavoritesStore>().mergeFromCloud(cloudFavs);
-      final cloudProg = await sm.fetchProgress();
-      if (cloudProg.isNotEmpty && mounted) context.read<WatchProgressStore>().mergeFromCloud(cloudProg);
-      final isAdmin = await sm.fetchIsAdmin();
-      AuthSession.instance.setAdmin(isAdmin);
-      if (mounted) context.read<WatchlistStore>().fetchFromCloud();
-      _loadProfile();
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // OAuth callback handled by deep link listener in main.dart (utan://)
       setState(() => _loading = false);
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -5472,9 +5662,11 @@ class _AccountScreenState extends State<AccountScreen>
 
   Future<void> _showEditProfileSheet(BuildContext ctx, String currentName) async {
     final nameCtrl = TextEditingController(text: currentName);
-    final avatarCtrl = TextEditingController(text: _avatarUrl);
     bool saving = false;
     String err = '';
+    String previewUrl = _avatarUrl;
+    List<int>? pickedBytes;
+    String pickedExt = 'jpg';
 
     await showModalBottomSheet(
       context: ctx,
@@ -5489,41 +5681,43 @@ class _AccountScreenState extends State<AccountScreen>
             bottom: MediaQuery.of(bCtx).viewInsets.bottom + 24),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(child: Container(width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.white24,
-                borderRadius: BorderRadius.circular(2)))),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 16),
             Text(L('تعديل الملف الشخصي', 'Edit Profile'),
               style: appFontStyle(18, bold: true)),
             const SizedBox(height: 20),
-            // Avatar preview
-            Center(child: Stack(alignment: Alignment.center, children: [
+            // Avatar preview + pick button
+            Center(child: Stack(alignment: Alignment.bottomRight, children: [
               CircleAvatar(
-                radius: 44,
+                radius: 46,
                 backgroundColor: utRed().withOpacity(0.15),
-                backgroundImage: avatarCtrl.text.isNotEmpty
-                    ? CachedNetworkImageProvider(avatarCtrl.text) : null,
-                child: avatarCtrl.text.isEmpty
+                backgroundImage: pickedBytes != null ? MemoryImage(Uint8List.fromList(pickedBytes!))
+                    : (previewUrl.isNotEmpty ? CachedNetworkImageProvider(previewUrl) : null) as ImageProvider?,
+                child: (pickedBytes == null && previewUrl.isEmpty)
                     ? Text(nameCtrl.text.isNotEmpty ? nameCtrl.text[0].toUpperCase() : '?',
                         style: TextStyle(fontSize: 34, color: utRed(), fontWeight: FontWeight.w700))
                     : null,
               ),
-            ])),
-            const SizedBox(height: 16),
-            // Avatar URL field
-            TextField(
-              controller: avatarCtrl,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              onChanged: (_) => setSt(() {}),
-              decoration: InputDecoration(
-                hintText: L('رابط الصورة (URL)', 'Avatar image URL'),
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-                prefixIcon: const Icon(Icons.image_outlined, color: Colors.white38),
-                filled: true, fillColor: Colors.white.withOpacity(0.07),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              GestureDetector(
+                onTap: () async {
+                  final picker = ImagePicker();
+                  final img = await picker.pickImage(
+                    source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 85);
+                  if (img == null) return;
+                  final bytes = await img.readAsBytes();
+                  final ext = img.name.split('.').last.toLowerCase();
+                  setSt(() { pickedBytes = bytes; pickedExt = ext; });
+                },
+                child: Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(
+                    color: utRed(), shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF1C1C1C), width: 2)),
+                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
+            ])),
+            const SizedBox(height: 18),
             // Display name field
             TextField(
               controller: nameCtrl,
@@ -5549,16 +5743,28 @@ class _AccountScreenState extends State<AccountScreen>
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               onPressed: saving ? null : () async {
                 setSt(() { saving = true; err = ''; });
+                final uid = AuthSession.instance.user?.id;
+                String? finalAvatarUrl = previewUrl;
+                // Upload image if picked
+                if (pickedBytes != null && uid != null) {
+                  final uploaded = await SupabaseManager.instance
+                      .uploadAvatar(uid, pickedBytes!, pickedExt);
+                  if (uploaded != null) {
+                    finalAvatarUrl = uploaded;
+                  } else {
+                    setSt(() { saving = false; err = L('فشل رفع الصورة', 'Image upload failed'); });
+                    return;
+                  }
+                }
                 final newName = nameCtrl.text.trim();
-                final newAvatar = avatarCtrl.text.trim();
                 final ok = await SupabaseManager.instance.updateProfile(
                   displayName: newName.isNotEmpty ? newName : null,
-                  avatarUrl: newAvatar,
+                  avatarUrl: finalAvatarUrl,
                 );
                 if (ok) {
                   if (newName.isNotEmpty) await AuthSession.instance.updateDisplayNameLocal(newName);
-                  await AuthSession.instance.updateAvatarUrl(newAvatar);
-                  if (mounted) setState(() => _avatarUrl = newAvatar);
+                  if (finalAvatarUrl != null) await AuthSession.instance.updateAvatarUrl(finalAvatarUrl);
+                  if (mounted) setState(() => _avatarUrl = finalAvatarUrl ?? '');
                   if (bCtx.mounted) Navigator.pop(bCtx);
                 } else {
                   setSt(() { saving = false; err = L('فشل الحفظ', 'Save failed'); });
@@ -5574,7 +5780,7 @@ class _AccountScreenState extends State<AccountScreen>
         ),
       ),
     );
-    nameCtrl.dispose(); avatarCtrl.dispose();
+    nameCtrl.dispose();
   }
 
   Widget _statCell(String value, String label) => Expanded(
@@ -6040,10 +6246,12 @@ class _MainTabScreenState extends State<MainTabScreen> {
 w("lib/main.dart", r"""import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:app_links/app_links.dart';
 import 'app_settings.dart';
 import 'app_colors.dart';
 import 'services/scraper.dart';
 import 'services/auth_session.dart';
+import 'services/supabase_manager.dart';
 import 'providers/favorites_store.dart';
 import 'providers/watch_progress_store.dart';
 import 'providers/watchlist_store.dart';
@@ -6147,12 +6355,47 @@ class _SplashGate extends StatefulWidget {
 
 class _SplashGateState extends State<_SplashGate> {
   bool _done = false;
+  late final AppLinks _appLinks;
 
   @override void initState() {
     super.initState();
+    _appLinks = AppLinks();
+    _appLinks.uriLinkStream.listen(_handleDeepLink);
+    _appLinks.getInitialLink().then((uri) { if (uri != null) _handleDeepLink(uri); });
     Future.delayed(const Duration(milliseconds: 1600), () {
       if (mounted) setState(() => _done = true);
     });
+  }
+
+  Future<void> _handleDeepLink(Uri uri) async {
+    final fragment = uri.fragment.isNotEmpty ? uri.fragment : uri.query;
+    final params = Uri.splitQueryString(fragment);
+    final accessToken = params['access_token'];
+    final refreshToken = params['refresh_token'] ?? \'\';
+    if (accessToken == null || accessToken.isEmpty) return;
+    try {
+      final sm = SupabaseManager.instance;
+      final info = await sm.getUserFromToken(accessToken);
+      if (info == null) return;
+      final meta = (info[\'user_metadata\'] as Map<String, dynamic>?) ?? {};
+      final user = SupabaseUser(
+        id: info[\'id\'] as String? ?? \'\',
+        email: info[\'email\'] as String?,
+        userMetadata: meta,
+        avatarUrl: meta[\'avatar_url\'] as String? ?? \'\',
+      );
+      await AuthSession.instance.save(
+        accessToken: accessToken, refreshToken: refreshToken, user: user,
+      );
+      final profile = await sm.fetchProfile();
+      if (profile != null) {
+        final av = profile[\'avatar_url\'] as String? ?? \'\';
+        if (av.isNotEmpty) await AuthSession.instance.updateAvatarUrl(av);
+      }
+      final isAdmin = await sm.fetchIsAdmin();
+      AuthSession.instance.setAdmin(isAdmin);
+      WatchlistStore.instance.fetchFromCloud();
+    } catch (_) {}
   }
 
   @override Widget build(BuildContext context) {
@@ -6171,6 +6414,8 @@ print("✅ main.dart + main_tab.dart written")
 # ─── android/app/src/main/AndroidManifest.xml patch helper ─────────────────
 w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
