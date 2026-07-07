@@ -6370,26 +6370,26 @@ class _SplashGateState extends State<_SplashGate> {
   Future<void> _handleDeepLink(Uri uri) async {
     final fragment = uri.fragment.isNotEmpty ? uri.fragment : uri.query;
     final params = Uri.splitQueryString(fragment);
-    final accessToken = params['access_token'];
-    final refreshToken = params['refresh_token'] ?? \'\';
+    final accessToken = params["access_token"];
+    final refreshToken = params["refresh_token"] ?? "";
     if (accessToken == null || accessToken.isEmpty) return;
     try {
       final sm = SupabaseManager.instance;
       final info = await sm.getUserFromToken(accessToken);
       if (info == null) return;
-      final meta = (info[\'user_metadata\'] as Map<String, dynamic>?) ?? {};
+      final meta = (info["user_metadata"] as Map<String, dynamic>?) ?? {};
       final user = SupabaseUser(
-        id: info[\'id\'] as String? ?? \'\',
-        email: info[\'email\'] as String?,
+        id: info["id"] as String? ?? "",
+        email: info["email"] as String?,
         userMetadata: meta,
-        avatarUrl: meta[\'avatar_url\'] as String? ?? \'\',
+        avatarUrl: meta["avatar_url"] as String? ?? "",
       );
       await AuthSession.instance.save(
         accessToken: accessToken, refreshToken: refreshToken, user: user,
       );
       final profile = await sm.fetchProfile();
       if (profile != null) {
-        final av = profile[\'avatar_url\'] as String? ?? \'\';
+        final av = profile["avatar_url"] as String? ?? "";
         if (av.isNotEmpty) await AuthSession.instance.updateAvatarUrl(av);
       }
       final isAdmin = await sm.fetchIsAdmin();
