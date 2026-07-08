@@ -57,7 +57,7 @@ jobs:
 
       - name: Copy generated code + assets
         run: |
-          # lib
+          # Dart source
           rm -rf build_project/lib/*
           cp -r UTan_Flutter/lib/* build_project/lib/
 
@@ -68,29 +68,47 @@ jobs:
           mkdir -p build_project/assets
           cp -r UTan_Flutter/assets/* build_project/assets/
 
-          # Android – full overlay (Manifest, kotlin, res, gradle files)
+          # Android – only Manifest, Kotlin, and res (NOT Gradle files)
           cp UTan_Flutter/android/app/src/main/AndroidManifest.xml \
              build_project/android/app/src/main/AndroidManifest.xml
 
+          mkdir -p build_project/android/app/src/main/kotlin/com/utan/flutter
           cp UTan_Flutter/android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt \
              build_project/android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt 2>/dev/null || true
 
           cp -r UTan_Flutter/android/app/src/main/res/* \
              build_project/android/app/src/main/res/
 
-          cp UTan_Flutter/android/app/build.gradle \
-             build_project/android/app/build.gradle
+      # ── Patch build.gradle ─────────────────────────────────────────────
+      - name: Patch android/app/build.gradle
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib
 
-          cp UTan_Flutter/android/build.gradle \
-             build_project/android/build.gradle
+          p = pathlib.Path('build_project/android/app/build.gradle')
+          lines = p.read_text().splitlines(keepends=True)
+          out = []
+          for line in lines:
+              stripped = line.strip()
+              if stripped.startswith('minSdk') and ('flutter.minSdkVersion' in line or 'minSdkVersion' in line):
+                  indent = line[: len(line) - len(line.lstrip())]
+                  out.append(f'{indent}minSdk 21\n')
+              elif stripped.startswith('compileSdk') and 'flutter.compileSdkVersion' in line and 'ndk' not in line.lower():
+                  indent = line[: len(line) - len(line.lstrip())]
+                  out.append(f'{indent}compileSdk 34\n')
+              elif stripped.startswith('targetSdk') and 'flutter.targetSdkVersion' in line:
+                  indent = line[: len(line) - len(line.lstrip())]
+                  out.append(f'{indent}targetSdk 34\n')
+              else:
+                  out.append(line)
+          p.write_text(''.join(out))
+          print('build.gradle patched:')
+          for l in out:
+              if any(k in l for k in ('minSdk', 'compileSdk', 'targetSdk')):
+                  print(' ', l.rstrip())
+          PYEOF
 
-          cp UTan_Flutter/android/settings.gradle \
-             build_project/android/settings.gradle
-
-          cp UTan_Flutter/android/gradle.properties \
-             build_project/android/gradle.properties
-
-      # ── Widen Dart SDK constraint so pub get never fails ───────────────
+      # ── Widen Dart SDK constraint ──────────────────────────────────────
       - name: Patch pubspec SDK constraint
         run: |
           python3 - << 'PYEOF'
@@ -100,8 +118,7 @@ jobs:
           t = re.sub(r"sdk:\s*['\"]>=3\.\d+\.\d+ <4\.0\.0['\"]",
                      "sdk: '>=3.2.0 <4.0.0'", t)
           p.write_text(t)
-          print('pubspec SDK constraint:',
-                [l for l in t.splitlines() if 'sdk' in l.lower()])
+          print('SDK constraint patched')
           PYEOF
 
       - name: flutter pub get
