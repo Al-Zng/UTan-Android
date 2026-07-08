@@ -1210,6 +1210,7 @@ print("✅ subtitle_parser + auth_session written")
 w("lib/services/supabase_manager.dart", r"""import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import '../models/video_item.dart';
 import '../models/watch_progress.dart';
 import '../models/feedback_item.dart';
 import '../models/comment_item.dart';
