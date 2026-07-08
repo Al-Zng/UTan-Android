@@ -23,7 +23,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  http_parser: ^4.0.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
@@ -81,21 +81,12 @@ TextStyle appFontStyle(double size, {bool bold = false, Color? color}) {
 
 TextStyle subtitleFontStyle(String fontName, double size, {Color? color}) {
   String family;
-  switch (fontName.toLowerCase()) {
-    case 'ibm':
-      family = 'IBMPlexArabic';
-      break;
-    case 'rubik':
-      family = 'Rubik';
-      break;
-    case 'cairo':
-      family = 'Cairo';
-      break;
-    case 'expo':
-      family = 'ExpoArabic';
-      break;
-    default:
-      family = 'Cairo';
+  switch (fontName) {
+    case 'IBMPlexArabic': family = 'IBMPlexArabic'; break;
+    case 'Rubik':         family = 'Rubik';          break;
+    case 'ExpoArabic':    family = 'ExpoArabic';     break;
+    case 'Cairo':
+    default:              family = 'Cairo';
   }
   return TextStyle(
     fontFamily: family,
@@ -1217,9 +1208,8 @@ print("✅ subtitle_parser + auth_session written")
 
 # ─── lib/services/supabase_manager.dart ─────────────────────────────────────
 w("lib/services/supabase_manager.dart", r"""import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import '../models/video_item.dart';
 import '../models/watch_progress.dart';
 import '../models/feedback_item.dart';
 import '../models/comment_item.dart';
@@ -1635,24 +1625,20 @@ class SupabaseManager {
     final token = AuthSession.instance.accessToken;
     if (token == null) return null;
     try {
-      final path = 'avatars/$userId.$ext';
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$_supabaseUrl/storage/v1/object/$path'),
-      )
-        ..headers.addAll({
+      final path = '$userId.$ext';
+      final mime = ext == 'jpg' ? 'image/jpeg' : 'image/$ext';
+      final resp = await http.put(
+        Uri.parse('$_supabaseUrl/storage/v1/object/avatars/$path'),
+        headers: {
           'Authorization': 'Bearer $token',
           'apikey': _anonKey,
+          'Content-Type': mime,
           'x-upsert': 'true',
-        })
-        ..files.add(http.MultipartFile.fromBytes(
-          'file', bytes,
-          filename: '$userId.$ext',
-          contentType: MediaType('image', ext == 'jpg' ? 'jpeg' : ext),
-        ));
-      final resp = await request.send().timeout(const Duration(seconds: 30));
+        },
+        body: Uint8List.fromList(bytes),
+      ).timeout(const Duration(seconds: 30));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        return '$_supabaseUrl/storage/v1/object/public/$path';
+        return '$_supabaseUrl/storage/v1/object/public/avatars/$path?t=${DateTime.now().millisecondsSinceEpoch}';
       }
     } catch (_) {}
     return null;
@@ -2075,35 +2061,19 @@ print("✅ Providers written")
 w("lib/widgets/ut_loader.dart", r"""import 'package:flutter/material.dart';
 import '../app_colors.dart';
 
-class UTanLoader extends StatefulWidget {
+class UTanLoader extends StatelessWidget {
   const UTanLoader({super.key});
-  @override State<UTanLoader> createState() => _UTanLoaderState();
-}
-
-class _UTanLoaderState extends State<UTanLoader>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
-
-  @override void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
-    _anim = Tween(begin: 1.0, end: 0.5).animate(_ctrl);
-  }
-
-  @override void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override Widget build(BuildContext context) {
     return Container(
       color: appBg(),
       child: Center(
-        child: FadeTransition(
-          opacity: _anim,
-          child: Image.asset('assets/images/logo.png', width: 120, height: 120,
-            errorBuilder: (_, __, ___) => Text('UTAN',
-              style: appFontStyle(40, bold: true, color: Colors.white)),
-          ),
+        child: Image.asset(
+          'assets/images/logo.png',
+          width: 130,
+          height: 130,
+          errorBuilder: (_, __, ___) => Text('Era',
+            style: appFontStyle(42, bold: true, color: Colors.white)),
         ),
       ),
     );
@@ -2289,6 +2259,25 @@ class _HeroCarouselState extends State<HeroCarousel> {
                     begin: Alignment.topCenter, end: Alignment.bottomCenter,
                     colors: [Colors.black.withOpacity(0.55), Colors.transparent],
                   ),
+                ),
+              ),
+            ),
+
+            // Logo top-left
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                  child: Row(children: [
+                    Image.asset(
+                      'assets/images/logo.png',
+                      height: 36,
+                      errorBuilder: (_, __, ___) => Text('Era',
+                        style: appFontStyle(22, bold: true, color: Colors.white)),
+                    ),
+                  ]),
                 ),
               ),
             ),
@@ -3023,8 +3012,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Subtitle settings panel
           if (_showSubtitleSettings) _buildSubtitleSettings(),
 
-          // Episode handle
-          if (!widget.isMovie && widget.episodes.isNotEmpty && !_showEpisodes)
+          // Episode handle — visible only with controls, hidden when subtitle settings open
+          if (!widget.isMovie && widget.episodes.isNotEmpty && !_showEpisodes
+              && _showControls && !_showSubtitleSettings)
             _buildEpisodeHandle(),
         ]),
       ),
@@ -3803,7 +3793,10 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: appBg(),
       extendBodyBehindAppBar: true,
       body: scraper.isLoading && scraper.categories.isEmpty
-          ? Center(child: CircularProgressIndicator(color: utRed()))
+          ? Container(
+              color: appBg(),
+              child: Center(child: CircularProgressIndicator(
+                color: utRed(), strokeWidth: 2.5)))
           : RefreshIndicator(
               onRefresh: scraper.refreshHome,
               color: utRed(),
@@ -6285,7 +6278,7 @@ class UTanApp extends StatelessWidget {
       ],
       child: Consumer<AppSettings>(builder: (_, settings, __) {
         return MaterialApp(
-          title: 'UTan',
+          title: 'Era',
           debugShowCheckedModeBanner: false,
           theme: _buildTheme(settings),
           home: const _SplashGate(),
@@ -6424,7 +6417,7 @@ w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http:
         android:maxSdkVersion="32"/>
 
     <application
-        android:label="UTan"
+        android:label="Era"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
@@ -6671,7 +6664,36 @@ print("═" * 60)
 print("\nNext steps:")
 print("  1. cd UTan_Flutter")
 print("  2. flutter pub get")
-print("  3. flutter run     (or 'flutter build apk --release')")
+print("  3. dart run flutter_launcher_icons   ← generates app icon from assets/images/app.jpg")
+print("  4. flutter run     (or 'flutter build apk --release')")
+
+# ── Auto-generate launcher icons if Pillow + app.jpg are available ───────────
+try:
+    from PIL import Image
+    src = os.path.join(BASE, 'assets', 'images', 'app.jpg')
+    if os.path.exists(src):
+        img = Image.open(src).convert('RGB')
+        sizes = {
+            'mipmap-mdpi':     48,
+            'mipmap-hdpi':     72,
+            'mipmap-xhdpi':    96,
+            'mipmap-xxhdpi':  144,
+            'mipmap-xxxhdpi': 192,
+        }
+        res_base = os.path.join(BASE, 'android', 'app', 'src', 'main', 'res')
+        for folder, sz in sizes.items():
+            d = os.path.join(res_base, folder)
+            os.makedirs(d, exist_ok=True)
+            resized = img.resize((sz, sz), Image.LANCZOS)
+            resized.save(os.path.join(d, 'ic_launcher.png'))
+            resized.save(os.path.join(d, 'ic_launcher_round.png'))
+        print("✅ Launcher icons generated from assets/images/app.jpg")
+    else:
+        print("ℹ️  app.jpg not found yet — icons will be generated by 'dart run flutter_launcher_icons' after assets are copied")
+except ImportError:
+    print("ℹ️  Pillow not available — run: pip install Pillow  OR  dart run flutter_launcher_icons")
+except Exception as e:
+    print(f"⚠️  Icon generation skipped: {e}")
 print("\nFonts + images must exist at:")
 print("  UTan_Flutter/assets/fonts/")
 print("  UTan_Flutter/assets/images/")
