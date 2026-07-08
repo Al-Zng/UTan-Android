@@ -26,6 +26,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Python deps
+        run: pip install Pillow
+
       - name: Generate Flutter project
         run: python generate_flutter_utan.py
 
@@ -36,6 +39,8 @@ jobs:
           if [ -d "UTan_Flutter" ]; then
             echo "=== UTan_Flutter/lib ==="
             find UTan_Flutter/lib -type f | sort
+            echo "=== UTan_Flutter/android ==="
+            find UTan_Flutter/android -type f | sort
           else
             echo "UTan_Flutter directory NOT found!"
             exit 1
@@ -52,43 +57,38 @@ jobs:
 
       - name: Copy generated code + assets
         run: |
+          # lib
           rm -rf build_project/lib/*
-          cp -r UTan_Flutter/lib/*         build_project/lib/
-          cp    UTan_Flutter/pubspec.yaml  build_project/pubspec.yaml
+          cp -r UTan_Flutter/lib/* build_project/lib/
+
+          # pubspec
+          cp UTan_Flutter/pubspec.yaml build_project/pubspec.yaml
+
+          # assets
           mkdir -p build_project/assets
-          cp -r UTan_Flutter/assets/*      build_project/assets/
+          cp -r UTan_Flutter/assets/* build_project/assets/
 
-      # ── Patch build.gradle: line-by-line, no cross-line regex ──────────
-      - name: Patch android/app/build.gradle
-        run: |
-          python3 - << 'PYEOF'
-          import pathlib
+          # Android – full overlay (Manifest, kotlin, res, gradle files)
+          cp UTan_Flutter/android/app/src/main/AndroidManifest.xml \
+             build_project/android/app/src/main/AndroidManifest.xml
 
-          p = pathlib.Path('build_project/android/app/build.gradle')
-          lines = p.read_text().splitlines(keepends=True)
-          out = []
-          for line in lines:
-              stripped = line.strip()
-              # minSdk – must be 21+ for video_player
-              if stripped.startswith('minSdk') and ('flutter.minSdkVersion' in line or 'minSdkVersion' in line):
-                  indent = line[: len(line) - len(line.lstrip())]
-                  out.append(f'{indent}minSdk 21\n')
-              # compileSdk
-              elif stripped.startswith('compileSdk') and 'flutter.compileSdkVersion' in line and 'ndk' not in line.lower():
-                  indent = line[: len(line) - len(line.lstrip())]
-                  out.append(f'{indent}compileSdk 34\n')
-              # targetSdk
-              elif stripped.startswith('targetSdk') and 'flutter.targetSdkVersion' in line:
-                  indent = line[: len(line) - len(line.lstrip())]
-                  out.append(f'{indent}targetSdk 34\n')
-              else:
-                  out.append(line)
-          p.write_text(''.join(out))
-          print('build.gradle patched:')
-          for l in out:
-              if any(k in l for k in ('minSdk', 'compileSdk', 'targetSdk')):
-                  print(' ', l.rstrip())
-          PYEOF
+          cp UTan_Flutter/android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt \
+             build_project/android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt 2>/dev/null || true
+
+          cp -r UTan_Flutter/android/app/src/main/res/* \
+             build_project/android/app/src/main/res/
+
+          cp UTan_Flutter/android/app/build.gradle \
+             build_project/android/app/build.gradle
+
+          cp UTan_Flutter/android/build.gradle \
+             build_project/android/build.gradle
+
+          cp UTan_Flutter/android/settings.gradle \
+             build_project/android/settings.gradle
+
+          cp UTan_Flutter/android/gradle.properties \
+             build_project/android/gradle.properties
 
       # ── Widen Dart SDK constraint so pub get never fails ───────────────
       - name: Patch pubspec SDK constraint
@@ -97,7 +97,6 @@ jobs:
           import pathlib, re
           p = pathlib.Path('build_project/pubspec.yaml')
           t = p.read_text()
-          # Replace any >=3.x.y floor with >=3.2.0 so it works on Dart 3.2+
           t = re.sub(r"sdk:\s*['\"]>=3\.\d+\.\d+ <4\.0\.0['\"]",
                      "sdk: '>=3.2.0 <4.0.0'", t)
           p.write_text(t)
@@ -105,25 +104,13 @@ jobs:
                 [l for l in t.splitlines() if 'sdk' in l.lower()])
           PYEOF
 
-      # ── Ensure INTERNET permission is present ──────────────────────────
-      - name: Patch AndroidManifest – INTERNET permission
-        run: |
-          python3 - << 'PYEOF'
-          import pathlib
-          p = pathlib.Path('build_project/android/app/src/main/AndroidManifest.xml')
-          t = p.read_text()
-          perm = '<uses-permission android:name="android.permission.INTERNET"/>'
-          if perm not in t:
-              t = t.replace('<application', f'{perm}\n    <application', 1)
-              p.write_text(t)
-              print('INTERNET permission injected')
-          else:
-              print('INTERNET permission already present')
-          PYEOF
-
       - name: flutter pub get
         working-directory: ./build_project
         run: flutter pub get
+
+      - name: Generate launcher icons
+        working-directory: ./build_project
+        run: dart run flutter_launcher_icons
 
       - name: Build release APK
         working-directory: ./build_project
