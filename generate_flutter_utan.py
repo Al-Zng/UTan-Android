@@ -23,7 +23,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
@@ -677,9 +677,13 @@ import '../models/media_details.dart';
 import '../models/episode_item.dart';
 
 const String _baseUrl = 'https://movie.vodu.me/';
+const String _proxyUrl = 'https://proxy.kuro-pq9.workers.dev/?url=';
 const String _userAgent =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
+// Wrap any URL through Cloudflare proxy to bypass geo-restrictions
+String _proxied(String url) => '$_proxyUrl${Uri.encodeComponent(url)}';
 
 String _optimizeImageUrl(String url, {int w = 400, int h = 600}) {
   if (url.contains('w=750') || url.contains('h=388')) return url;
@@ -704,7 +708,7 @@ class MovieScraper extends ChangeNotifier {
     notifyListeners();
     try {
       final resp = await http.get(
-        Uri.parse('${_baseUrl}index.php'),
+        Uri.parse(_proxied('${_baseUrl}index.php')),
         headers: {'User-Agent': _userAgent},
       ).timeout(const Duration(seconds: 20));
       if (resp.statusCode == 200) {
@@ -737,7 +741,7 @@ class MovieScraper extends ChangeNotifier {
     if (genre != null && genre.isNotEmpty) urlStr += '&genre=$genre';
     try {
       final resp = await http.get(
-        Uri.parse(urlStr),
+        Uri.parse(_proxied(urlStr)),
         headers: {'User-Agent': _userAgent},
       ).timeout(const Duration(seconds: 20));
       if (resp.statusCode == 200) {
@@ -768,7 +772,7 @@ class MovieScraper extends ChangeNotifier {
     if (language != null && language.isNotEmpty) params['language'] = language;
     if (director != null && director.isNotEmpty) params['director'] = director;
     if (imdbrate != null && imdbrate.isNotEmpty) params['imdbrate'] = imdbrate;
-    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
+    final uri = Uri.parse(_proxied(_baseUrl + 'index.php')).replace(queryParameters: params);
     try {
       final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
           .timeout(const Duration(seconds: 20));
@@ -782,7 +786,7 @@ class MovieScraper extends ChangeNotifier {
   Future<List<VideoItem>> searchItems(String query) async {
     if (query.trim().isEmpty) return [];
     final params = <String, String>{'do': 'list', 'title': query.trim()};
-    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
+    final uri = Uri.parse(_proxied(_baseUrl + 'index.php')).replace(queryParameters: params);
     try {
       final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
           .timeout(const Duration(seconds: 20));
@@ -796,7 +800,7 @@ class MovieScraper extends ChangeNotifier {
   Future<MediaDetails> fetchDetails(String id) async {
     try {
       final resp = await http.get(
-        Uri.parse('${_baseUrl}index.php?do=view&type=post&id=$id'),
+        Uri.parse(_proxied('${_baseUrl}index.php?do=view&type=post&id=$id')),
         headers: {'User-Agent': _userAgent},
       ).timeout(const Duration(seconds: 25));
       if (resp.statusCode == 200) {
@@ -928,6 +932,19 @@ MediaDetails _parseDetails(String html) {
     final epTitle = extract(r'data-title="([^"]*)"', block);
     final epUrl   = extract(r'data-url="([^"]*)"', block);
     if (epUrl.isEmpty) continue;
+    // Auto-detect season from title: S01E01, S1E1, الموسم 1, Season 1
+    String epSeason = '';
+    final sMatch = RegExp(r'[Ss](\d{1,2})[Ee]\d{1,3}').firstMatch(epTitle);
+    if (sMatch != null) {
+      epSeason = 'S${sMatch.group(1)!.padLeft(2, '0')}';
+    } else {
+      final arMatch = RegExp(r'الموسم\s*(\d+)').firstMatch(epTitle);
+      if (arMatch != null) epSeason = 'S${arMatch.group(1)!.padLeft(2, '0')}';
+      else {
+        final enMatch = RegExp(r'[Ss]eason\s*(\d+)').firstMatch(epTitle);
+        if (enMatch != null) epSeason = 'S${enMatch.group(1)!.padLeft(2, '0')}';
+      }
+    }
     episodes.add(EpisodeItem(
       id: epId,
       title: epTitle.isEmpty ? 'الحلقة ${episodes.length + 1}' : epTitle,
@@ -938,6 +955,7 @@ MediaDetails _parseDetails(String html) {
       url4k:   extract(r'data-url4k="([^"]*)"', block),
       subtitleUrl:    extract(r'data-srt="([^"]*)"', block),
       subtitleVttUrl: extract(r'data-webvtt="([^"]*)"', block),
+      season: epSeason,
     ));
   }
 
@@ -2283,43 +2301,43 @@ class _HeroCarouselState extends State<HeroCarousel> {
               ),
             ),
 
-            // Bottom cinematic triple-fade
+            // Bottom cinematic triple-fade (tinted with theme color)
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Container(height: 80,
                   decoration: BoxDecoration(gradient: LinearGradient(
                     begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.15)],
+                    colors: [Colors.transparent, utRed().withOpacity(0.08)],
                   )),
                 ),
                 Container(height: 120,
                   decoration: BoxDecoration(gradient: LinearGradient(
                     begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.15), Colors.black.withOpacity(0.65)],
+                    colors: [utRed().withOpacity(0.08), appBg().withOpacity(0.75)],
                   )),
                 ),
                 Container(height: 100,
                   decoration: BoxDecoration(gradient: LinearGradient(
                     begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.65), Colors.black],
+                    colors: [appBg().withOpacity(0.75), appBg()],
                   )),
                 ),
-                Container(height: 30, color: Colors.black),
+                Container(height: 30, color: appBg()),
               ]),
             ),
 
-            // Left-aligned content — Apple TV signature
+            // Centered content
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 22),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Type pill
-                    Row(children: [
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       Text(
                         item.type == 'series'
                           ? L('مسلسل', 'SERIES') : L('فيلم', 'FILM'),
@@ -5271,6 +5289,7 @@ print("✅ settings_screen.dart written")
 w("lib/screens/account_screen.dart", r"""import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../services/auth_session.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -5442,16 +5461,12 @@ class _AccountScreenState extends State<AccountScreen>
   Future<void> _doGoogleSignIn() async {
     setState(() { _loading = true; _error = ''; });
     try {
-      final url = SupabaseManager.instance.getOAuthUrl('google');
-      final uri = Uri.parse(url);
-      if (!await canLaunchUrl(uri)) {
-        setState(() { _loading = false; _error = L('تعذر فتح المتصفح', 'Cannot open browser'); });
-        return;
-      }
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      // OAuth callback handled by deep link listener in main.dart (utan://)
+      final oauthUrl = SupabaseManager.instance.getOAuthUrl('google');
+      if (!mounted) return;
+      final result = await Navigator.push<bool>(context,
+        MaterialPageRoute(builder: (_) => _OAuthWebView(url: oauthUrl)));
       setState(() => _loading = false);
-      if (mounted) Navigator.pop(context);
+      if (result == true && mounted) Navigator.pop(context);
     } catch (e) {
       setState(() { _loading = false; _error = e.toString(); });
     }
@@ -5746,8 +5761,49 @@ class _AccountScreenState extends State<AccountScreen>
                   if (uploaded != null) {
                     finalAvatarUrl = uploaded;
                   } else {
-                    setSt(() { saving = false; err = L('فشل رفع الصورة', 'Image upload failed'); });
-                    return;
+                    // Upload failed — ask user for URL instead
+                    setSt(() { saving = false; });
+                    if (!bCtx.mounted) return;
+                    final urlCtrl = TextEditingController();
+                    final manualUrl = await showDialog<String>(
+                      context: bCtx,
+                      builder: (dCtx) => AlertDialog(
+                        backgroundColor: const Color(0xFF1C1C1C),
+                        title: Text(L('تعذر رفع الصورة', 'Upload failed'),
+                          style: const TextStyle(color: Colors.white, fontSize: 16)),
+                        content: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(L('أدخل رابط الصورة يدوياً', 'Enter image URL manually'),
+                            style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: urlCtrl, autofocus: true,
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'https://',
+                              hintStyle: const TextStyle(color: Colors.white38),
+                              filled: true, fillColor: Colors.white12,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide.none)),
+                          ),
+                        ]),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dCtx),
+                            child: Text(L('إلغاء', 'Cancel'),
+                              style: const TextStyle(color: Colors.white54))),
+                          TextButton(
+                            onPressed: () => Navigator.pop(dCtx, urlCtrl.text.trim()),
+                            child: Text(L('حفظ', 'Save'),
+                              style: TextStyle(color: utRed()))),
+                        ],
+                      ),
+                    );
+                    if (manualUrl != null && manualUrl.isNotEmpty) {
+                      finalAvatarUrl = manualUrl;
+                    } else {
+                      return; // user cancelled
+                    }
+                    setSt(() { saving = true; });
                   }
                 }
                 final newName = nameCtrl.text.trim();
@@ -5901,6 +5957,94 @@ class _AccountScreenState extends State<AccountScreen>
       title: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
       subtitle: Text(value, style: const TextStyle(color: Colors.white, fontSize: 15)),
     );
+
+// ── In-app OAuth WebView ─────────────────────────────────────────────────────
+class _OAuthWebView extends StatefulWidget {
+  final String url;
+  const _OAuthWebView({required this.url});
+  @override State<_OAuthWebView> createState() => _OAuthWebViewState();
+}
+
+class _OAuthWebViewState extends State<_OAuthWebView> {
+  late final WebViewController _ctrl;
+  bool _loading = true;
+
+  @override void initState() {
+    super.initState();
+    _ctrl = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFF0D0D0D))
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (url) {
+          if (!url.startsWith('utan://')) return;
+          final uri = Uri.tryParse(url.replaceFirst('utan://', 'https://callback/'));
+          if (uri == null) return;
+          final params = Uri.splitQueryString(
+            uri.fragment.isNotEmpty ? uri.fragment : uri.query);
+          final accessToken = params['access_token'];
+          final refreshToken = params['refresh_token'] ?? '';
+          if (accessToken != null && accessToken.isNotEmpty) {
+            _handleTokens(accessToken, refreshToken);
+          }
+        },
+        onPageFinished: (_) => setState(() => _loading = false),
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  Future<void> _handleTokens(String accessToken, String refreshToken) async {
+    try {
+      final sm = SupabaseManager.instance;
+      final info = await sm.getUserFromToken(accessToken);
+      if (info == null) return;
+      final meta = (info['user_metadata'] as Map<String, dynamic>?) ?? {};
+      final user = SupabaseUser(
+        id: info['id'] as String? ?? '',
+        email: info['email'] as String?,
+        userMetadata: meta,
+        avatarUrl: meta['avatar_url'] as String? ?? '',
+      );
+      await AuthSession.instance.save(
+        accessToken: accessToken, refreshToken: refreshToken, user: user);
+      final cloudFavs = await sm.fetchFavorites();
+      if (cloudFavs.isNotEmpty) FavoritesStore.instance.mergeFromCloud(cloudFavs);
+      final cloudProg = await sm.fetchProgress();
+      if (cloudProg.isNotEmpty) WatchProgressStore.instance.mergeFromCloud(cloudProg);
+      final profile = await sm.fetchProfile();
+      if (profile != null) {
+        final av = profile['avatar_url'] as String? ?? '';
+        if (av.isNotEmpty) await AuthSession.instance.updateAvatarUrl(av);
+      }
+      final isAdmin = await sm.fetchIsAdmin();
+      AuthSession.instance.setAdmin(isAdmin);
+      WatchlistStore.instance.fetchFromCloud();
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) Navigator.pop(context, false);
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D0D),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0D0D0D),
+        foregroundColor: Colors.white,
+        title: const Text('تسجيل الدخول بـ Google',
+          style: TextStyle(fontSize: 16, color: Colors.white)),
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context, false),
+        ),
+      ),
+      body: Stack(children: [
+        WebViewWidget(controller: _ctrl),
+        if (_loading) const Center(child: CircularProgressIndicator(color: Colors.red)),
+      ]),
+    );
+  }
+}
+
 }
 """)
 print("✅ account_screen.dart written")
@@ -6279,9 +6423,16 @@ class UTanApp extends StatelessWidget {
       ],
       child: Consumer<AppSettings>(builder: (_, settings, __) {
         return MaterialApp(
+          key: ValueKey('${settings.appThemeColor}-${settings.appLanguage}'),
           title: 'Era',
           debugShowCheckedModeBanner: false,
           theme: _buildTheme(settings),
+          locale: Locale(settings.appLanguage),
+          builder: (_, child) => Directionality(
+            textDirection: settings.appLanguage == 'ar'
+                ? TextDirection.rtl : TextDirection.ltr,
+            child: child!,
+          ),
           home: const _SplashGate(),
         );
       }),
@@ -6381,6 +6532,16 @@ class _SplashGateState extends State<_SplashGate> {
       await AuthSession.instance.save(
         accessToken: accessToken, refreshToken: refreshToken, user: user,
       );
+      // Sync all cloud data — same as email login
+      final cloudFavs = await sm.fetchFavorites();
+      if (cloudFavs.isNotEmpty) {
+        // ignore: use_build_context_synchronously
+        FavoritesStore.instance.mergeFromCloud(cloudFavs);
+      }
+      final cloudProg = await sm.fetchProgress();
+      if (cloudProg.isNotEmpty) {
+        WatchProgressStore.instance.mergeFromCloud(cloudProg);
+      }
       final profile = await sm.fetchProfile();
       if (profile != null) {
         final av = profile["avatar_url"] as String? ?? "";
