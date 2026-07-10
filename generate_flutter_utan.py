@@ -5286,6 +5286,101 @@ class MoreSettingsView extends StatelessWidget {
 print("✅ settings_screen.dart written")
 
 # ─── lib/screens/account_screen.dart ────────────────────────────────────────
+
+# ─── lib/screens/oauth_webview_screen.dart ─────────────────────────────────
+w("lib/screens/oauth_webview_screen.dart", r"""import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import '../services/auth_session.dart';
+import '../services/supabase_manager.dart';
+import '../providers/favorites_store.dart';
+import '../providers/watch_progress_store.dart';
+import '../providers/watchlist_store.dart';
+
+class OAuthWebViewScreen extends StatefulWidget {
+  final String url;
+  const OAuthWebViewScreen({super.key, required this.url});
+  @override State<OAuthWebViewScreen> createState() => _OAuthWebViewScreenState();
+}
+
+class _OAuthWebViewScreenState extends State<OAuthWebViewScreen> {
+  late final WebViewController _ctrl;
+  bool _loading = true;
+
+  @override void initState() {
+    super.initState();
+    _ctrl = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFF0D0D0D))
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (url) {
+          if (!url.startsWith('utan://')) return;
+          final uri = Uri.tryParse(url.replaceFirst('utan://', 'https://x/'));
+          if (uri == null) return;
+          final params = Uri.splitQueryString(
+              uri.fragment.isNotEmpty ? uri.fragment : uri.query);
+          final at = params['access_token'];
+          final rt = params['refresh_token'] ?? '';
+          if (at != null && at.isNotEmpty) _handleTokens(at, rt);
+        },
+        onPageFinished: (_) => setState(() => _loading = false),
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  Future<void> _handleTokens(String at, String rt) async {
+    try {
+      final sm = SupabaseManager.instance;
+      final info = await sm.getUserFromToken(at);
+      if (info == null) return;
+      final meta = (info['user_metadata'] as Map<String, dynamic>?) ?? {};
+      final user = SupabaseUser(
+        id: info['id'] as String? ?? '',
+        email: info['email'] as String?,
+        userMetadata: meta,
+        avatarUrl: meta['avatar_url'] as String? ?? '',
+      );
+      await AuthSession.instance.save(accessToken: at, refreshToken: rt, user: user);
+      final favs = await sm.fetchFavorites();
+      if (favs.isNotEmpty) FavoritesStore.instance.mergeFromCloud(favs);
+      final prog = await sm.fetchProgress();
+      if (prog.isNotEmpty) WatchProgressStore.instance.mergeFromCloud(prog);
+      final profile = await sm.fetchProfile();
+      if (profile != null) {
+        final av = profile['avatar_url'] as String? ?? '';
+        if (av.isNotEmpty) await AuthSession.instance.updateAvatarUrl(av);
+      }
+      AuthSession.instance.setAdmin(await sm.fetchIsAdmin());
+      WatchlistStore.instance.fetchFromCloud();
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) Navigator.pop(context, false);
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D0D),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0D0D0D),
+        foregroundColor: Colors.white,
+        title: const Text('Google',
+            style: TextStyle(fontSize: 16, color: Colors.white)),
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context, false),
+        ),
+      ),
+      body: Stack(children: [
+        WebViewWidget(controller: _ctrl),
+        if (_loading) const Center(
+            child: CircularProgressIndicator(color: Colors.red)),
+      ]),
+    );
+  }
+}
+""")
+print("✅ oauth_webview_screen.dart written")
+
 w("lib/screens/account_screen.dart", r"""import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -5299,6 +5394,7 @@ import '../services/supabase_manager.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watch_progress_store.dart';
 import '../providers/watchlist_store.dart';
+import 'oauth_webview_screen.dart';
 
 import 'details_screen.dart';
 import '../app_colors.dart';
@@ -5464,7 +5560,7 @@ class _AccountScreenState extends State<AccountScreen>
       final oauthUrl = SupabaseManager.instance.getOAuthUrl('google');
       if (!mounted) return;
       final result = await Navigator.push<bool>(context,
-        MaterialPageRoute(builder: (_) => _OAuthWebView(url: oauthUrl)));
+        MaterialPageRoute(builder: (_) => OAuthWebViewScreen(url: oauthUrl)));
       setState(() => _loading = false);
       if (result == true && mounted) Navigator.pop(context);
     } catch (e) {
@@ -5958,94 +6054,6 @@ class _AccountScreenState extends State<AccountScreen>
       subtitle: Text(value, style: const TextStyle(color: Colors.white, fontSize: 15)),
     );
 
-}
-
-
-// ── In-app OAuth WebView ─────────────────────────────────────────────────────
-class _OAuthWebView extends StatefulWidget {
-  final String url;
-  const _OAuthWebView({required this.url});
-  @override State<_OAuthWebView> createState() => _OAuthWebViewState();
-}
-
-class _OAuthWebViewState extends State<_OAuthWebView> {
-  late final WebViewController _ctrl;
-  bool _loading = true;
-
-  @override void initState() {
-    super.initState();
-    _ctrl = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFF0D0D0D))
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (url) {
-          if (!url.startsWith('utan://')) return;
-          final uri = Uri.tryParse(url.replaceFirst('utan://', 'https://callback/'));
-          if (uri == null) return;
-          final params = Uri.splitQueryString(
-            uri.fragment.isNotEmpty ? uri.fragment : uri.query);
-          final accessToken = params['access_token'];
-          final refreshToken = params['refresh_token'] ?? '';
-          if (accessToken != null && accessToken.isNotEmpty) {
-            _handleTokens(accessToken, refreshToken);
-          }
-        },
-        onPageFinished: (_) => setState(() => _loading = false),
-      ))
-      ..loadRequest(Uri.parse(widget.url));
-  }
-
-  Future<void> _handleTokens(String accessToken, String refreshToken) async {
-    try {
-      final sm = SupabaseManager.instance;
-      final info = await sm.getUserFromToken(accessToken);
-      if (info == null) return;
-      final meta = (info['user_metadata'] as Map<String, dynamic>?) ?? {};
-      final user = SupabaseUser(
-        id: info['id'] as String? ?? '',
-        email: info['email'] as String?,
-        userMetadata: meta,
-        avatarUrl: meta['avatar_url'] as String? ?? '',
-      );
-      await AuthSession.instance.save(
-        accessToken: accessToken, refreshToken: refreshToken, user: user);
-      final cloudFavs = await sm.fetchFavorites();
-      if (cloudFavs.isNotEmpty) FavoritesStore.instance.mergeFromCloud(cloudFavs);
-      final cloudProg = await sm.fetchProgress();
-      if (cloudProg.isNotEmpty) WatchProgressStore.instance.mergeFromCloud(cloudProg);
-      final profile = await sm.fetchProfile();
-      if (profile != null) {
-        final av = profile['avatar_url'] as String? ?? '';
-        if (av.isNotEmpty) await AuthSession.instance.updateAvatarUrl(av);
-      }
-      final isAdmin = await sm.fetchIsAdmin();
-      AuthSession.instance.setAdmin(isAdmin);
-      WatchlistStore.instance.fetchFromCloud();
-      if (mounted) Navigator.pop(context, true);
-    } catch (_) {
-      if (mounted) Navigator.pop(context, false);
-    }
-  }
-
-  @override Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D0D),
-        foregroundColor: Colors.white,
-        title: const Text('تسجيل الدخول بـ Google',
-          style: TextStyle(fontSize: 16, color: Colors.white)),
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context, false),
-        ),
-      ),
-      body: Stack(children: [
-        WebViewWidget(controller: _ctrl),
-        if (_loading) const Center(child: CircularProgressIndicator(color: Colors.red)),
-      ]),
-    );
-  }
 }
 """)
 print("✅ account_screen.dart written")
