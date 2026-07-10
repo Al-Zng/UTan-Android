@@ -6860,8 +6860,7 @@ except Exception as e:
 print("\nFonts + images must exist at:")
 print("  UTan_Flutter/assets/fonts/")
 print("  UTan_Flutter/assets/images/")
-"""
-ort os, sys
+import os, sys
 
 BASE = "UTan_Flutter"
 DIRS = [
