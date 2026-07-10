@@ -677,13 +677,9 @@ import '../models/media_details.dart';
 import '../models/episode_item.dart';
 
 const String _baseUrl = 'https://movie.vodu.me/';
-const String _proxyUrl = 'https://proxy.kuro-pq9.workers.dev/?url=';
 const String _userAgent =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
-
-// Wrap any URL through Cloudflare proxy to bypass geo-restrictions
-String _proxied(String url) => '$_proxyUrl${Uri.encodeComponent(url)}';
 
 String _optimizeImageUrl(String url, {int w = 400, int h = 600}) {
   if (url.contains('w=750') || url.contains('h=388')) return url;
@@ -708,7 +704,7 @@ class MovieScraper extends ChangeNotifier {
     notifyListeners();
     try {
       final resp = await http.get(
-        Uri.parse(_proxied('${_baseUrl}index.php')),
+        Uri.parse('${_baseUrl}index.php'),
         headers: {'User-Agent': _userAgent},
       ).timeout(const Duration(seconds: 20));
       if (resp.statusCode == 200) {
@@ -741,7 +737,7 @@ class MovieScraper extends ChangeNotifier {
     if (genre != null && genre.isNotEmpty) urlStr += '&genre=$genre';
     try {
       final resp = await http.get(
-        Uri.parse(_proxied(urlStr)),
+        Uri.parse(urlStr),
         headers: {'User-Agent': _userAgent},
       ).timeout(const Duration(seconds: 20));
       if (resp.statusCode == 200) {
@@ -772,7 +768,7 @@ class MovieScraper extends ChangeNotifier {
     if (language != null && language.isNotEmpty) params['language'] = language;
     if (director != null && director.isNotEmpty) params['director'] = director;
     if (imdbrate != null && imdbrate.isNotEmpty) params['imdbrate'] = imdbrate;
-    final uri = Uri.parse(_proxied(_baseUrl + 'index.php')).replace(queryParameters: params);
+    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
     try {
       final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
           .timeout(const Duration(seconds: 20));
@@ -786,7 +782,7 @@ class MovieScraper extends ChangeNotifier {
   Future<List<VideoItem>> searchItems(String query) async {
     if (query.trim().isEmpty) return [];
     final params = <String, String>{'do': 'list', 'title': query.trim()};
-    final uri = Uri.parse(_proxied(_baseUrl + 'index.php')).replace(queryParameters: params);
+    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
     try {
       final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
           .timeout(const Duration(seconds: 20));
@@ -800,7 +796,7 @@ class MovieScraper extends ChangeNotifier {
   Future<MediaDetails> fetchDetails(String id) async {
     try {
       final resp = await http.get(
-        Uri.parse(_proxied('${_baseUrl}index.php?do=view&type=post&id=$id')),
+        Uri.parse('${_baseUrl}index.php?do=view&type=post&id=$id'),
         headers: {'User-Agent': _userAgent},
       ).timeout(const Duration(seconds: 25));
       if (resp.statusCode == 200) {
