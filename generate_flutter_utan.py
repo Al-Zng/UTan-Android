@@ -1059,7 +1059,7 @@ class SubtitleParser {
     var clean = url;
     if (!clean.startsWith('http')) clean = 'https://movie.vodu.me/$clean';
     try {
-      final resp = await http.get(Uri.parse(url))
+      final resp = await http.get(Uri.parse(clean))
           .timeout(const Duration(seconds: 15));
       if (resp.statusCode != 200) return [];
       // Force UTF-8 decode to fix Arabic garbling
@@ -2203,12 +2203,15 @@ class DownloadStore extends ChangeNotifier {
       if (!await dir.exists()) await dir.create(recursive: true);
       return custom;
     }
-    // Android: use public Downloads/UTan so files are visible in Files app
+    // Android: use app-specific external storage (visible in Files, no permission needed)
     if (Platform.isAndroid) {
-      final dir = Directory('/storage/emulated/0/Download/UTan');
       try {
-        if (!await dir.exists()) await dir.create(recursive: true);
-        return dir.path;
+        final ext = await getExternalStorageDirectory();
+        if (ext != null) {
+          final dir = Directory('${ext.path}/UTanDownloads');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          return dir.path;
+        }
       } catch (_) {}
     }
     final base = await getApplicationDocumentsDirectory();
@@ -2220,7 +2223,7 @@ class DownloadStore extends ChangeNotifier {
   String get currentDownloadsDir {
     final custom = AppSettings.instance.downloadPath;
     if (custom.isNotEmpty) return custom;
-    if (Platform.isAndroid) return '/storage/emulated/0/Download/UTan';
+    if (Platform.isAndroid) return 'Android/data/<pkg>/files/UTanDownloads';
     return '';
   }
 
@@ -3016,7 +3019,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     _currentEpisodeId = widget.episodeId;
     _currentEpisodeTitle = widget.episodeTitle;
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight,
     ]);
@@ -3073,7 +3076,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _scheduleHide();
       _startSaveTimer();
     } catch (e) {
-      setState(() { _errorMessage = 'تعذر تشغيل الفيديو. تحقق من اتصالك بالإنترنت.'; _isBuffering = false; });
+      final isLocal = url.startsWith('/') || url.startsWith('file://');
+      setState(() {
+        _errorMessage = isLocal
+            ? 'تعذر تشغيل الملف المحلي. قد يكون التحميل لم يكتمل.'
+            : 'تعذر تشغيل الفيديو. تحقق من اتصالك بالإنترنت.';
+        _isBuffering = false;
+      });
     }
   }
 
@@ -3094,6 +3103,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _updateSubtitle();
   }
 
+  // iOS-style cursor-based subtitle lookup (O(1) amortized)
+  int _subtitleCursor = 0;
+
   void _updateSubtitle() {
     if (!AppSettings.instance.subtitlesEnabled || _cues.isEmpty) {
       if (_activeSub.isNotEmpty || _activeTopSub.isNotEmpty) {
@@ -3103,11 +3115,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     final delay = AppSettings.instance.subtitleDelay;
     final t = _currentTime - delay;
-    final active = _cues.where((c) => t >= c.startTime && t <= c.endTime).toList();
+    _lookupSubtitle(t);
+  }
+
+  void _lookupSubtitle(double t) {
+    if (_cues.isEmpty) return;
+    if (_subtitleCursor >= _cues.length) _subtitleCursor = _cues.length - 1;
+    // Advance cursor forward
+    while (_subtitleCursor < _cues.length - 1 && _cues[_subtitleCursor].endTime < t) {
+      _subtitleCursor++;
+    }
+    // Binary search backward if current cursor is past the time
+    if (_cues[_subtitleCursor].startTime > t) {
+      int lo = 0, hi = _subtitleCursor;
+      while (lo < hi) {
+        final mid = (lo + hi) ~/ 2;
+        if (_cues[mid].endTime < t) lo = mid + 1; else hi = mid;
+      }
+      _subtitleCursor = lo;
+    }
+    // Collect active cues in a small window around cursor
+    final windowStart = (_subtitleCursor - 3).clamp(0, _cues.length - 1);
+    final windowEnd   = (_subtitleCursor + 3).clamp(0, _cues.length - 1);
+    final active = <SubtitleCue>[];
+    for (int i = windowStart; i <= windowEnd; i++) {
+      if (t >= _cues[i].startTime && t <= _cues[i].endTime) active.add(_cues[i]);
+    }
     String bot = '', top = '';
     if (active.length == 1) { bot = active[0].text; }
-    else if (active.length >= 2) { top = active[0].text; bot = active[1].text; }
-    setState(() { _activeSub = bot; _activeTopSub = top; });
+    else if (active.length >= 2) { top = active[0].text; bot = active.last.text; }
+    if (bot != _activeSub || top != _activeTopSub) {
+      setState(() { _activeSub = bot; _activeTopSub = top; });
+    }
   }
 
   Future<void> _loadSubtitles() async {
@@ -3152,8 +3191,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _vpc?.dispose();
     _vpc = null;
     _cues = [];
+    _subtitleCursor = 0;
     _activeSub = ''; _activeTopSub = '';
     _isFinished = false; _showUpNext = false;
+    _episodesRailOffset = 0;
     _currentEpisodeId = ep.id;
     _currentEpisodeTitle = ep.title;
     setState(() { _showEpisodes = false; _isBuffering = true; });
@@ -3326,7 +3367,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       onVerticalDragUpdate: (d) {
         if (_isLocked) return;
         final x = d.localPosition.dx;
-        final w = MediaQuery.of(context).size.width;
+        final y = d.localPosition.dy;
+        final size = MediaQuery.of(context).size;
+        // Dead zone: ignore bottom 15% (system nav gesture area) and top 10%
+        if (y > size.height * 0.85 || y < size.height * 0.10) return;
+        final w = size.width;
         final delta = -d.delta.dy / 200;
         if (x > w / 2) {
           _volumeValue = (_volumeValue + delta).clamp(0, 1);
@@ -3530,14 +3575,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     bottom: 0, left: 0, right: 0,
     child: GestureDetector(
       onVerticalDragEnd: (d) {
-        if ((d.primaryVelocity ?? 0) < -100) setState(() => _showEpisodes = true);
+        if ((d.primaryVelocity ?? 0) < -200) setState(() => _showEpisodes = true);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black.withOpacity(0.55)],
+            colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
           ),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -3546,17 +3591,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
             decoration: BoxDecoration(
               color: Colors.white54, borderRadius: BorderRadius.circular(3)),
           ),
-          const SizedBox(height: 4),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Icon(Icons.expand_less, color: Colors.white70, size: 14),
-            const SizedBox(width: 4),
-            Text(L('اسحب لأعلى للحلقات', 'Swipe up for Episodes'),
-              style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
-          ]),
         ]),
       ),
     ),
   );
+
+  // ── iOS-style episode quick-rail (slides up from bottom) ──
+  double _episodesRailOffset = 0;
 
   Widget _buildEpisodesDrawer() {
     final episodes = widget.episodes;
@@ -3566,133 +3607,147 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     final hasSeason = seasons.length > 1;
     final selSeason = _selectedDrawerSeason.isEmpty
-        ? (seasons.isNotEmpty ? seasons.first : '')
+        ? (seasons.firstOrNull ?? '')
         : _selectedDrawerSeason;
     final filtered = hasSeason
         ? episodes.where((e) => e.season == selSeason).toList()
         : episodes;
 
-    return Positioned.fill(
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.black.withOpacity(0.97), Colors.black.withOpacity(0.9)],
-          ),
-        ),
-        child: SafeArea(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-              child: Row(children: [
-                Expanded(child: Text(widget.itemTitle,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14,
-                    fontWeight: FontWeight.w600),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70, size: 22),
-                  onPressed: () => setState(() => _showEpisodes = false),
-                ),
-              ]),
+    return Positioned(
+      left: 0, right: 0, bottom: 0,
+      child: Transform.translate(
+        offset: Offset(0, _episodesRailOffset.clamp(0, 300)),
+        child: GestureDetector(
+          onVerticalDragUpdate: (d) {
+            if (d.delta.dy > 0) {
+              setState(() => _episodesRailOffset += d.delta.dy);
+            }
+          },
+          onVerticalDragEnd: (d) {
+            final v = d.primaryVelocity ?? 0;
+            if (_episodesRailOffset > 80 || v > 200) {
+              setState(() { _showEpisodes = false; _episodesRailOffset = 0; });
+            } else {
+              setState(() => _episodesRailOffset = 0);
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+              ),
             ),
-
-            // Season picker
-            if (hasSeason)
-              SizedBox(
-                height: 38,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: seasons.length,
-                  itemBuilder: (_, i) {
-                    final s = seasons[i];
-                    final active = s == selSeason;
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedDrawerSeason = s),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: active ? utRed() : Colors.white.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(20)),
-                        child: Text(s, style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-                          fontSize: 12)),
-                      ),
-                    );
-                  },
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              // Close handle
+              Padding(
+                padding: const EdgeInsets.only(top: 8, right: 16, bottom: 4),
+                child: Align(alignment: Alignment.centerRight,
+                  child: GestureDetector(
+                    onTap: () => setState(() { _showEpisodes = false; _episodesRailOffset = 0; }),
+                    child: Icon(Icons.cancel, color: Colors.white.withOpacity(0.8), size: 26),
+                  ),
                 ),
               ),
-            const SizedBox(height: 10),
-
-            // Horizontal episode cards - iOS style
-            SizedBox(
-              height: 130,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final ep = filtered[i];
-                  final isCurrent = ep.id == _currentEpisodeId;
-                  return GestureDetector(
-                    onTap: () => _switchEpisode(ep),
-                    child: Container(
-                      width: 130,
-                      margin: const EdgeInsets.only(right: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Stack(children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: ep.imageUrl.isNotEmpty
-                                ? CachedNetworkImage(
-                                    imageUrl: ep.imageUrl,
-                                    width: 130, height: 73, fit: BoxFit.cover,
-                                    placeholder: (_, __) => _epThumb(),
-                                    errorWidget: (_, __, ___) => _epThumb(),
-                                  )
-                                : _epThumb(),
-                            ),
-                            if (isCurrent)
+              // Season pills
+              if (hasSeason)
+                SizedBox(
+                  height: 36,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: seasons.length,
+                    itemBuilder: (_, i) {
+                      final s = seasons[i];
+                      final active = s == selSeason;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedDrawerSeason = s),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: active ? utRed() : Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(16)),
+                          child: Text(s, style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: active ? FontWeight.w700 : FontWeight.w400,
+                            fontSize: 12)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 8),
+              // Horizontal episode cards
+              SizedBox(
+                height: 130,
+                child: ScrollConfiguration(
+                  behavior: const ScrollBehavior(),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24, top: 8),
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final ep = filtered[i];
+                      final isCurrent = ep.id == _currentEpisodeId;
+                      return GestureDetector(
+                        onTap: () {
+                          _switchEpisode(ep, autoplay: true);
+                          setState(() { _showEpisodes = false; _episodesRailOffset = 0; });
+                        },
+                        child: Container(
+                          width: 130,
+                          margin: const EdgeInsets.only(right: 10),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Stack(children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  width: 130, height: 73,
-                                  color: Colors.black.withOpacity(0.5),
-                                  alignment: Alignment.center,
-                                  child: const Icon(Icons.play_arrow_rounded,
-                                    color: Colors.white, size: 28),
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.itemImageUrl,
+                                  width: 130, height: 73, fit: BoxFit.cover,
+                                  placeholder: (_, __) =>
+                                    Container(width: 130, height: 73, color: Colors.white10),
+                                  errorWidget: (_, __, ___) =>
+                                    Container(width: 130, height: 73, color: Colors.white10),
                                 ),
                               ),
-                            Positioned.fill(child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: isCurrent ? utRed() : Colors.transparent,
-                                  width: 2)),
-                            )),
+                              if (isCurrent) ...[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    width: 130, height: 73, color: Colors.black.withOpacity(0.45)),
+                                ),
+                                const Positioned.fill(child: Center(
+                                  child: Text('Playing',
+                                    style: TextStyle(color: Colors.white,
+                                      fontSize: 12, fontWeight: FontWeight.w700)),
+                                )),
+                              ],
+                              // Red border if current
+                              Positioned.fill(child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isCurrent ? utRed() : Colors.transparent,
+                                    width: 2),
+                                ),
+                              )),
+                            ]),
+                            const SizedBox(height: 6),
+                            Text(ep.title,
+                              style: const TextStyle(color: Colors.white,
+                                fontSize: 11, fontWeight: FontWeight.w500),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
                           ]),
-                          const SizedBox(height: 5),
-                          Text(ep.title,
-                            style: TextStyle(
-                              color: isCurrent
-                                ? utRed() : Colors.white.withOpacity(0.85),
-                              fontSize: 11, fontWeight: FontWeight.w500),
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
-            ),
-          ],
-        )),
+            ]),
+          ),
+        ),
       ),
     );
   }
@@ -4691,6 +4746,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   MediaDetails? _details;
   bool _loading = true;
   String _selectedSeason = '';
+  bool _synopsisExpanded = false;
   // Comments
   List<CommentItem> _comments = [];
   bool _commentsLoaded = false;
@@ -4824,13 +4880,46 @@ class _DetailsScreenState extends State<DetailsScreen> {
           ]),
           const SizedBox(height: 20),
 
+          // Continue Watching button (only if real progress on correct episode)
+          Builder(builder: (_) {
+            final prog = context.read<WatchProgressStore>()
+                .latestFor(widget.itemId);
+            if (prog != null && prog.progressSeconds > 30) {
+              final EpisodeItem? ep = d.isMovie ? null
+                  : (d.episodes.firstWhere((e) => e.id == prog.episodeId,
+                      orElse: () => d.episodes.first));
+              return Column(children: [
+                SizedBox(width: double.infinity, child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14)),
+                  icon: const Icon(Icons.play_arrow, color: Colors.black),
+                  label: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(L('متابعة المشاهدة', 'Continue Watching'),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black)),
+                    if (!d.isMovie && ep != null)
+                      Text(ep.title, style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ]),
+                  onPressed: () {
+                    if (d.isMovie) { _playMovie(d); }
+                    else if (ep != null) { _playEpisode(d, ep); }
+                  },
+                )),
+                const SizedBox(height: 10),
+              ]);
+            }
+            return const SizedBox.shrink();
+          }),
+
           // Action buttons row
           Row(children: [
             Expanded(child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: utRed(), padding: const EdgeInsets.symmetric(vertical: 14)),
               icon: const Icon(Icons.play_arrow),
-              label: Text(d.isMovie ? L('تشغيل', 'Play') : L('أول حلقة', 'First Episode'),
+              label: Text(d.isMovie ? L('تشغيل', 'Play') : L('الحلقة الأولى', 'First Episode'),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               onPressed: () {
                 if (d.isMovie) { _playMovie(d); }
@@ -4853,13 +4942,22 @@ class _DetailsScreenState extends State<DetailsScreen> {
           ]),
           const SizedBox(height: 20),
 
-          // Synopsis
+          // Synopsis with expand/collapse
           if (d.synopsis.isNotEmpty) ...[
             Text(L('القصة', 'Synopsis'),
               style: appFontStyle(16, bold: true, color: Colors.white70)),
             const SizedBox(height: 8),
             Text(d.synopsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.6)),
+              style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.6),
+              maxLines: _synopsisExpanded ? null : 3,
+              overflow: _synopsisExpanded ? TextOverflow.visible : TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () => setState(() => _synopsisExpanded = !_synopsisExpanded),
+              child: Text(
+                _synopsisExpanded ? L('عرض أقل', 'Show Less') : L('عرض المزيد', 'Read More'),
+                style: TextStyle(color: utRed(), fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
             const SizedBox(height: 20),
           ],
 
@@ -5028,48 +5126,103 @@ class _DetailsScreenState extends State<DetailsScreen> {
     final prog = context.read<WatchProgressStore>()
         .progressFor(widget.itemId, episodeId: ep.id);
     final pct = (prog != null && prog.durationSeconds > 0)
-        ? prog.progressSeconds / prog.durationSeconds : 0.0;
-    return GestureDetector(
-      onTap: () => _playEpisode(d, ep),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-        ),
-        child: Row(children: [
-          // Play icon
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: utRed().withOpacity(0.15), shape: BoxShape.circle),
-            child: Icon(Icons.play_arrow, color: utRed()),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(ep.title,
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-            if (pct > 0) ...[
-              const SizedBox(height: 6),
-              LinearProgressIndicator(
-                value: pct.clamp(0, 1), minHeight: 2,
-                backgroundColor: Colors.white12,
-                valueColor: AlwaysStoppedAnimation<Color>(utRed()),
+        ? (prog.progressSeconds / prog.durationSeconds).clamp(0.0, 1.0) : 0.0;
+    final watched = pct >= 0.95;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        // Thumbnail with progress bar + ep number + watched icon
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _playEpisode(d, ep),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
               ),
-            ],
-          ])),
-          GestureDetector(
-            onTap: () => _downloadUrl(ep.url, ep: ep),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6),
-              child: Icon(Icons.download_outlined, color: Colors.white54, size: 20),
+              child: Row(children: [
+                // Thumbnail
+                Stack(children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: d.imageUrl,
+                      width: 120, height: 68,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        width: 120, height: 68, color: Colors.white10),
+                      errorWidget: (_, __, ___) => Container(
+                        width: 120, height: 68, color: Colors.white10,
+                        child: const Icon(Icons.movie, color: Colors.white24, size: 28)),
+                    ),
+                  ),
+                  // Progress bar overlay at bottom
+                  if (pct > 0)
+                    Positioned(bottom: 0, left: 0, right: 0,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(8),
+                          bottomRight: Radius.circular(8)),
+                        child: LinearProgressIndicator(
+                          value: pct, minHeight: 3,
+                          backgroundColor: Colors.white30,
+                          valueColor: AlwaysStoppedAnimation<Color>(utRed()),
+                        ),
+                      ),
+                    ),
+                  // Episode number badge
+                  if (ep.episodeNumber != null)
+                    Positioned(left: 5, bottom: 5,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.65),
+                          borderRadius: BorderRadius.circular(5)),
+                        child: Text('${ep.episodeNumber}',
+                          style: const TextStyle(color: Colors.white,
+                            fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  // Play icon if partially watched
+                  if (pct > 0)
+                    Positioned.fill(child: Center(
+                      child: Icon(Icons.play_circle_fill,
+                        color: utRed(), size: 28),
+                    )),
+                ]),
+                const SizedBox(width: 12),
+                // Title + watched %
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ep.title,
+                      style: const TextStyle(color: Colors.white,
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (pct > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(watched
+                        ? L('تمت المشاهدة', 'Watched')
+                        : L('شوهد ${(pct * 100).round()}%', '${(pct * 100).round()}% watched'),
+                        style: TextStyle(
+                          color: watched ? utRed() : Colors.grey,
+                          fontSize: 11)),
+                    ],
+                  ],
+                )),
+              ]),
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
-        ]),
-      ),
+        ),
+        // Download button outside the tile
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () => _downloadUrl(ep.url, ep: ep),
+          child: const Icon(Icons.download_outlined, color: Colors.white38, size: 22),
+        ),
+      ]),
     );
   }
 
@@ -5216,7 +5369,7 @@ print("✅ details_screen.dart written")
 w("lib/screens/downloads_screen.dart", r"""import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:open_file/open_file.dart';
 import '../providers/download_store.dart';
 import '../models/download_item.dart';
 import '../app_colors.dart';
@@ -5371,10 +5524,11 @@ class _DownloadTile extends StatelessWidget {
   void _playLocal(BuildContext context, DownloadItem item) {
     final mode = AppSettings.instance.downloadOpenMode;
     if (mode == 'external') {
-      final uri = Uri.file(item.filePath);
-      launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(L('تعذر فتح الملف بمشغل خارجي', 'Could not open with external player'))));
+      OpenFile.open(item.filePath).then((result) {
+        if (result.type != ResultType.done) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(L('تعذر فتح الملف بمشغل خارجي', 'Could not open with external player'))));
+        }
       });
       return;
     }
@@ -7349,7 +7503,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
