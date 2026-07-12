@@ -23,7 +23,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
@@ -1066,8 +1066,9 @@ class SubtitleParser {
       if (resp.statusCode != 200) return [];
       // Force UTF-8 decode to fix Arabic garbling
       final text = utf8.decode(resp.bodyBytes, allowMalformed: true);
-      if (text.contains('WEBVTT')) return _parseWebVTT(text);
-      return _parseSRT(text);
+      final cues = text.contains('WEBVTT') ? _parseWebVTT(text) : _parseSRT(text);
+      cues.sort((a, b) => a.startTime.compareTo(b.startTime));
+      return cues;
     } catch (_) {
       return [];
     }
@@ -2147,6 +2148,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:convert';
 import '../models/download_item.dart';
 import '../app_settings.dart';
@@ -2198,6 +2201,41 @@ class DownloadStore extends ChangeNotifier {
           (i.status == DownloadStatus.completed ||
            i.status == DownloadStatus.downloading));
 
+  bool _hasStoragePermission = false;
+
+  /// Requests the correct storage permission for the running Android version.
+  /// Android 13+ (API 33+): no permission needed for app-specific dirs, and
+  /// WRITE_EXTERNAL_STORAGE no longer grants public Downloads access at all.
+  /// Android 11-12 (API 30-32): needs MANAGE_EXTERNAL_STORAGE ("All files access").
+  /// Android 10 and below (API <=29): needs classic WRITE_EXTERNAL_STORAGE.
+  Future<bool> _ensureStoragePermission() async {
+    if (_hasStoragePermission) return true;
+    try {
+      if (Platform.isAndroid) {
+        final info = await DeviceInfoPlugin().androidInfo;
+        final sdk = info.version.sdkInt;
+        if (sdk >= 30) {
+          var status = await Permission.manageExternalStorage.status;
+          if (!status.isGranted) {
+            status = await Permission.manageExternalStorage.request();
+          }
+          _hasStoragePermission = status.isGranted;
+        } else {
+          var status = await Permission.storage.status;
+          if (!status.isGranted) {
+            status = await Permission.storage.request();
+          }
+          _hasStoragePermission = status.isGranted;
+        }
+      } else {
+        _hasStoragePermission = true;
+      }
+    } catch (_) {
+      _hasStoragePermission = false;
+    }
+    return _hasStoragePermission;
+  }
+
   Future<String> _downloadsDir() async {
     final custom = AppSettings.instance.downloadPath;
     if (custom.isNotEmpty) {
@@ -2205,23 +2243,25 @@ class DownloadStore extends ChangeNotifier {
       if (!await dir.exists()) await dir.create(recursive: true);
       return custom;
     }
-    // Android: write to public Downloads/Era folder
+    // Android: write to public Downloads/Era folder (needs runtime permission)
     if (Platform.isAndroid) {
-      try {
-        final dir = Directory('/storage/emulated/0/Download/Era');
-        if (!await dir.exists()) await dir.create(recursive: true);
-        return dir.path;
-      } catch (_) {
-        // Fallback to app external files dir
+      final granted = await _ensureStoragePermission();
+      if (granted) {
         try {
-          final ext = await getExternalStorageDirectory();
-          if (ext != null) {
-            final dir = Directory('${ext.path}/Era');
-            if (!await dir.exists()) await dir.create(recursive: true);
-            return dir.path;
-          }
+          final dir = Directory('/storage/emulated/0/Download/Era');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          return dir.path;
         } catch (_) {}
       }
+      // Fallback to app-specific external dir (always writable, no permission needed)
+      try {
+        final ext = await getExternalStorageDirectory();
+        if (ext != null) {
+          final dir = Directory('${ext.path}/Era');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          return dir.path;
+        }
+      } catch (_) {}
     }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/downloads');
@@ -2952,6 +2992,7 @@ w("lib/player/player_screen.dart", r"""import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -3085,21 +3126,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _setupPlayer() async {
+  Future<void> _setupPlayer({bool retryWithoutHeaders = false}) async {
     final url = _resolvedUrl();
     if (url.isEmpty) { setState(() => _errorMessage = 'الرابط غير متاح'); return; }
     setState(() { _errorMessage = null; _isBuffering = true; });
+    final isLocal = url.startsWith('/') || url.startsWith('file://');
     // Support local file paths (downloads)
-    if (url.startsWith('/') || url.startsWith('file://')) {
+    if (isLocal) {
       final path = url.replaceFirst('file://', '');
       _vpc = VideoPlayerController.file(File(path));
+    } else if (retryWithoutHeaders) {
+      // Fallback: some CDNs reject custom headers on redirect - try with none
+      _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
     } else {
       _vpc = VideoPlayerController.networkUrl(
         Uri.parse(url),
         httpHeaders: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
           'Referer': 'https://movie.vodu.me/',
-          'Origin': 'https://movie.vodu.me',
         },
       );
     }
@@ -3114,12 +3158,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() { _isPlaying = true; _duration = _vpc!.value.duration.inMilliseconds / 1000.0; });
       _scheduleHide();
       _startSaveTimer();
-    } catch (e) {
-      final isLocal = url.startsWith('/') || url.startsWith('file://');
+    } catch (e, st) {
+      debugPrint('PlayerScreen: video init failed for url=$url error=$e');
+      debugPrint(st.toString());
+      // Retry once without custom headers - some CDNs reject them on redirect
+      if (!isLocal && !retryWithoutHeaders) {
+        await _vpc?.dispose();
+        _vpc = null;
+        await _setupPlayer(retryWithoutHeaders: true);
+        return;
+      }
       setState(() {
         _errorMessage = isLocal
             ? 'تعذر تشغيل الملف المحلي. قد يكون التحميل لم يكتمل.'
-            : 'تعذر تشغيل الفيديو. تحقق من اتصالك بالإنترنت.';
+            : 'تعذر تشغيل الفيديو (${e.runtimeType}). تحقق من اتصالك بالإنترنت.';
         _isBuffering = false;
       });
     }
@@ -3159,50 +3211,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _lookupSubtitle(double t) {
     if (_cues.isEmpty) return;
+    // Cues are guaranteed sorted by startTime (see SubtitleParser.parse).
     if (_subtitleCursor >= _cues.length) _subtitleCursor = _cues.length - 1;
-    // Advance cursor forward past ended cues
-    while (_subtitleCursor < _cues.length - 1 && _cues[_subtitleCursor].endTime < t) {
+    // Advance cursor forward past cues that have fully ended
+    while (_subtitleCursor < _cues.length - 1 && _cues[_subtitleCursor].endTime <= t) {
       _subtitleCursor++;
     }
-    // Seek backward if jumped back in time
+    // Seek backward via binary search if we jumped back in time (rewind/seek)
     if (_cues[_subtitleCursor].startTime > t) {
       int lo = 0, hi = _subtitleCursor;
       while (lo < hi) {
         final mid = (lo + hi) ~/ 2;
-        if (_cues[mid].endTime < t) lo = mid + 1; else hi = mid;
+        if (_cues[mid].endTime <= t) lo = mid + 1; else hi = mid;
       }
       _subtitleCursor = lo;
     }
-    // Collect TRULY overlapping cues only (must overlap by > 100ms)
-    // Check only a tight window of 4 cues around cursor
-    final windowStart = (_subtitleCursor - 1).clamp(0, _cues.length - 1);
-    final windowEnd   = (_subtitleCursor + 2).clamp(0, _cues.length - 1);
+    // Collect cues genuinely active at time t, scanning only near the cursor
     final active = <SubtitleCue>[];
-    for (int i = windowStart; i <= windowEnd; i++) {
+    for (int i = _subtitleCursor; i < _cues.length && i < _subtitleCursor + 4; i++) {
       final c = _cues[i];
+      if (c.startTime > t) break; // sorted, so nothing further can be active yet
       if (t >= c.startTime && t < c.endTime) active.add(c);
     }
-    // Remove near-duplicate cues (same text or tiny gap between consecutive cues)
-    final deduped = <SubtitleCue>[];
-    for (final c in active) {
-      if (deduped.isEmpty || c.text.trim() != deduped.last.text.trim()) {
-        deduped.add(c);
-      }
-    }
-    // Only show two cues if they TRULY overlap (not just consecutive within 100ms)
     String bot = '', top = '';
-    if (deduped.length == 1) {
-      bot = deduped[0].text;
-    } else if (deduped.length >= 2) {
-      // Check that they genuinely overlap (not just cursor rounding touching next cue)
-      final a = deduped[0], b = deduped[1];
-      final overlap = a.endTime - b.startTime; // positive = real overlap
-      if (overlap > 0.1) {
-        top = a.text; bot = b.text;
-      } else {
-        // Not really simultaneous - pick whichever started latest
-        bot = (b.startTime > a.startTime) ? b.text : a.text;
-      }
+    if (active.length == 1) {
+      bot = active[0].text;
+    } else if (active.length >= 2) {
+      // Two genuinely overlapping cues = dual-line subtitle (e.g. speaker + narrator)
+      top = active[0].text;
+      bot = active[1].text;
     }
     if (bot != _activeSub || top != _activeTopSub) {
       setState(() { _activeSub = bot; _activeTopSub = top; });
@@ -7248,12 +7285,13 @@ class _SplashGateState extends State<_SplashGate> {
 print("✅ main.dart + main_tab.dart written")
 
 # --- android/app/src/main/AndroidManifest.xml patch helper -----------------
-w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
@@ -7565,7 +7603,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
