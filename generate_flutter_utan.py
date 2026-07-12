@@ -1281,6 +1281,7 @@ print("✅ subtitle_parser + auth_session written")
 # --- lib/services/supabase_manager.dart -------------------------------------
 w("lib/services/supabase_manager.dart", r"""import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/video_item.dart';
 import '../models/watch_progress.dart';
