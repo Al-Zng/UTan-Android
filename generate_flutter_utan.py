@@ -5295,7 +5295,7 @@ class _DownloadTile extends StatelessWidget {
             Text(_formatBytes(item.downloadedBytes) + ' / ' + _formatBytes(item.totalBytes),
               style: const TextStyle(color: Colors.white54, fontSize: 11)),
           ] else if (done)
-            Text(L("مكتمل · ") + _formatBytes(item.totalBytes),
+            Text(L("مكتمل · ", "Done · ") + _formatBytes(item.totalBytes),
               style: const TextStyle(color: Colors.green, fontSize: 12))
           else if (fail)
             Text(L("فشل التحميل", "Download failed"),
