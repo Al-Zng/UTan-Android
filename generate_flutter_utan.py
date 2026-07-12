@@ -23,16 +23,16 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
 
-# ─── lib/app_colors.dart ────────────────────────────────────────────────────
+# --- lib/app_colors.dart ----------------------------------------------------
 w("lib/app_colors.dart", r"""import 'package:flutter/material.dart';
 import 'app_settings.dart';
 
-// ─── Dynamic background based on selected theme ──────────────────────────
+// --- Dynamic background based on selected theme --------------------------
 Color appBg() {
   switch (AppSettings.instance.appTheme) {
     case 'amoled':
@@ -46,7 +46,7 @@ Color appBg() {
   }
 }
 
-// ─── Dynamic accent color ─────────────────────────────────────────────────
+// --- Dynamic accent color -------------------------------------------------
 Color utRed() {
   switch (AppSettings.instance.accentColorName) {
     case 'blue':
@@ -65,11 +65,11 @@ Color utRed() {
 const Color utWhite = Colors.white;
 const Color utSurface = Color(0x1FFFFFFF);
 
-// ─── L() localisation helper ─────────────────────────────────────────────
+// --- L() localisation helper ---------------------------------------------
 String L(String ar, String en) =>
     AppSettings.instance.appLanguage == 'en' ? en : ar;
 
-// ─── App Font helper ─────────────────────────────────────────────────────
+// --- App Font helper -----------------------------------------------------
 TextStyle appFontStyle(double size, {bool bold = false, Color? color}) {
   return TextStyle(
     fontFamily: 'ExpoArabic',
@@ -96,7 +96,7 @@ TextStyle subtitleFontStyle(String fontName, double size, {Color? color}) {
   );
 }
 
-// ─── Category color/icon helpers ─────────────────────────────────────────
+// --- Category color/icon helpers -----------------------------------------
 Color categoryColor(String nameEn) {
   final n = nameEn.toLowerCase();
   if (n.contains('anime')) return Colors.purple;
@@ -139,7 +139,7 @@ IconData categoryIcon(String nameEn) {
   return Icons.play_circle_fill;
 }
 
-// ─── Color from hex ────────────────────────────────────────────────────────
+// --- Color from hex --------------------------------------------------------
 Color colorFromHex(String hex) {
   final cleaned = hex.replaceAll('#', '');
   if (cleaned.length == 6) {
@@ -165,7 +165,7 @@ String formatTime(double seconds) {
 
 print("✅ app_colors.dart written")
 
-# ─── lib/app_settings.dart ─────────────────────────────────────────────────
+# --- lib/app_settings.dart -------------------------------------------------
 w("lib/app_settings.dart", r"""import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -179,7 +179,7 @@ class AppSettings extends ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
   }
 
-  // ── Subtitle settings ───────────────────────────────────────────
+  // -- Subtitle settings -------------------------------------------
   double get subtitleFontSize => _prefs.getDouble('sub_fontSize') ?? 22.0;
   set subtitleFontSize(double v) { _prefs.setDouble('sub_fontSize', v); notifyListeners(); }
 
@@ -207,39 +207,42 @@ class AppSettings extends ChangeNotifier {
   double get subtitleDelay => _prefs.getDouble('sub_delay') ?? 0.0;
   set subtitleDelay(double v) { _prefs.setDouble('sub_delay', v); notifyListeners(); }
 
-  // ── Autoplay settings ───────────────────────────────────────────
+  // -- Autoplay settings -------------------------------------------
   bool get autoPlayNextEnabled => _prefs.getBool('autoplay_next') ?? true;
   set autoPlayNextEnabled(bool v) { _prefs.setBool('autoplay_next', v); notifyListeners(); }
 
   int get autoPlayCountdownSeconds => _prefs.getInt('autoplay_countdown') ?? 10;
   set autoPlayCountdownSeconds(int v) { _prefs.setInt('autoplay_countdown', v); notifyListeners(); }
 
-  // ── Quality preference ──────────────────────────────────────────
+  // -- Quality preference ------------------------------------------
   String get preferredQuality => _prefs.getString('pref_quality') ?? 'auto';
   set preferredQuality(String v) { _prefs.setString('pref_quality', v); notifyListeners(); }
 
-  // ── WiFi-only downloads ─────────────────────────────────────────
+  // -- WiFi-only downloads -----------------------------------------
   bool get downloadOverWifiOnly => _prefs.getBool('download_wifi_only') ?? false;
   set downloadOverWifiOnly(bool v) { _prefs.setBool('download_wifi_only', v); notifyListeners(); }
 
-  // ── Download open mode ───────────────────────────────────────────
+  // -- Download open mode -------------------------------------------
   // 'internal' = open in app player, 'external' = system browser/downloader
-  String get downloadOpenMode => _prefs.getString('download_open_mode') ?? 'internal';
+  String get downloadOpenMode => _prefs.getString('download_open_mode') ?? 'external';
   set downloadOpenMode(String v) { _prefs.setString('download_open_mode', v); notifyListeners(); }
 
-  // ── Language ────────────────────────────────────────────────────
+  String get downloadPath => _prefs.getString('download_path') ?? '';
+  set downloadPath(String v) { _prefs.setString('download_path', v); notifyListeners(); }
+
+  // -- Language ----------------------------------------------------
   String get appLanguage => _prefs.getString('app_language') ?? 'ar';
   set appLanguage(String v) { _prefs.setString('app_language', v); notifyListeners(); }
 
-  // ── Theme ────────────────────────────────────────────────────────
+  // -- Theme --------------------------------------------------------
   String get appTheme => _prefs.getString('app_theme') ?? 'amoled';
   set appTheme(String v) { _prefs.setString('app_theme', v); notifyListeners(); }
 
-  // ── Accent color ─────────────────────────────────────────────────
+  // -- Accent color -------------------------------------------------
   String get accentColorName => _prefs.getString('accent_color') ?? 'red';
   set accentColorName(String v) { _prefs.setString('accent_color', v); notifyListeners(); }
 
-  // ── Grid size ────────────────────────────────────────────────────
+  // -- Grid size ----------------------------------------------------
   String get gridSizeStr => _prefs.getString('grid_size') ?? 'medium';
   set gridSizeStr(String v) { _prefs.setString('grid_size', v); notifyListeners(); }
 
@@ -259,7 +262,7 @@ class AppSettings extends ChangeNotifier {
 
 print("✅ app_settings.dart written")
 
-# ─── lib/models/video_item.dart ──────────────────────────────────────────────
+# --- lib/models/video_item.dart ----------------------------------------------
 w("lib/models/video_item.dart", r"""class VideoItem {
   final String id;
   final String title;
@@ -289,7 +292,7 @@ w("lib/models/video_item.dart", r"""class VideoItem {
 }
 """)
 
-# ─── lib/models/episode_item.dart ───────────────────────────────────────────
+# --- lib/models/episode_item.dart -------------------------------------------
 w("lib/models/episode_item.dart", r"""class EpisodeItem {
   final String id;
   final String title;
@@ -329,7 +332,7 @@ w("lib/models/episode_item.dart", r"""class EpisodeItem {
 }
 """)
 
-# ─── lib/models/media_details.dart ──────────────────────────────────────────
+# --- lib/models/media_details.dart ------------------------------------------
 w("lib/models/media_details.dart", r"""import 'episode_item.dart';
 
 class MediaDetails {
@@ -397,7 +400,7 @@ class MediaDetails {
 }
 """)
 
-# ─── lib/models/subtitle_cue.dart ───────────────────────────────────────────
+# --- lib/models/subtitle_cue.dart -------------------------------------------
 w("lib/models/subtitle_cue.dart", r"""class SubtitleCue {
   final double startTime;
   final double endTime;
@@ -411,7 +414,7 @@ w("lib/models/subtitle_cue.dart", r"""class SubtitleCue {
 }
 """)
 
-# ─── lib/models/watch_progress.dart ─────────────────────────────────────────
+# --- lib/models/watch_progress.dart -----------------------------------------
 w("lib/models/watch_progress.dart", r"""class WatchProgress {
   final String itemId;
   final String title;
@@ -493,7 +496,62 @@ w("lib/models/watch_progress.dart", r"""class WatchProgress {
 }
 """)
 
-# ─── lib/models/watch_list.dart ─────────────────────────────────────────────
+# --- lib/models/watch_list.dart ---------------------------------------------
+w("lib/models/download_item.dart", r"""import 'dart:convert';
+
+enum DownloadStatus { queued, downloading, completed, failed, cancelled }
+
+class DownloadItem {
+  final String id;
+  final String itemId;
+  final String episodeId;
+  final String title;
+  final String imageUrl;
+  final String url;
+  String filePath;
+  DownloadStatus status;
+  double progress;
+  int totalBytes;
+  int downloadedBytes;
+  final DateTime addedAt;
+
+  DownloadItem({
+    required this.id, required this.itemId, required this.episodeId,
+    required this.title, required this.imageUrl, required this.url,
+    this.filePath = '', this.status = DownloadStatus.queued,
+    this.progress = 0, this.totalBytes = 0, this.downloadedBytes = 0,
+    DateTime? addedAt,
+  }) : addedAt = addedAt ?? DateTime.now();
+
+  bool get isMovie => episodeId == itemId;
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'itemId': itemId, 'episodeId': episodeId,
+    'title': title, 'imageUrl': imageUrl, 'url': url,
+    'filePath': filePath, 'status': status.name,
+    'progress': progress, 'totalBytes': totalBytes,
+    'downloadedBytes': downloadedBytes,
+    'addedAt': addedAt.toIso8601String(),
+  };
+
+  factory DownloadItem.fromJson(Map<String, dynamic> j) => DownloadItem(
+    id: j['id'] as String, itemId: j['itemId'] as String,
+    episodeId: j['episodeId'] as String, title: j['title'] as String,
+    imageUrl: j['imageUrl'] as String? ?? '', url: j['url'] as String,
+    filePath: j['filePath'] as String? ?? '',
+    status: DownloadStatus.values.firstWhere(
+        (s) => s.name == j['status'], orElse: () => DownloadStatus.queued),
+    progress: (j['progress'] as num?)?.toDouble() ?? 0,
+    totalBytes: j['totalBytes'] as int? ?? 0,
+    downloadedBytes: j['downloadedBytes'] as int? ?? 0,
+    addedAt: DateTime.tryParse(j['addedAt'] as String? ?? '') ?? DateTime.now(),
+  );
+}
+""")
+print("✅ download_item.dart written")
+
+
+# --- lib/models/watch_list.dart ---------------------------------------------
 w("lib/models/watch_list.dart", r"""import 'dart:convert';
 import 'video_item.dart';
 
@@ -565,7 +623,7 @@ class WatchList {
 }
 """)
 
-# ─── lib/models/site_category.dart ──────────────────────────────────────────
+# --- lib/models/site_category.dart ------------------------------------------
 w("lib/models/site_category.dart", r"""class SiteCategory {
   final int id;
   final int remoteId;
@@ -615,7 +673,7 @@ const List<SiteCategory> siteCategories = [
 ];
 """)
 
-# ─── lib/models/feedback_item.dart ──────────────────────────────────────────
+# --- lib/models/feedback_item.dart ------------------------------------------
 w("lib/models/feedback_item.dart", r"""class FeedbackItem {
   final String id;
   final String userId;
@@ -644,7 +702,7 @@ w("lib/models/feedback_item.dart", r"""class FeedbackItem {
 }
 """)
 
-# ─── lib/models/comment_item.dart ───────────────────────────────────────────
+# --- lib/models/comment_item.dart -------------------------------------------
 w("lib/models/comment_item.dart", r"""class CommentItem {
   final String id;
   final String itemId;
@@ -668,7 +726,7 @@ w("lib/models/comment_item.dart", r"""class CommentItem {
 
 print("✅ All model files written")
 
-# ─── lib/services/scraper.dart ───────────────────────────────────────────────
+# --- lib/services/scraper.dart -----------------------------------------------
 w("lib/services/scraper.dart", r"""import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -807,7 +865,7 @@ class MovieScraper extends ChangeNotifier {
   }
 }
 
-// ── Isolate-safe parsers ────────────────────────────────────────────────────
+// -- Isolate-safe parsers ----------------------------------------------------
 
 (List<VideoItem>, List<({String name, List<VideoItem> items, int tagId})>)
     _parseHomePage(String html) {
@@ -981,7 +1039,7 @@ MediaDetails _parseDetails(String html) {
 
 print("✅ scraper.dart written")
 
-# ─── lib/services/subtitle_parser.dart ─────────────────────────────────────
+# --- lib/services/subtitle_parser.dart -------------------------------------
 w("lib/services/subtitle_parser.dart", r"""import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -1106,7 +1164,7 @@ class SubtitleParser {
 }
 """)
 
-# ─── lib/services/auth_session.dart ─────────────────────────────────────────
+# --- lib/services/auth_session.dart -----------------------------------------
 w("lib/services/auth_session.dart", r"""import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1220,7 +1278,7 @@ class AuthSession extends ChangeNotifier {
 
 print("✅ subtitle_parser + auth_session written")
 
-# ─── lib/services/supabase_manager.dart ─────────────────────────────────────
+# --- lib/services/supabase_manager.dart -------------------------------------
 w("lib/services/supabase_manager.dart", r"""import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
@@ -1244,7 +1302,7 @@ class SupabaseManager {
     if (token != null) 'Authorization': 'Bearer $token',
   };
 
-  // ── OAuth ───────────────────────────────────────────────────────────────
+  // -- OAuth ---------------------------------------------------------------
   String getOAuthUrl(String provider) =>
     '$_supabaseUrl/auth/v1/authorize?provider=$provider&redirect_to=utan://';
 
@@ -1259,7 +1317,7 @@ class SupabaseManager {
     return null;
   }
 
-  // ── Auth ────────────────────────────────────────────────────────────────
+  // -- Auth ----------------------------------------------------------------
   Future<Map<String, dynamic>?> signUp({
     required String email,
     required String password,
@@ -1316,7 +1374,7 @@ class SupabaseManager {
     }
   }
 
-  // ── Favorites ──────────────────────────────────────────────────────────
+  // -- Favorites ----------------------------------------------------------
   Future<List<VideoItem>> fetchFavorites() async {
     final token = AuthSession.instance.accessToken;
     final userId = AuthSession.instance.user?.id;
@@ -1369,7 +1427,7 @@ class SupabaseManager {
     } catch (_) { return false; }
   }
 
-  // ── Watch Progress ─────────────────────────────────────────────────────
+  // -- Watch Progress -----------------------------------------------------
   Future<List<WatchProgress>> fetchProgress() async {
     final token = AuthSession.instance.accessToken;
     final userId = AuthSession.instance.user?.id;
@@ -1442,7 +1500,7 @@ class SupabaseManager {
     } catch (_) { return false; }
   }
 
-  // ── Feedback ───────────────────────────────────────────────────────────
+  // -- Feedback -----------------------------------------------------------
   Future<bool> submitFeedback({required String type, required String message}) async {
     final token = AuthSession.instance.accessToken;
     final user = AuthSession.instance.user;
@@ -1506,7 +1564,7 @@ class SupabaseManager {
     } catch (_) { return false; }
   }
 
-  // ── Watchlists ─────────────────────────────────────────────────────────
+  // -- Watchlists ---------------------------------------------------------
   Future<List<Map<String, dynamic>>> fetchWatchlists() async {
     final token = AuthSession.instance.accessToken;
     final userId = AuthSession.instance.user?.id;
@@ -1590,7 +1648,7 @@ class SupabaseManager {
     } catch (_) { return false; }
   }
 
-  // ── Profile ────────────────────────────────────────────────────────────
+  // -- Profile ------------------------------------------------------------
   Future<Map<String, dynamic>?> fetchProfile() async {
     final token = AuthSession.instance.accessToken;
     final userId = AuthSession.instance.user?.id;
@@ -1659,7 +1717,7 @@ class SupabaseManager {
     return null;
   }
 
-  // ── Admin check ────────────────────────────────────────────────────────
+  // -- Admin check --------------------------------------------------------
   Future<bool> fetchIsAdmin() async {
     final token = AuthSession.instance.accessToken;
     final userId = AuthSession.instance.user?.id;
@@ -1677,7 +1735,7 @@ class SupabaseManager {
     return false;
   }
 
-  // ── Comments ───────────────────────────────────────────────────────────
+  // -- Comments -----------------------------------------------------------
   Future<List<CommentItem>> fetchComments(String itemId) async {
     final token = AuthSession.instance.accessToken;
     if (token == null) return [];
@@ -1728,7 +1786,7 @@ class SupabaseManager {
 
 print("✅ supabase_manager.dart written")
 
-# ─── lib/providers/watch_progress_store.dart ────────────────────────────────
+# --- lib/providers/watch_progress_store.dart --------------------------------
 w("lib/providers/watch_progress_store.dart", r"""import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -1848,7 +1906,7 @@ class WatchProgressStore extends ChangeNotifier {
 }
 """)
 
-# ─── lib/providers/favorites_store.dart ─────────────────────────────────────
+# --- lib/providers/favorites_store.dart -------------------------------------
 w("lib/providers/favorites_store.dart", r"""import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1917,7 +1975,7 @@ class FavoritesStore extends ChangeNotifier {
 }
 """)
 
-# ─── lib/providers/watchlist_store.dart ─────────────────────────────────────
+# --- lib/providers/watchlist_store.dart -------------------------------------
 w("lib/providers/watchlist_store.dart", r"""import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1949,7 +2007,7 @@ class WatchlistStore extends ChangeNotifier {
     if (AuthSession.instance.isLoggedIn) unawaited(fetchFromCloud());
   }
 
-  // ── Cloud sync ─────────────────────────────────────────────────
+  // -- Cloud sync -------------------------------------------------
   Future<void> fetchFromCloud() async {
     try {
       final sm = SupabaseManager.instance;
@@ -1996,7 +2054,7 @@ class WatchlistStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  // ── Local + cloud mutations ─────────────────────────────────────
+  // -- Local + cloud mutations -------------------------------------
   void createList(String name, {bool isPrivate = true}) {
     final list = WatchList(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -2072,7 +2130,172 @@ void unawaited(Future<void> f) => f.ignore();
 
 print("✅ Providers written")
 
-# ─── lib/widgets/ut_loader.dart ──────────────────────────────────────────────
+# --- lib/providers/download_store.dart ---------------------------------------
+w("lib/providers/download_store.dart", r"""import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
+import 'dart:convert';
+import '../models/download_item.dart';
+import '../app_settings.dart';
+
+class DownloadStore extends ChangeNotifier {
+  static final DownloadStore instance = DownloadStore._();
+  DownloadStore._();
+
+  static const _key = 'EraDownloads_v1';
+  final List<DownloadItem> _items = [];
+  final Map<String, CancelToken> _tokens = {};
+
+  List<DownloadItem> get items => List.unmodifiable(_items);
+  List<DownloadItem> get completed =>
+      _items.where((i) => i.status == DownloadStatus.completed).toList();
+  List<DownloadItem> get active =>
+      _items.where((i) => i.status == DownloadStatus.downloading ||
+          i.status == DownloadStatus.queued).toList();
+
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_key);
+    if (data != null) {
+      try {
+        final list = jsonDecode(data) as List<dynamic>;
+        _items.addAll(list.map((e) => DownloadItem.fromJson(e as Map<String, dynamic>)));
+        // Mark interrupted downloads as failed
+        for (final item in _items) {
+          if (item.status == DownloadStatus.downloading ||
+              item.status == DownloadStatus.queued) {
+            item.status = DownloadStatus.failed;
+          }
+        }
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  DownloadItem? get(String id) =>
+      _items.where((i) => i.id == id).firstOrNull;
+
+  bool hasDownload(String id) =>
+      _items.any((i) => i.id == id &&
+          (i.status == DownloadStatus.completed ||
+           i.status == DownloadStatus.downloading));
+
+  Future<String> _downloadsDir() async {
+    final custom = AppSettings.instance.downloadPath;
+    if (custom.isNotEmpty) {
+      final dir = Directory(custom);
+      if (!await dir.exists()) await dir.create(recursive: true);
+      return custom;
+    }
+    final base = await getApplicationDocumentsDirectory();
+    final dir = Directory('${base.path}/downloads');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir.path;
+  }
+
+  Future<void> startDownload(DownloadItem item) async {
+    // Remove old failed/cancelled entry with same id
+    _items.removeWhere((i) => i.id == item.id &&
+        (i.status == DownloadStatus.failed ||
+         i.status == DownloadStatus.cancelled));
+    if (_items.any((i) => i.id == item.id)) return; // already exists
+
+    _items.insert(0, item);
+    notifyListeners();
+    await _persist();
+    _download(item);
+  }
+
+  Future<void> _download(DownloadItem item) async {
+    try {
+      final dir   = await _downloadsDir();
+      final ext   = item.url.contains('.mkv') ? 'mkv' : 'mp4';
+      final fname = '${item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}.$ext';
+      final path  = '$dir/$fname';
+
+      item.status   = DownloadStatus.downloading;
+      item.filePath = path;
+      notifyListeners();
+
+      final cancel = CancelToken();
+      _tokens[item.id] = cancel;
+
+      await Dio().download(
+        item.url, path,
+        cancelToken: cancel,
+        onReceiveProgress: (received, total) {
+          item.downloadedBytes = received;
+          item.totalBytes      = total;
+          item.progress        = total > 0 ? received / total : 0;
+          notifyListeners();
+        },
+      );
+
+      item.status   = DownloadStatus.completed;
+      item.progress = 1.0;
+      _tokens.remove(item.id);
+      notifyListeners();
+      await _persist();
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        item.status = DownloadStatus.cancelled;
+      } else {
+        item.status = DownloadStatus.failed;
+      }
+      _tokens.remove(item.id);
+      notifyListeners();
+      await _persist();
+    } catch (_) {
+      item.status = DownloadStatus.failed;
+      _tokens.remove(item.id);
+      notifyListeners();
+      await _persist();
+    }
+  }
+
+  void cancelDownload(String id) {
+    _tokens[id]?.cancel();
+    _tokens.remove(id);
+    final item = get(id);
+    if (item != null) {
+      item.status = DownloadStatus.cancelled;
+      notifyListeners();
+      _persist();
+    }
+  }
+
+  Future<void> deleteDownload(String id) async {
+    final item = get(id);
+    if (item != null && item.filePath.isNotEmpty) {
+      final f = File(item.filePath);
+      if (await f.exists()) await f.delete();
+    }
+    _items.removeWhere((i) => i.id == id);
+    notifyListeners();
+    await _persist();
+  }
+
+  Future<void> retryDownload(String id) async {
+    final item = get(id);
+    if (item == null) return;
+    item.status   = DownloadStatus.queued;
+    item.progress = 0;
+    notifyListeners();
+    await _persist();
+    _download(item);
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(_items.map((i) => i.toJson()).toList()));
+  }
+}
+""")
+
+# --- lib/widgets/ut_loader.dart ----------------------------------------------
 w("lib/widgets/ut_loader.dart", r"""import 'package:flutter/material.dart';
 import '../app_colors.dart';
 
@@ -2096,7 +2319,7 @@ class UTanLoader extends StatelessWidget {
 }
 """)
 
-# ─── lib/widgets/poster_card.dart ───────────────────────────────────────────
+# --- lib/widgets/poster_card.dart -------------------------------------------
 w("lib/widgets/poster_card.dart", r"""import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/video_item.dart';
@@ -2181,7 +2404,7 @@ class PosterCard extends StatelessWidget {
 }
 """)
 
-# ─── lib/widgets/hero_carousel.dart ─────────────────────────────────────────
+# --- lib/widgets/hero_carousel.dart -----------------------------------------
 w("lib/widgets/hero_carousel.dart", r"""import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -2264,7 +2487,7 @@ class _HeroCarouselState extends State<HeroCarousel> {
               ),
             ),
 
-            // Top vignette — protect status bar
+            // Top vignette - protect status bar
             Positioned(
               top: 0, left: 0, right: 0,
               child: Container(
@@ -2361,19 +2584,19 @@ class _HeroCarouselState extends State<HeroCarousel> {
                     const SizedBox(height: 10),
 
                     // Large cinematic title
-                    Text(item.title,
-                      style: const TextStyle(
-                        fontSize: 36, fontWeight: FontWeight.w700,
-                        color: Colors.white, height: 1.15,
-                        shadows: [Shadow(blurRadius: 8, color: Colors.black54, offset: Offset(0,3))],
-                      ),
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                     Text(item.title,
+                       textAlign: TextAlign.center,
+                       style: const TextStyle(
+                         fontSize: 22, fontWeight: FontWeight.w700,
+                         color: Colors.white, height: 1.2,
+                         shadows: [Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0,2))],
+                       ),
                     ),
                     const SizedBox(height: 14),
 
-                    // Action buttons — capsule style
-                    Consumer<FavoritesStore>(builder: (ctx, favs, _) =>
-                      Row(children: [
+                    // Action buttons - capsule style
+                     Consumer<FavoritesStore>(builder: (ctx, favs, _) =>
+                       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                         // Play button
                         GestureDetector(
                           onTap: () => widget.onTap(item.id),
@@ -2433,7 +2656,7 @@ class _HeroCarouselState extends State<HeroCarousel> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Dot indicator — animated capsule
+                    // Dot indicator - animated capsule
                     if (_displayCount > 1)
                       Row(children: [
                         for (int i = 0; i < _displayCount; i++)
@@ -2463,7 +2686,7 @@ class _HeroCarouselState extends State<HeroCarousel> {
 }
 """)
 
-# ─── lib/widgets/category_row.dart ──────────────────────────────────────────
+# --- lib/widgets/category_row.dart ------------------------------------------
 w("lib/widgets/category_row.dart", r"""import 'package:flutter/material.dart';
 import '../models/video_item.dart';
 import '../models/watch_progress.dart';
@@ -2541,7 +2764,7 @@ class CategoryRow extends StatelessWidget {
 }
 """)
 
-# ─── lib/widgets/continue_watching_row.dart ─────────────────────────────────
+# --- lib/widgets/continue_watching_row.dart ---------------------------------
 w("lib/widgets/continue_watching_row.dart", r"""import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/watch_progress.dart';
@@ -2657,8 +2880,9 @@ class ContinueWatchingRow extends StatelessWidget {
 
 print("✅ Widget files written")
 
-# ─── lib/player/player_screen.dart ──────────────────────────────────────────
+# --- lib/player/player_screen.dart ------------------------------------------
 w("lib/player/player_screen.dart", r"""import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -2798,7 +3022,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final url = _resolvedUrl();
     if (url.isEmpty) { setState(() => _errorMessage = 'الرابط غير متاح'); return; }
     setState(() { _errorMessage = null; _isBuffering = true; });
-    _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+    // Support local file paths (downloads)
+    if (url.startsWith('/') || url.startsWith('file://')) {
+      final path = url.replaceFirst('file://', '');
+      _vpc = VideoPlayerController.file(File(path));
+    } else {
+      _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+    }
     try {
       await _vpc!.initialize();
       _vpc!.addListener(_onPlayerUpdate);
@@ -3027,7 +3257,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Subtitle settings panel
           if (_showSubtitleSettings) _buildSubtitleSettings(),
 
-          // Episode handle — visible only with controls, hidden when subtitle settings open
+          // Episode handle - visible only with controls, hidden when subtitle settings open
           if (!widget.isMovie && widget.episodes.isNotEmpty && !_showEpisodes
               && _showControls && !_showSubtitleSettings)
             _buildEpisodeHandle(),
@@ -3139,7 +3369,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             Expanded(
               child: Text(
-                widget.isMovie ? widget.itemTitle : '$_currentEpisodeTitle – ${widget.itemTitle}',
+                widget.isMovie ? widget.itemTitle : '$_currentEpisodeTitle - ${widget.itemTitle}',
                 style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
@@ -3366,7 +3596,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             const SizedBox(height: 10),
 
-            // Horizontal episode cards — iOS style
+            // Horizontal episode cards - iOS style
             SizedBox(
               height: 130,
               child: ListView.builder(
@@ -3757,7 +3987,7 @@ class _SubText extends StatelessWidget {
 
 print("✅ player_screen.dart written")
 
-# ─── lib/screens/home_screen.dart ───────────────────────────────────────────
+# --- lib/screens/home_screen.dart -------------------------------------------
 w("lib/screens/home_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -3819,7 +4049,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 SliverToBoxAdapter(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Hero (edge-to-edge, no top bar) ──────────────────
+                    // -- Hero (edge-to-edge, no top bar) ------------------
                     if (scraper.heroItems.isNotEmpty)
                       HeroCarousel(
                         items: scraper.heroItems.take(10).toList(),
@@ -3828,7 +4058,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     const SizedBox(height: 24),
 
-                    // ── Continue Watching ─────────────────────────────────
+                    // -- Continue Watching ---------------------------------
                     if (recentlyWatched.isNotEmpty) ...[
                       ContinueWatchingRow(
                         items: recentlyWatched,
@@ -3839,7 +4069,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 24),
                     ],
 
-                    // ── Trending Today (numbered) ─────────────────────────
+                    // -- Trending Today (numbered) -------------------------
                     if (scraper.heroItems.length >= 5) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
@@ -3916,7 +4146,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 28),
                     ],
 
-                    // ── Browse by Genre ───────────────────────────────────
+                    // -- Browse by Genre -----------------------------------
                     if (scraper.categories.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
@@ -3978,7 +4208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 28),
                     ],
 
-                    // ── Category rows from scraper ────────────────────────
+                    // -- Category rows from scraper ------------------------
                     ...scraper.categories.map((cat) => Padding(
                       padding: const EdgeInsets.only(bottom: 24),
                       child: CategoryRow(
@@ -4022,7 +4252,7 @@ class _HomeScreenState extends State<HomeScreen> {
 """)
 
 
-# ─── lib/screens/browse_screen.dart ─────────────────────────────────────────
+# --- lib/screens/browse_screen.dart -----------------------------------------
 w("lib/screens/browse_screen.dart", r"""import 'package:flutter/material.dart';
 import '../models/site_category.dart';
 import '../app_colors.dart';
@@ -4097,7 +4327,7 @@ class BrowseScreen extends StatelessWidget {
 
 print("✅ home + browse screens written")
 
-# ─── lib/screens/category_list_screen.dart ───────────────────────────────────
+# --- lib/screens/category_list_screen.dart -----------------------------------
 w("lib/screens/category_list_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/site_category.dart';
@@ -4241,7 +4471,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 }
 """)
 
-# ─── lib/screens/search_screen.dart ─────────────────────────────────────────
+# --- lib/screens/search_screen.dart -----------------------------------------
 w("lib/screens/search_screen.dart", r"""import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -4397,7 +4627,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
 print("✅ category_list + search screens written")
 
-# ─── lib/screens/details_screen.dart ────────────────────────────────────────
+# --- lib/screens/details_screen.dart ----------------------------------------
 w("lib/screens/details_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -4408,6 +4638,8 @@ import '../models/episode_item.dart';
 import '../providers/watch_progress_store.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watchlist_store.dart';
+import '../providers/download_store.dart';
+import '../models/download_item.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/comment_item.dart';
 import '../services/supabase_manager.dart';
@@ -4635,7 +4867,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             })(),
           ],
 
-          // ── Comments ───────────────────────────────────────────────
+          // -- Comments -----------------------------------------------
           const SizedBox(height: 28),
           _buildCommentsSection(),
         ]),
@@ -4831,24 +5063,33 @@ class _DetailsScreenState extends State<DetailsScreen> {
     );
 
   Future<void> _downloadUrl(String url, {EpisodeItem? ep}) async {
-    final d = _details;
-    if (d == null) return;
-    final mode = AppSettings.instance.downloadOpenMode;
-    if (mode == 'internal') {
-      if (!mounted) return;
-      if (ep != null) { _playEpisode(d, ep); } else { _playMovie(d); }
-      return;
-    }
     if (url.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(L('رابط التحميل غير متاح', 'Download URL not available'))));
       return;
     }
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final d = _details!;
+    final epId  = ep?.id   ?? widget.itemId;
+    final title = ep?.title ?? d.title;
+    final dlId  = '${widget.itemId}_$epId';
+
+    final store = context.read<DownloadStore>();
+    if (store.hasDownload(dlId)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(L('موجود في التحميلات', 'Already in downloads'))));
+      return;
     }
+
+    store.startDownload(DownloadItem(
+      id: dlId, itemId: widget.itemId, episodeId: epId,
+      title: title, imageUrl: d.imageUrl, url: url,
+    ));
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: utRed(),
+      content: Text(L('بدأ التحميل: $title', 'Downloading: $title'),
+        style: const TextStyle(color: Colors.white)),
+    ));
   }
 
   void _showAddToListDialog(BuildContext ctx, VideoItem item) {
@@ -4938,7 +5179,191 @@ class _AddToListSheetState extends State<_AddToListSheet> {
 
 print("✅ details_screen.dart written")
 
-# ─── lib/screens/settings_screen.dart ───────────────────────────────────────
+# --- lib/screens/settings_screen.dart ---------------------------------------
+# --- lib/screens/downloads_screen.dart --------------------------------------
+w("lib/screens/downloads_screen.dart", r"""import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:open_file/open_file.dart';
+import '../providers/download_store.dart';
+import '../models/download_item.dart';
+import '../app_colors.dart';
+import '../app_settings.dart';
+import '../player/player_screen.dart';
+import '../models/media_details.dart';
+
+class DownloadsScreen extends StatelessWidget {
+  const DownloadsScreen({super.key});
+
+  @override Widget build(BuildContext context) {
+    return Consumer<DownloadStore>(builder: (_, store, __) {
+      final items = store.items;
+      return Scaffold(
+        backgroundColor: appBg(),
+        appBar: AppBar(
+          backgroundColor: appBg(),
+          title: Text(L("التحميلات", "Downloads"),
+            style: appFontStyle(18, bold: true)),
+          actions: [
+            if (store.completed.isNotEmpty)
+              TextButton(
+                onPressed: () => _confirmClearAll(context, store),
+                child: Text(L("حذف الكل", "Clear all"),
+                  style: const TextStyle(color: Colors.red, fontSize: 13)),
+              ),
+          ],
+        ),
+        body: items.isEmpty
+            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.download_outlined, size: 64, color: Colors.white24),
+                const SizedBox(height: 16),
+                Text(L("لا توجد تحميلات", "No downloads yet"),
+                  style: const TextStyle(color: Colors.white38, fontSize: 16)),
+              ]))
+            : ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: items.length,
+                itemBuilder: (_, i) => _DownloadTile(item: items[i]),
+              ),
+      );
+    });
+  }
+
+  void _confirmClearAll(BuildContext ctx, DownloadStore store) {
+    showDialog(context: ctx, builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF1C1C1C),
+      title: Text(L("حذف الكل؟", "Delete all?"),
+        style: const TextStyle(color: Colors.white)),
+      content: Text(L("سيتم حذف جميع الملفات المحملة",
+        "All downloaded files will be deleted"),
+        style: const TextStyle(color: Colors.white70)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+          child: Text(L("إلغاء", "Cancel"), style: const TextStyle(color: Colors.white54))),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            for (final item in store.completed.toList()) {
+              store.deleteDownload(item.id);
+            }
+          },
+          child: const Text("OK", style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ));
+  }
+}
+
+class _DownloadTile extends StatelessWidget {
+  final DownloadItem item;
+  const _DownloadTile({required this.item});
+
+  @override Widget build(BuildContext context) {
+    final done = item.status == DownloadStatus.completed;
+    final fail = item.status == DownloadStatus.failed ||
+                 item.status == DownloadStatus.cancelled;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        // Thumbnail
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(item.imageUrl, width: 60, height: 84,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              width: 60, height: 84, color: Colors.white10,
+              child: const Icon(Icons.movie, color: Colors.white24))),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(item.title,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+            maxLines: 2, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 6),
+          if (item.status == DownloadStatus.downloading) ...[
+            LinearProgressIndicator(
+              value: item.progress,
+              backgroundColor: Colors.white12,
+              color: utRed(),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 4),
+            Text(_formatBytes(item.downloadedBytes) + ' / ' + _formatBytes(item.totalBytes),
+              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ] else if (done)
+            Text(L("مكتمل · ") + _formatBytes(item.totalBytes),
+              style: const TextStyle(color: Colors.green, fontSize: 12))
+          else if (fail)
+            Text(L("فشل التحميل", "Download failed"),
+              style: const TextStyle(color: Colors.red, fontSize: 12))
+          else
+            Text(L("في الانتظار...", "Queued..."),
+              style: const TextStyle(color: Colors.white38, fontSize: 12)),
+        ])),
+        const SizedBox(width: 8),
+        // Actions
+        Column(children: [
+          if (done) ...[
+            IconButton(
+              icon: Icon(Icons.play_circle_fill, color: utRed(), size: 28),
+              tooltip: L("تشغيل", "Play"),
+              onPressed: () => _playLocal(context, item),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
+              tooltip: L("حذف", "Delete"),
+              onPressed: () => context.read<DownloadStore>().deleteDownload(item.id),
+            ),
+          ] else if (item.status == DownloadStatus.downloading)
+            IconButton(
+              icon: const Icon(Icons.cancel_outlined, color: Colors.orange, size: 26),
+              tooltip: L("إلغاء", "Cancel"),
+              onPressed: () => context.read<DownloadStore>().cancelDownload(item.id),
+            )
+          else if (fail)
+            IconButton(
+              icon: Icon(Icons.refresh, color: utRed(), size: 26),
+              tooltip: L("إعادة", "Retry"),
+              onPressed: () => context.read<DownloadStore>().retryDownload(item.id),
+            ),
+        ]),
+      ]),
+    );
+  }
+
+  void _playLocal(BuildContext context, DownloadItem item) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      itemId: item.itemId,
+      itemTitle: item.title,
+      itemImageUrl: item.imageUrl,
+      isMovie: item.isMovie,
+      videoUrl: item.filePath,
+      videoUrl720: '', videoUrl1080: '', videoUrl360: '', videoUrl4k: '',
+      subtitleUrl: '', subtitleVttUrl: '',
+      episodeId: item.episodeId, episodeTitle: item.title,
+      episodes: const [],
+    )));
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024*1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024*1024*1024)).toStringAsFixed(2)} GB';
+  }
+}
+
+String L(String ar, [String en = '']) {
+  return AppSettings.instance.appLanguage == 'ar' ? ar : (en.isEmpty ? ar : en);
+}
+""")
+print("✅ downloads_screen.dart written")
+
 w("lib/screens/settings_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/favorites_store.dart';
@@ -4950,6 +5375,8 @@ import '../app_colors.dart';
 import '../app_settings.dart';
 import 'account_screen.dart';
 import 'list_detail_screen.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -4994,10 +5421,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: utRed().withOpacity(0.2),
-                child: Text(
-                  session.isLoggedIn ? session.user!.displayName[0].toUpperCase() : '?',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: utRed()),
-                ),
+                backgroundImage: (session.isLoggedIn && session.user!.avatarUrl.isNotEmpty)
+                    ? CachedNetworkImageProvider(session.user!.avatarUrl) : null,
+                child: (session.isLoggedIn && session.user!.avatarUrl.isEmpty)
+                    ? Text(session.user!.displayName.isNotEmpty
+                        ? session.user!.displayName[0].toUpperCase() : '?',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: utRed()))
+                    : null,
               ),
               const SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -5154,7 +5584,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-// ─── More Settings overlay ─────────────────────────────────────────────────
+// --- More Settings overlay -------------------------------------------------
 class MoreSettingsView extends StatelessWidget {
   const MoreSettingsView({super.key});
   @override Widget build(BuildContext context) {
@@ -5281,9 +5711,9 @@ class MoreSettingsView extends StatelessWidget {
 
 print("✅ settings_screen.dart written")
 
-# ─── lib/screens/account_screen.dart ────────────────────────────────────────
+# --- lib/screens/account_screen.dart ----------------------------------------
 
-# ─── lib/screens/oauth_webview_screen.dart ─────────────────────────────────
+# --- lib/screens/oauth_webview_screen.dart ---------------------------------
 w("lib/screens/oauth_webview_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../services/auth_session.dart';
@@ -5307,6 +5737,10 @@ class _OAuthWebViewScreenState extends State<OAuthWebViewScreen> {
     _ctrl = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF0D0D0D))
+      ..setUserAgent(
+        'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 '
+        '(KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36',
+      )
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
           if (!url.startsWith('utan://')) return;
@@ -5577,19 +6011,19 @@ class _AccountScreenState extends State<AccountScreen>
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 28),
 
-        // ── Avatar + name ──────────────────────────────────────────────
+        // -- Avatar + name ----------------------------------------------
         Center(child: Column(children: [
           Stack(children: [
             CircleAvatar(
               radius: 48,
               backgroundColor: utRed().withOpacity(0.15),
-              backgroundImage: _avatarUrl.isNotEmpty
-                  ? CachedNetworkImageProvider(_avatarUrl) : null,
-              child: _avatarUrl.isEmpty
+              backgroundImage: (_avatarUrl.isNotEmpty || session.user!.avatarUrl.isNotEmpty)
+                  ? CachedNetworkImageProvider(
+                      _avatarUrl.isNotEmpty ? _avatarUrl : session.user!.avatarUrl)
+                  : null,
+              child: (_avatarUrl.isEmpty && session.user!.avatarUrl.isEmpty)
                   ? Text(initials, style: TextStyle(fontSize: 38,
                       fontWeight: FontWeight.w700, color: utRed()))
-                  : null,
-            ),
             Positioned(bottom: 0, right: 0,
               child: GestureDetector(
                 onTap: () => _showEditProfileSheet(context, name),
@@ -5621,7 +6055,7 @@ class _AccountScreenState extends State<AccountScreen>
         const SizedBox(height: 24),
         const Divider(color: Colors.white12, height: 1),
 
-        // ── Stats row ─────────────────────────────────────────────────
+        // -- Stats row -------------------------------------------------
         Row(children: [
           _statCell(favs.items.length.toString(),     L('المفضلة', 'Favorites')),
           Container(width: 1, height: 40, color: Colors.white12),
@@ -5635,7 +6069,7 @@ class _AccountScreenState extends State<AccountScreen>
 
 
 
-        // ── Favorites ────────────────────────────────────────────────
+        // -- Favorites ------------------------------------------------
         if (favs.items.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -5676,7 +6110,7 @@ class _AccountScreenState extends State<AccountScreen>
           const SizedBox(height: 24),
         ],
 
-        // ── History ──────────────────────────────────────────────────
+        // -- History --------------------------------------------------
         ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -5743,7 +6177,7 @@ class _AccountScreenState extends State<AccountScreen>
 
         const SizedBox(height: 30),
 
-        // ── Sign out ─────────────────────────────────────────────────
+        // -- Sign out -------------------------------------------------
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
           child: TextButton.icon(
@@ -5853,7 +6287,7 @@ class _AccountScreenState extends State<AccountScreen>
                   if (uploaded != null) {
                     finalAvatarUrl = uploaded;
                   } else {
-                    // Upload failed — ask user for URL instead
+                    // Upload failed - ask user for URL instead
                     setSt(() { saving = false; });
                     if (!bCtx.mounted) return;
                     final urlCtrl = TextEditingController();
@@ -5988,7 +6422,7 @@ class _AccountScreenState extends State<AccountScreen>
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
       )),
 
-      // ── OR divider ──────────────────────────────────────────────────
+      // -- OR divider --------------------------------------------------
       const SizedBox(height: 16),
       Row(children: [
         const Expanded(child: Divider(color: Colors.white24)),
@@ -6001,7 +6435,7 @@ class _AccountScreenState extends State<AccountScreen>
       ]),
       const SizedBox(height: 16),
 
-      // ── Google Sign-In button ────────────────────────────────────────
+      // -- Google Sign-In button ----------------------------------------
       SizedBox(
         width: double.infinity,
         child: OutlinedButton.icon(
@@ -6054,7 +6488,7 @@ class _AccountScreenState extends State<AccountScreen>
 """)
 print("✅ account_screen.dart written")
 
-# ─── lib/screens/admin_panel_screen.dart ────────────────────────────────────
+# --- lib/screens/admin_panel_screen.dart ------------------------------------
 w("lib/screens/admin_panel_screen.dart", r"""import 'package:flutter/material.dart';
 import '../services/supabase_manager.dart';
 import '../models/feedback_item.dart';
@@ -6177,7 +6611,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 }
 """)
 
-# ─── lib/screens/list_detail_screen.dart ─────────────────────────────────────
+# --- lib/screens/list_detail_screen.dart -------------------------------------
 w("lib/screens/list_detail_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -6284,37 +6718,9 @@ class ListDetailScreen extends StatelessWidget {
 }
 """)
 
-# ─── lib/screens/downloads_screen.dart ───────────────────────────────────────
-w("lib/screens/downloads_screen.dart", r"""import 'package:flutter/material.dart';
-import '../app_colors.dart';
-import '../app_settings.dart';
-
-class DownloadsScreen extends StatelessWidget {
-  const DownloadsScreen({super.key});
-  @override Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: appBg(),
-      appBar: AppBar(
-        backgroundColor: appBg(), elevation: 0,
-        title: Text(L('التنزيلات', 'Downloads'), style: appFontStyle(20, bold: true)),
-      ),
-      body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.download_rounded, size: 80, color: Colors.white12),
-        const SizedBox(height: 20),
-        Text(L('لا توجد تنزيلات', 'No downloads yet'),
-          style: const TextStyle(color: Colors.white38, fontSize: 16)),
-        const SizedBox(height: 10),
-        Text(L('يمكنك تحميل المحتوى لمشاهدته دون اتصال', 'Download content to watch offline'),
-          style: const TextStyle(color: Colors.white24, fontSize: 13), textAlign: TextAlign.center),
-      ])),
-    );
-  }
-}
-""")
-
 print("✅ admin + list_detail + downloads screens written")
 
-# ─── lib/screens/main_tab.dart ───────────────────────────────────────────────
+# --- lib/screens/main_tab.dart -----------------------------------------------
 w("lib/screens/main_tab.dart", r"""import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6385,7 +6791,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
 }
 """)
 
-# ─── lib/main.dart ───────────────────────────────────────────────────────────
+# --- lib/main.dart -----------------------------------------------------------
 w("lib/main.dart", r"""import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6398,6 +6804,7 @@ import 'services/supabase_manager.dart';
 import 'providers/favorites_store.dart';
 import 'providers/watch_progress_store.dart';
 import 'providers/watchlist_store.dart';
+import 'providers/download_store.dart';
 import 'screens/main_tab.dart';
 import 'widgets/ut_loader.dart';
 
@@ -6410,6 +6817,7 @@ void main() async {
   await FavoritesStore.instance.init();
   await WatchProgressStore.instance.init();
   await WatchlistStore.instance.init();
+  await DownloadStore.instance.init();
   runApp(const UTanApp());
 }
 
@@ -6425,6 +6833,7 @@ class UTanApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FavoritesStore.instance),
         ChangeNotifierProvider(create: (_) => WatchProgressStore.instance),
         ChangeNotifierProvider(create: (_) => WatchlistStore.instance),
+        ChangeNotifierProvider(create: (_) => DownloadStore.instance),
       ],
       child: Consumer<AppSettings>(builder: (_, settings, __) {
         return MaterialApp(
@@ -6537,7 +6946,7 @@ class _SplashGateState extends State<_SplashGate> {
       await AuthSession.instance.save(
         accessToken: accessToken, refreshToken: refreshToken, user: user,
       );
-      // Sync all cloud data — same as email login
+      // Sync all cloud data - same as email login
       final cloudFavs = await sm.fetchFavorites();
       if (cloudFavs.isNotEmpty) {
         // ignore: use_build_context_synchronously
@@ -6571,11 +6980,13 @@ class _SplashGateState extends State<_SplashGate> {
 
 print("✅ main.dart + main_tab.dart written")
 
-# ─── android/app/src/main/AndroidManifest.xml patch helper ─────────────────
+# --- android/app/src/main/AndroidManifest.xml patch helper -----------------
 w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -6625,7 +7036,7 @@ w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http:
 </manifest>
 """)
 
-# ─── android/app/build.gradle ───────────────────────────────────────────────
+# --- android/app/build.gradle -----------------------------------------------
 w("android/app/build.gradle", r"""plugins {
     id "com.android.application"
     id "kotlin-android"
@@ -6686,7 +7097,7 @@ dependencies {
 }
 """)
 
-# ─── android/build.gradle ───────────────────────────────────────────────────
+# --- android/build.gradle ---------------------------------------------------
 w("android/build.gradle", r"""allprojects {
     repositories {
         google()
@@ -6707,7 +7118,7 @@ tasks.register("clean", Delete) {
 }
 """)
 
-# ─── android/settings.gradle ────────────────────────────────────────────────
+# --- android/settings.gradle ------------------------------------------------
 w("android/settings.gradle", r"""pluginManagement {
     def flutterSdkPath = {
         def properties = new Properties()
@@ -6733,13 +7144,13 @@ plugins {
 include ":app"
 """)
 
-# ─── android/gradle.properties ──────────────────────────────────────────────
+# --- android/gradle.properties ----------------------------------------------
 w("android/gradle.properties", r"""org.gradle.jvmargs=-Xmx4G
 android.useAndroidX=true
 android.enableJetifier=true
 """)
 
-# ─── android/app/src/main/kotlin/MainActivity.kt ────────────────────────────
+# --- android/app/src/main/kotlin/MainActivity.kt ----------------------------
 os.makedirs(os.path.join(BASE, "android/app/src/main/kotlin/com/utan/flutter"), exist_ok=True)
 w("android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt", r"""package com.utan.flutter
 
@@ -6750,7 +7161,7 @@ class MainActivity: FlutterActivity()
 
 print("✅ Android project files written")
 
-# ─── android res: styles, colors, drawables ─────────────────────────────────
+# --- android res: styles, colors, drawables ---------------------------------
 os.makedirs(os.path.join(BASE, "android/app/src/main/res/values"), exist_ok=True)
 os.makedirs(os.path.join(BASE, "android/app/src/main/res/drawable"), exist_ok=True)
 os.makedirs(os.path.join(BASE, "android/app/src/main/res/drawable-v21"), exist_ok=True)
@@ -6780,7 +7191,7 @@ w("android/app/src/main/res/drawable-v21/launch_background.xml", r"""<?xml versi
 </layer-list>
 """)
 
-# ─── analysis_options.yaml ──────────────────────────────────────────────────
+# --- analysis_options.yaml --------------------------------------------------
 w("analysis_options.yaml", r"""include: package:flutter_lints/flutter.yaml
 linter:
   rules:
@@ -6789,27 +7200,27 @@ linter:
     use_key_in_widget_constructors: true
 """)
 
-# ─── README.md ───────────────────────────────────────────────────────────────
+# --- README.md ---------------------------------------------------------------
 open(os.path.join(BASE, "..", "README.md"), "w", encoding="utf-8").write(r"""# UTan Flutter
 
-Arabic/English video streaming app – Flutter port of the original Swift/SwiftUI application.
+Arabic/English video streaming app - Flutter port of the original Swift/SwiftUI application.
 
 ## Structure
 ```
 UTan_Flutter/
-├── assets/
-│   ├── fonts/     # Cairo, Rubik, IBMPlexArabic, ExpoArabic
-│   └── images/    # logo.png + category images
-└── lib/
-    ├── main.dart
-    ├── app_colors.dart
-    ├── app_settings.dart
-    ├── models/
-    ├── services/
-    ├── providers/
-    ├── screens/
-    ├── widgets/
-    └── player/
++-- assets/
+|   +-- fonts/     # Cairo, Rubik, IBMPlexArabic, ExpoArabic
+|   +-- images/    # logo.png + category images
++-- lib/
+    +-- main.dart
+    +-- app_colors.dart
+    +-- app_settings.dart
+    +-- models/
+    +-- services/
+    +-- providers/
+    +-- screens/
+    +-- widgets/
+    +-- player/
 ```
 
 ## Setup
@@ -6825,16 +7236,16 @@ flutter build apk --release
 ```
 """)
 
-print("\n" + "═" * 60)
+print("\n" + "-" * 60)
 print("✅ DONE! Flutter project generated inside UTan_Flutter/")
-print("═" * 60)
+print("-" * 60)
 print("\nNext steps:")
 print("  1. cd UTan_Flutter")
 print("  2. flutter pub get")
 print("  3. dart run flutter_launcher_icons   ← generates app icon from assets/images/app.jpg")
 print("  4. flutter run     (or 'flutter build apk --release')")
 
-# ── Auto-generate launcher icons if Pillow + app.jpg are available ───────────
+# -- Auto-generate launcher icons if Pillow + app.jpg are available -----------
 try:
     from PIL import Image
     src = os.path.join(BASE, 'assets', 'images', 'app.jpg')
@@ -6856,9 +7267,9 @@ try:
             resized.save(os.path.join(d, 'ic_launcher_round.png'))
         print("✅ Launcher icons generated from assets/images/app.jpg")
     else:
-        print("ℹ️  app.jpg not found yet — icons will be generated by 'dart run flutter_launcher_icons' after assets are copied")
+        print("ℹ️  app.jpg not found yet - icons will be generated by 'dart run flutter_launcher_icons' after assets are copied")
 except ImportError:
-    print("ℹ️  Pillow not available — run: pip install Pillow  OR  dart run flutter_launcher_icons")
+    print("ℹ️  Pillow not available - run: pip install Pillow  OR  dart run flutter_launcher_icons")
 except Exception as e:
     print(f"⚠️  Icon generation skipped: {e}")
 print("\nFonts + images must exist at:")
@@ -6895,7 +7306,7 @@ print("pubspec.yaml written")
 
 
 
-# ─── android res: styles, colors, drawables ─────────────────────────────────
+# --- android res: styles, colors, drawables ---------------------------------
 os.makedirs(os.path.join(BASE, "android/app/src/main/res/values"), exist_ok=True)
 os.makedirs(os.path.join(BASE, "android/app/src/main/res/drawable"), exist_ok=True)
 os.makedirs(os.path.join(BASE, "android/app/src/main/res/drawable-v21"), exist_ok=True)
@@ -6925,7 +7336,7 @@ w("android/app/src/main/res/drawable-v21/launch_background.xml", r"""<?xml versi
 </layer-list>
 """)
 
-# ─── analysis_options.yaml ──────────────────────────────────────────────────
+# --- analysis_options.yaml --------------------------------------------------
 w("analysis_options.yaml", r"""include: package:flutter_lints/flutter.yaml
 linter:
   rules:
@@ -6934,27 +7345,27 @@ linter:
     use_key_in_widget_constructors: true
 """)
 
-# ─── README.md ───────────────────────────────────────────────────────────────
+# --- README.md ---------------------------------------------------------------
 open(os.path.join(BASE, "..", "README.md"), "w", encoding="utf-8").write(r"""# UTan Flutter
 
-Arabic/English video streaming app – Flutter port of the original Swift/SwiftUI application.
+Arabic/English video streaming app - Flutter port of the original Swift/SwiftUI application.
 
 ## Structure
 ```
 UTan_Flutter/
-├── assets/
-│   ├── fonts/     # Cairo, Rubik, IBMPlexArabic, ExpoArabic
-│   └── images/    # logo.png + category images
-└── lib/
-    ├── main.dart
-    ├── app_colors.dart
-    ├── app_settings.dart
-    ├── models/
-    ├── services/
-    ├── providers/
-    ├── screens/
-    ├── widgets/
-    └── player/
++-- assets/
+|   +-- fonts/     # Cairo, Rubik, IBMPlexArabic, ExpoArabic
+|   +-- images/    # logo.png + category images
++-- lib/
+    +-- main.dart
+    +-- app_colors.dart
+    +-- app_settings.dart
+    +-- models/
+    +-- services/
+    +-- providers/
+    +-- screens/
+    +-- widgets/
+    +-- player/
 ```
 
 ## Setup
@@ -6970,16 +7381,16 @@ flutter build apk --release
 ```
 """)
 
-print("\n" + "═" * 60)
+print("\n" + "-" * 60)
 print("✅ DONE! Flutter project generated inside UTan_Flutter/")
-print("═" * 60)
+print("-" * 60)
 print("\nNext steps:")
 print("  1. cd UTan_Flutter")
 print("  2. flutter pub get")
 print("  3. dart run flutter_launcher_icons   ← generates app icon from assets/images/app.jpg")
 print("  4. flutter run     (or 'flutter build apk --release')")
 
-# ── Auto-generate launcher icons if Pillow + app.jpg are available ───────────
+# -- Auto-generate launcher icons if Pillow + app.jpg are available -----------
 try:
     from PIL import Image
     src = os.path.join(BASE, 'assets', 'images', 'app.jpg')
@@ -7001,9 +7412,9 @@ try:
             resized.save(os.path.join(d, 'ic_launcher_round.png'))
         print("✅ Launcher icons generated from assets/images/app.jpg")
     else:
-        print("ℹ️  app.jpg not found yet — icons will be generated by 'dart run flutter_launcher_icons' after assets are copied")
+        print("ℹ️  app.jpg not found yet - icons will be generated by 'dart run flutter_launcher_icons' after assets are copied")
 except ImportError:
-    print("ℹ️  Pillow not available — run: pip install Pillow  OR  dart run flutter_launcher_icons")
+    print("ℹ️  Pillow not available - run: pip install Pillow  OR  dart run flutter_launcher_icons")
 except Exception as e:
     print(f"⚠️  Icon generation skipped: {e}")
 print("\nFonts + images must exist at:")
