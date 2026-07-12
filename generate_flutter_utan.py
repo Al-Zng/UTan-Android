@@ -1698,22 +1698,29 @@ class SupabaseManager {
     final token = AuthSession.instance.accessToken;
     if (token == null) return null;
     try {
-      final path = '$userId.$ext';
+      final path = '$userId/avatar.$ext';
       final mime = ext == 'jpg' ? 'image/jpeg' : 'image/$ext';
+      final bodyBytes = Uint8List.fromList(bytes);
       final resp = await http.put(
         Uri.parse('$_supabaseUrl/storage/v1/object/avatars/$path'),
         headers: {
           'Authorization': 'Bearer $token',
           'apikey': _anonKey,
           'Content-Type': mime,
+          'Content-Length': '${bodyBytes.length}',
           'x-upsert': 'true',
+          'cache-control': '3600',
         },
-        body: Uint8List.fromList(bytes),
-      ).timeout(const Duration(seconds: 30));
+        body: bodyBytes,
+      ).timeout(const Duration(seconds: 60));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         return '$_supabaseUrl/storage/v1/object/public/avatars/$path?t=${DateTime.now().millisecondsSinceEpoch}';
       }
-    } catch (_) {}
+      // Log error for debugging
+      debugPrint('Avatar upload failed: ${resp.statusCode} ${resp.body}');
+    } catch (e) {
+      debugPrint('Avatar upload exception: $e');
+    }
     return null;
   }
 
@@ -2141,6 +2148,11 @@ import 'dart:convert';
 import '../models/download_item.dart';
 import '../app_settings.dart';
 
+const String _userAgent =
+    'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
+const String _referer = 'https://movie.vodu.me/';
+
 class DownloadStore extends ChangeNotifier {
   static final DownloadStore instance = DownloadStore._();
   DownloadStore._();
@@ -2190,10 +2202,25 @@ class DownloadStore extends ChangeNotifier {
       if (!await dir.exists()) await dir.create(recursive: true);
       return custom;
     }
+    // Android: use public Downloads/UTan so files are visible in Files app
+    if (Platform.isAndroid) {
+      final dir = Directory('/storage/emulated/0/Download/UTan');
+      try {
+        if (!await dir.exists()) await dir.create(recursive: true);
+        return dir.path;
+      } catch (_) {}
+    }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/downloads');
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir.path;
+  }
+
+  String get currentDownloadsDir {
+    final custom = AppSettings.instance.downloadPath;
+    if (custom.isNotEmpty) return custom;
+    if (Platform.isAndroid) return '/storage/emulated/0/Download/UTan';
+    return '';
   }
 
   Future<void> startDownload(DownloadItem item) async {
@@ -2225,6 +2252,10 @@ class DownloadStore extends ChangeNotifier {
 
       await Dio().download(
         item.url, path,
+        options: Options(headers: {
+          'User-Agent': _userAgent,
+          'Referer': _referer,
+        }),
         cancelToken: cancel,
         onReceiveProgress: (received, total) {
           item.downloadedBytes = received;
@@ -5184,6 +5215,7 @@ print("✅ details_screen.dart written")
 w("lib/screens/downloads_screen.dart", r"""import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/download_store.dart';
 import '../models/download_item.dart';
 import '../app_colors.dart';
@@ -5336,6 +5368,15 @@ class _DownloadTile extends StatelessWidget {
   }
 
   void _playLocal(BuildContext context, DownloadItem item) {
+    final mode = AppSettings.instance.downloadOpenMode;
+    if (mode == 'external') {
+      final uri = Uri.file(item.filePath);
+      launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(L('تعذر فتح الملف بمشغل خارجي', 'Could not open with external player'))));
+      });
+      return;
+    }
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
       itemId: item.itemId,
       itemTitle: item.title,
@@ -5655,6 +5696,16 @@ class MoreSettingsView extends StatelessWidget {
               [L('مشغل التطبيق', 'App Player'), L('مشغل خارجي', 'External')],
               s.downloadOpenMode,
               (v) { s.downloadOpenMode = v; setSt(() {}); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined, color: Colors.white54),
+              title: Text(L('مجلد التنزيل', 'Download folder'),
+                style: const TextStyle(color: Colors.white, fontSize: 14)),
+              subtitle: Text(
+                s.downloadPath.isNotEmpty ? s.downloadPath
+                    : '/storage/emulated/0/Download/UTan',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+                overflow: TextOverflow.ellipsis),
             ),
           ]),
           _section(L('البيانات', 'Data'), [
