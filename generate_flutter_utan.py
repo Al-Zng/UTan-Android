@@ -508,6 +508,7 @@ class DownloadItem {
   final String title;
   final String imageUrl;
   final String url;
+  final String subtitleUrl;
   String filePath;
   DownloadStatus status;
   double progress;
@@ -518,7 +519,7 @@ class DownloadItem {
   DownloadItem({
     required this.id, required this.itemId, required this.episodeId,
     required this.title, required this.imageUrl, required this.url,
-    this.filePath = '', this.status = DownloadStatus.queued,
+    this.subtitleUrl = '', this.filePath = '', this.status = DownloadStatus.queued,
     this.progress = 0, this.totalBytes = 0, this.downloadedBytes = 0,
     DateTime? addedAt,
   }) : addedAt = addedAt ?? DateTime.now();
@@ -528,7 +529,7 @@ class DownloadItem {
   Map<String, dynamic> toJson() => {
     'id': id, 'itemId': itemId, 'episodeId': episodeId,
     'title': title, 'imageUrl': imageUrl, 'url': url,
-    'filePath': filePath, 'status': status.name,
+    'subtitleUrl': subtitleUrl, 'filePath': filePath, 'status': status.name,
     'progress': progress, 'totalBytes': totalBytes,
     'downloadedBytes': downloadedBytes,
     'addedAt': addedAt.toIso8601String(),
@@ -538,6 +539,7 @@ class DownloadItem {
     id: j['id'] as String, itemId: j['itemId'] as String,
     episodeId: j['episodeId'] as String, title: j['title'] as String,
     imageUrl: j['imageUrl'] as String? ?? '', url: j['url'] as String,
+    subtitleUrl: j['subtitleUrl'] as String? ?? '',
     filePath: j['filePath'] as String? ?? '',
     status: DownloadStatus.values.firstWhere(
         (s) => s.name == j['status'], orElse: () => DownloadStatus.queued),
@@ -2203,16 +2205,23 @@ class DownloadStore extends ChangeNotifier {
       if (!await dir.exists()) await dir.create(recursive: true);
       return custom;
     }
-    // Android: use app-specific external storage (visible in Files, no permission needed)
+    // Android: write to public Downloads/Era folder
     if (Platform.isAndroid) {
       try {
-        final ext = await getExternalStorageDirectory();
-        if (ext != null) {
-          final dir = Directory('${ext.path}/UTanDownloads');
-          if (!await dir.exists()) await dir.create(recursive: true);
-          return dir.path;
-        }
-      } catch (_) {}
+        final dir = Directory('/storage/emulated/0/Download/Era');
+        if (!await dir.exists()) await dir.create(recursive: true);
+        return dir.path;
+      } catch (_) {
+        // Fallback to app external files dir
+        try {
+          final ext = await getExternalStorageDirectory();
+          if (ext != null) {
+            final dir = Directory('${ext.path}/Era');
+            if (!await dir.exists()) await dir.create(recursive: true);
+            return dir.path;
+          }
+        } catch (_) {}
+      }
     }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/downloads');
@@ -2223,7 +2232,7 @@ class DownloadStore extends ChangeNotifier {
   String get currentDownloadsDir {
     final custom = AppSettings.instance.downloadPath;
     if (custom.isNotEmpty) return custom;
-    if (Platform.isAndroid) return 'Android/data/<pkg>/files/UTanDownloads';
+    if (Platform.isAndroid) return '/storage/emulated/0/Download/Era';
     return '';
   }
 
@@ -2238,6 +2247,29 @@ class DownloadStore extends ChangeNotifier {
     notifyListeners();
     await _persist();
     _download(item);
+    // Download subtitle file in background (for external player auto-load)
+    if (item.subtitleUrl.isNotEmpty) {
+      _downloadSubtitleSilently(item);
+    }
+  }
+
+  Future<void> _downloadSubtitleSilently(DownloadItem item) async {
+    try {
+      final dir = await _downloadsDir();
+      final baseName = item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+      final subPath = '$dir/${baseName}.srt';
+      var subUrl = item.subtitleUrl;
+      if (!subUrl.startsWith('http')) subUrl = 'https://movie.vodu.me/$subUrl';
+      final resp = await Dio().get<List<int>>(subUrl,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'User-Agent': _userAgent, 'Referer': _referer},
+        ),
+      );
+      if (resp.statusCode == 200 && resp.data != null) {
+        await File(subPath).writeAsBytes(resp.data!);
+      }
+    } catch (_) {}
   }
 
   Future<void> _download(DownloadItem item) async {
@@ -3062,7 +3094,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final path = url.replaceFirst('file://', '');
       _vpc = VideoPlayerController.file(File(path));
     } else {
-      _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+      _vpc = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        httpHeaders: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
+          'Referer': 'https://movie.vodu.me/',
+          'Origin': 'https://movie.vodu.me',
+        },
+      );
     }
     try {
       await _vpc!.initialize();
@@ -3121,11 +3160,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _lookupSubtitle(double t) {
     if (_cues.isEmpty) return;
     if (_subtitleCursor >= _cues.length) _subtitleCursor = _cues.length - 1;
-    // Advance cursor forward
+    // Advance cursor forward past ended cues
     while (_subtitleCursor < _cues.length - 1 && _cues[_subtitleCursor].endTime < t) {
       _subtitleCursor++;
     }
-    // Binary search backward if current cursor is past the time
+    // Seek backward if jumped back in time
     if (_cues[_subtitleCursor].startTime > t) {
       int lo = 0, hi = _subtitleCursor;
       while (lo < hi) {
@@ -3134,16 +3173,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       _subtitleCursor = lo;
     }
-    // Collect active cues in a small window around cursor
-    final windowStart = (_subtitleCursor - 3).clamp(0, _cues.length - 1);
-    final windowEnd   = (_subtitleCursor + 3).clamp(0, _cues.length - 1);
+    // Collect TRULY overlapping cues only (must overlap by > 100ms)
+    // Check only a tight window of 4 cues around cursor
+    final windowStart = (_subtitleCursor - 1).clamp(0, _cues.length - 1);
+    final windowEnd   = (_subtitleCursor + 2).clamp(0, _cues.length - 1);
     final active = <SubtitleCue>[];
     for (int i = windowStart; i <= windowEnd; i++) {
-      if (t >= _cues[i].startTime && t <= _cues[i].endTime) active.add(_cues[i]);
+      final c = _cues[i];
+      if (t >= c.startTime && t < c.endTime) active.add(c);
     }
+    // Remove near-duplicate cues (same text or tiny gap between consecutive cues)
+    final deduped = <SubtitleCue>[];
+    for (final c in active) {
+      if (deduped.isEmpty || c.text.trim() != deduped.last.text.trim()) {
+        deduped.add(c);
+      }
+    }
+    // Only show two cues if they TRULY overlap (not just consecutive within 100ms)
     String bot = '', top = '';
-    if (active.length == 1) { bot = active[0].text; }
-    else if (active.length >= 2) { top = active[0].text; bot = active.last.text; }
+    if (deduped.length == 1) {
+      bot = deduped[0].text;
+    } else if (deduped.length >= 2) {
+      // Check that they genuinely overlap (not just cursor rounding touching next cue)
+      final a = deduped[0], b = deduped[1];
+      final overlap = a.endTime - b.startTime; // positive = real overlap
+      if (overlap > 0.1) {
+        top = a.text; bot = b.text;
+      } else {
+        // Not really simultaneous - pick whichever started latest
+        bot = (b.startTime > a.startTime) ? b.text : a.text;
+      }
+    }
     if (bot != _activeSub || top != _activeTopSub) {
       setState(() { _activeSub = bot; _activeTopSub = top; });
     }
@@ -5265,9 +5325,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
       return;
     }
 
+    final subUrl = ep != null
+        ? (ep.subtitleVttUrl.isNotEmpty ? ep.subtitleVttUrl : ep.subtitleUrl)
+        : (d.movieSubtitleVttUrl.isNotEmpty ? d.movieSubtitleVttUrl : d.movieSubtitleUrl);
     store.startDownload(DownloadItem(
       id: dlId, itemId: widget.itemId, episodeId: epId,
       title: title, imageUrl: d.imageUrl, url: url,
+      subtitleUrl: subUrl,
     ));
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -7192,16 +7256,14 @@ w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http:
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32"/>
+
 
     <application
         android:label="Era"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
