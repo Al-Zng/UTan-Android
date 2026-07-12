@@ -5184,7 +5184,6 @@ print("✅ details_screen.dart written")
 w("lib/screens/downloads_screen.dart", r"""import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:open_file/open_file.dart';
 import '../providers/download_store.dart';
 import '../models/download_item.dart';
 import '../app_colors.dart';
@@ -5356,10 +5355,6 @@ class _DownloadTile extends StatelessWidget {
     if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024*1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024*1024*1024)).toStringAsFixed(2)} GB';
   }
-}
-
-String L(String ar, [String en = '']) {
-  return AppSettings.instance.appLanguage == 'ar' ? ar : (en.isEmpty ? ar : en);
 }
 """)
 print("✅ downloads_screen.dart written")
@@ -6024,6 +6019,8 @@ class _AccountScreenState extends State<AccountScreen>
               child: (_avatarUrl.isEmpty && session.user!.avatarUrl.isEmpty)
                   ? Text(initials, style: TextStyle(fontSize: 38,
                       fontWeight: FontWeight.w700, color: utRed()))
+                  : null,
+            ),
             Positioned(bottom: 0, right: 0,
               child: GestureDetector(
                 onTap: () => _showEditProfileSheet(context, name),
@@ -7300,7 +7297,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
