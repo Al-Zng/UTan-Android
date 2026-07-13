@@ -23,7 +23,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  file_picker: ^8.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  file_picker: ^8.1.2\n  fvp: ^0.14.0\n  android_intent_plus: ^5.2.0\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
@@ -2296,7 +2296,7 @@ class DownloadStore extends ChangeNotifier {
   Future<void> _downloadSubtitleSilently(DownloadItem item) async {
     try {
       final dir = await _downloadsDir();
-      final baseName = item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+      final baseName = _safeFileName(item.title, item.id);
       final subPath = '$dir/${baseName}.srt';
       var subUrl = item.subtitleUrl;
       if (!subUrl.startsWith('http')) subUrl = 'https://movie.vodu.me/$subUrl';
@@ -2348,10 +2348,30 @@ class DownloadStore extends ChangeNotifier {
     return false;
   }
 
+  /// Sanitizes an episode/movie title into a safe filename while keeping
+  /// Arabic (and other Unicode) letters intact - only strips characters that
+  /// are actually illegal in filenames. The old approach stripped anything
+  /// outside a-zA-Z0-9_, which nuked Arabic titles entirely and left files
+  /// named after the raw internal id (looking like random digits/hashes).
+  String _safeFileName(String title, String uniqueSuffix) {
+    var clean = title.trim();
+    if (clean.isEmpty) clean = 'video';
+    // Strip characters illegal on Android/Windows filesystems
+    clean = clean.replaceAll(RegExp(r'[\/:*?"<>|
+
+	]'), ' ');
+    clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length > 80) clean = clean.substring(0, 80).trim();
+    final shortSuffix = uniqueSuffix.length > 6
+        ? uniqueSuffix.substring(uniqueSuffix.length - 6)
+        : uniqueSuffix;
+    return '${clean}_$shortSuffix';
+  }
+
   Future<void> _download(DownloadItem item) async {
     final dir   = await _downloadsDir();
     final ext   = item.url.contains('.mkv') ? 'mkv' : 'mp4';
-    final fname = '${item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}.$ext';
+    final fname = '${_safeFileName(item.title, item.id)}.$ext';
     final path  = '$dir/$fname';
     try {
       item.status   = DownloadStatus.downloading;
@@ -5537,6 +5557,9 @@ w("lib/screens/downloads_screen.dart", r"""import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:open_file/open_file.dart';
+import 'package:android_intent_plus/android_intent_plus.dart';
+import 'package:android_intent_plus/flag.dart';
+import 'package:path_provider/path_provider.dart';
 import '../providers/download_store.dart';
 import '../models/download_item.dart';
 import '../app_colors.dart';
@@ -5688,9 +5711,70 @@ class _DownloadTile extends StatelessWidget {
     );
   }
 
-  void _playLocal(BuildContext context, DownloadItem item) {
+  /// Converts a raw filesystem path into a content:// URI via our
+  /// FileProvider, if the path is inside one of the mapped roots.
+  /// Returns null if the path isn't covered (caller should fall back
+  /// to open_file, which uses its own internal FileProvider).
+  Future<Uri?> _contentUriFor(String filePath) async {
+    const authority = 'com.app.era.provider';
+    if (filePath.startsWith('/storage/emulated/0/Download/')) {
+      final rel = filePath.substring('/storage/emulated/0/Download/'.length);
+      return Uri.parse('content://$authority/download_root/$rel');
+    }
+    try {
+      final ext = await getExternalStorageDirectory();
+      if (ext != null && filePath.startsWith('${ext.path}/Era/')) {
+        final rel = filePath.substring('${ext.path}/Era/'.length);
+        return Uri.parse('content://$authority/ext_era/$rel');
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Finds the subtitle file downloaded alongside [item] (same base name,
+  /// .srt extension) so we can hand it directly to the external player.
+  String _siblingSubtitlePath(DownloadItem item) {
+    final base = item.filePath.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '');
+    return '$base.srt';
+  }
+
+  void _playLocal(BuildContext context, DownloadItem item) async {
     final mode = AppSettings.instance.downloadOpenMode;
     if (mode == 'external') {
+      final subPath = _siblingSubtitlePath(item);
+      final hasSub = await File(subPath).exists();
+      final videoUri = await _contentUriFor(item.filePath);
+
+      if (videoUri != null) {
+        try {
+          final extras = <String, dynamic>{};
+          if (hasSub) {
+            final subUri = await _contentUriFor(subPath);
+            if (subUri != null) {
+              // MX Player-compatible extras: auto-loads the subtitle
+              // without the user having to pick it manually.
+              extras['subs'] = [subUri.toString()];
+              extras['subs.name'] = [L('عربي', 'Arabic')];
+              extras['subs.enable'] = [subUri.toString()];
+            }
+          }
+          final intent = AndroidIntent(
+            action: 'action_view',
+            data: videoUri.toString(),
+            type: 'video/*',
+            arguments: extras,
+            flags: [
+              Flag.FLAG_GRANT_READ_URI_PERMISSION,
+              Flag.FLAG_ACTIVITY_NEW_TASK,
+            ],
+          );
+          await intent.launch();
+          return;
+        } catch (_) {
+          // fall through to open_file below
+        }
+      }
+
       OpenFile.open(item.filePath).then((result) {
         if (result.type != ResultType.done) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -7188,6 +7272,7 @@ w("lib/main.dart", r"""import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:app_links/app_links.dart';
+import 'package:fvp/fvp.dart' as fvp;
 import 'app_settings.dart';
 import 'app_colors.dart';
 import 'services/scraper.dart';
@@ -7202,6 +7287,14 @@ import 'widgets/ut_loader.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Register the fvp (mdk/FFmpeg) video engine as the backend for
+  // VideoPlayerController. Stock ExoPlayer (default video_player backend)
+  // can't decode some codecs commonly found in scraped content (AC3/EAC3
+  // audio, certain HEVC profiles), throwing PlatformException even though
+  // the file itself is a perfectly valid mp4 - fvp fixes that with a much
+  // broader FFmpeg-based codec set, while keeping the exact same
+  // VideoPlayerController API so no other code needs to change.
+  fvp.registerWith();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final settings = AppSettings.instance;
   await settings.init();
@@ -7416,6 +7509,15 @@ w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http:
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.app.era.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/era_file_paths"/>
+        </provider>
     </application>
     <queries>
         <intent>
@@ -7423,9 +7525,22 @@ w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http:
             <category android:name="android.intent.category.BROWSABLE"/>
             <data android:scheme="https"/>
         </intent>
+        <package android:name="com.mxtech.videoplayer.ad"/>
+        <package android:name="com.mxtech.videoplayer.pro"/>
+        <package android:name="org.videolan.vlc"/>
     </queries>
 </manifest>
 """)
+
+os.makedirs(os.path.join(BASE, "android/app/src/main/res/xml"), exist_ok=True)
+w("android/app/src/main/res/xml/era_file_paths.xml", r"""<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="download_era" path="Download/Era/"/>
+    <external-files-path name="ext_era" path="Era/"/>
+    <external-path name="download_root" path="Download/"/>
+</paths>
+""")
+print("✅ FileProvider + file_paths.xml written")
 
 # --- android/app/era_release.keystore (fixed signing key, base64-embedded) --
 # A consistent release keystore is required so every CI build is signed
@@ -7729,7 +7844,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  file_picker: ^8.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  file_picker: ^8.1.2\n  fvp: ^0.14.0\n  android_intent_plus: ^5.2.0\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
