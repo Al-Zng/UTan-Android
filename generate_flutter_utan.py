@@ -5560,7 +5560,7 @@ w("lib/screens/downloads_screen.dart", r"""import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:open_file/open_file.dart';
-import 'package:android_intent_plus/android_intent_plus.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'package:path_provider/path_provider.dart';
 import '../providers/download_store.dart';
