@@ -23,7 +23,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.3\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  path_provider: ^2.1.4\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  file_picker: ^8.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
@@ -2312,13 +2312,48 @@ class DownloadStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> _download(DownloadItem item) async {
+  /// Checks the first bytes of a downloaded file to confirm it's a real
+  /// video container (mp4/mov = 'ftyp' box, mkv/webm = EBML header).
+  /// Scraped sites sometimes return a small HTML error/redirect page with a
+  /// 200 status, which Dio would otherwise happily save as a "successful" .mp4.
+  Future<bool> _isValidVideoFile(String path) async {
     try {
-      final dir   = await _downloadsDir();
-      final ext   = item.url.contains('.mkv') ? 'mkv' : 'mp4';
-      final fname = '${item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}.$ext';
-      final path  = '$dir/$fname';
+      final file = File(path);
+      final len = await file.length();
+      if (len < 100 * 1024) return false; // under 100KB is almost certainly not a real video
+      final raf = await file.open();
+      final header = await raf.read(64);
+      await raf.close();
+      // mp4/mov: 'ftyp' appears within the first ~12 bytes
+      final hasFtyp = _bytesContain(header, [0x66, 0x74, 0x79, 0x70]); // 'ftyp'
+      // mkv/webm: starts with EBML header 1A 45 DF A3
+      final isEbml = header.length >= 4 &&
+          header[0] == 0x1A && header[1] == 0x45 && header[2] == 0xDF && header[3] == 0xA3;
+      // ts/mpeg-ts: starts with sync byte 0x47
+      final isTs = header.isNotEmpty && header[0] == 0x47;
+      return hasFtyp || isEbml || isTs;
+    } catch (_) {
+      return false;
+    }
+  }
 
+  bool _bytesContain(List<int> haystack, List<int> needle) {
+    for (int i = 0; i <= haystack.length - needle.length; i++) {
+      bool match = true;
+      for (int j = 0; j < needle.length; j++) {
+        if (haystack[i + j] != needle[j]) { match = false; break; }
+      }
+      if (match) return true;
+    }
+    return false;
+  }
+
+  Future<void> _download(DownloadItem item) async {
+    final dir   = await _downloadsDir();
+    final ext   = item.url.contains('.mkv') ? 'mkv' : 'mp4';
+    final fname = '${item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}.$ext';
+    final path  = '$dir/$fname';
+    try {
       item.status   = DownloadStatus.downloading;
       item.filePath = path;
       notifyListeners();
@@ -2326,12 +2361,16 @@ class DownloadStore extends ChangeNotifier {
       final cancel = CancelToken();
       _tokens[item.id] = cancel;
 
-      await Dio().download(
+      final resp = await Dio().download(
         item.url, path,
-        options: Options(headers: {
-          'User-Agent': _userAgent,
-          'Referer': _referer,
-        }),
+        options: Options(
+          headers: {
+            'User-Agent': _userAgent,
+            'Referer': _referer,
+          },
+          followRedirects: true,
+          validateStatus: (code) => code != null && code >= 200 && code < 300,
+        ),
         cancelToken: cancel,
         onReceiveProgress: (received, total) {
           item.downloadedBytes = received;
@@ -2341,22 +2380,41 @@ class DownloadStore extends ChangeNotifier {
         },
       );
 
+      // Validate the saved file is a real video, not an HTML error page
+      final valid = resp.statusCode != null &&
+          resp.statusCode! >= 200 && resp.statusCode! < 300 &&
+          await _isValidVideoFile(path);
+
+      if (!valid) {
+        try { await File(path).delete(); } catch (_) {}
+        item.status = DownloadStatus.failed;
+        item.filePath = '';
+        _tokens.remove(item.id);
+        notifyListeners();
+        await _persist();
+        return;
+      }
+
       item.status   = DownloadStatus.completed;
       item.progress = 1.0;
       _tokens.remove(item.id);
       notifyListeners();
       await _persist();
     } on DioException catch (e) {
+      try { await File(path).delete(); } catch (_) {}
       if (e.type == DioExceptionType.cancel) {
         item.status = DownloadStatus.cancelled;
       } else {
         item.status = DownloadStatus.failed;
       }
+      item.filePath = '';
       _tokens.remove(item.id);
       notifyListeners();
       await _persist();
     } catch (_) {
+      try { await File(path).delete(); } catch (_) {}
       item.status = DownloadStatus.failed;
+      item.filePath = '';
       _tokens.remove(item.id);
       notifyListeners();
       await _persist();
@@ -3134,7 +3192,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Support local file paths (downloads)
     if (isLocal) {
       final path = url.replaceFirst('file://', '');
-      _vpc = VideoPlayerController.file(File(path));
+      final f = File(path);
+      if (!await f.exists() || await f.length() < 50 * 1024) {
+        setState(() {
+          _errorMessage = 'الملف التالف أو غير مكتمل. احذفه وأعد التحميل.';
+          _isBuffering = false;
+        });
+        return;
+      }
+      _vpc = VideoPlayerController.file(f);
     } else if (retryWithoutHeaders) {
       // Fallback: some CDNs reject custom headers on redirect - try with none
       _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
@@ -5658,6 +5724,7 @@ print("✅ downloads_screen.dart written")
 
 w("lib/screens/settings_screen.dart", r"""import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/favorites_store.dart';
 import '../providers/watchlist_store.dart';
 
@@ -5959,10 +6026,31 @@ class MoreSettingsView extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
               subtitle: Text(
                 s.downloadPath.isNotEmpty ? s.downloadPath
-                    : '/storage/emulated/0/Download/UTan',
+                    : '/storage/emulated/0/Download/Era',
                 style: const TextStyle(color: Colors.white38, fontSize: 11),
                 overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+              onTap: () async {
+                try {
+                  final selected = await FilePicker.platform.getDirectoryPath();
+                  if (selected != null && selected.isNotEmpty) {
+                    s.downloadPath = selected;
+                    setSt(() {});
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(L('تعذر اختيار المجلد', 'Could not pick folder'))));
+                }
+              },
             ),
+            if (s.downloadPath.isNotEmpty)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.restore, color: Colors.white38, size: 18),
+                title: Text(L('استخدام المجلد الافتراضي', 'Use default folder'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                onTap: () { s.downloadPath = ''; setSt(() {}); },
+              ),
           ]),
           _section(L('البيانات', 'Data'), [
             ListTile(
@@ -7339,6 +7427,27 @@ w("android/app/src/main/AndroidManifest.xml", r"""<manifest xmlns:android="http:
 </manifest>
 """)
 
+# --- android/app/era_release.keystore (fixed signing key, base64-embedded) --
+# A consistent release keystore is required so every CI build is signed
+# identically. Without this, each CI run (or the OS's auto-generated debug
+# keystore) produces a DIFFERENT signature, and Android refuses to install a
+# new APK over an existing one ("app not installed" / signature mismatch).
+import base64 as _b64
+_keystore_b64 = (
+    "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"
+)
+os.makedirs(os.path.join(BASE, "android/app"), exist_ok=True)
+with open(os.path.join(BASE, "android/app/era_release.keystore"), "wb") as _kf:
+    _kf.write(_b64.b64decode(_keystore_b64))
+print("✅ era_release.keystore written")
+
+w("android/key.properties", r"""storePassword=EraApp2026Secure
+keyPassword=EraApp2026Secure
+keyAlias=era_key
+storeFile=era_release.keystore
+""")
+print("✅ key.properties written")
+
 # --- android/app/build.gradle -----------------------------------------------
 w("android/app/build.gradle", r"""plugins {
     id "com.android.application"
@@ -7355,8 +7464,14 @@ if (localPropertiesFile.exists()) {
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
 def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace "com.utan.flutter"
+    namespace "com.app.era"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
@@ -7374,7 +7489,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.utan.flutter"
+        applicationId "com.app.era"
         minSdkVersion 21
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
@@ -7382,9 +7497,20 @@ android {
         multiDexEnabled true
     }
 
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             shrinkResources false
         }
@@ -7454,8 +7580,8 @@ android.enableJetifier=true
 """)
 
 # --- android/app/src/main/kotlin/MainActivity.kt ----------------------------
-os.makedirs(os.path.join(BASE, "android/app/src/main/kotlin/com/utan/flutter"), exist_ok=True)
-w("android/app/src/main/kotlin/com/utan/flutter/MainActivity.kt", r"""package com.utan.flutter
+os.makedirs(os.path.join(BASE, "android/app/src/main/kotlin/com/app/era"), exist_ok=True)
+w("android/app/src/main/kotlin/com/app/era/MainActivity.kt", r"""package com.app.era
 
 import io.flutter.embedding.android.FlutterActivity
 
@@ -7603,7 +7729,7 @@ def w(rel_path, content):
 print("✅ Directories created")
 
 # --- pubspec.yaml ---
-_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
+_pubspec = "name: utan_flutter\ndescription: UTan Video Streaming App\npublish_to: 'none'\nversion: 5.0.0+5\n\nenvironment:\n  sdk: '>=3.2.0 <4.0.0'\n  flutter: '>=3.22.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n  provider: ^6.1.2\n  http: ^1.2.1\n  cached_network_image: ^3.3.1\n  shared_preferences: ^2.3.0\n  video_player: ^2.8.6\n  chewie: ^1.8.1\n  intl: ^0.19.0\n  wakelock_plus: ^1.2.8\n  url_launcher: ^6.3.0\n  path_provider: ^2.1.4\n  flutter_cache_manager: ^3.4.1\n  supabase_flutter: ^2.5.3\n  google_sign_in: ^6.2.1\n  app_links: ^6.0.0\n  image_picker: ^1.0.7\n  webview_flutter: ^4.8.0\n  dio: ^5.4.3\n  open_file: ^3.3.2\n  permission_handler: ^11.3.1\n  device_info_plus: ^10.1.2\n  file_picker: ^8.1.2\n  rxdart: ^0.28.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n  flutter_lints: ^4.0.0\n  flutter_launcher_icons: ^0.14.1\n\nflutter_icons:\n  android: true\n  ios: false\n  image_path: 'assets/images/app.jpg'\n  adaptive_icon_background: '#0D0D0D'\n  adaptive_icon_foreground: 'assets/images/app.jpg'\n  min_sdk_android: 21\n\nflutter:\n  uses-material-design: true\n\n  assets:\n    - assets/images/\n\n  fonts:\n    - family: Cairo\n      fonts:\n        - asset: assets/fonts/Cairo.ttf\n          weight: 400\n        - asset: assets/fonts/Cairo-Bold-1.ttf\n          weight: 700\n    - family: Rubik\n      fonts:\n        - asset: assets/fonts/Rubik.ttf\n          weight: 400\n        - asset: assets/fonts/Rubik-Bold.ttf\n          weight: 700\n    - family: IBMPlexArabic\n      fonts:\n        - asset: assets/fonts/Ibm.ttf\n          weight: 400\n        - asset: assets/fonts/IBMPlexArabic-Bold.ttf\n          weight: 700\n    - family: ExpoArabic\n      fonts:\n        - asset: assets/fonts/alfont_com_AlFont_com_ExpoArabic-Bold.otf\n          weight: 700\n"
 w("pubspec.yaml", _pubspec)
 print("pubspec.yaml written")
 
