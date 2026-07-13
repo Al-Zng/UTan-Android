@@ -2356,11 +2356,14 @@ class DownloadStore extends ChangeNotifier {
   String _safeFileName(String title, String uniqueSuffix) {
     var clean = title.trim();
     if (clean.isEmpty) clean = 'video';
-    // Strip characters illegal on Android/Windows filesystems
-    clean = clean.replaceAll(RegExp(r'[\/:*?"<>|
-
-	]'), ' ');
-    clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+    // Strip characters illegal on Android/Windows filesystems (avoid regex
+    // backslash-escaping pitfalls entirely by checking chars directly).
+    const illegal = <int>[0x5C, 0x2F, 0x3A, 0x2A, 0x3F, 0x22, 0x3C, 0x3E, 0x7C, 0x0A, 0x0D, 0x09];
+    final buf = StringBuffer();
+    for (final rune in clean.runes) {
+      buf.writeCharCode(illegal.contains(rune) ? 0x20 : rune);
+    }
+    clean = buf.toString().replaceAll(RegExp('  +'), ' ').trim();
     if (clean.length > 80) clean = clean.substring(0, 80).trim();
     final shortSuffix = uniqueSuffix.length > 6
         ? uniqueSuffix.substring(uniqueSuffix.length - 6)
