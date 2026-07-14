@@ -3207,11 +3207,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _setupPlayer({bool retryWithoutHeaders = false}) async {
+  int _setupAttempt = 0;
+
+  Future<void> _setupPlayer({bool retryWithoutHeaders = false, bool retryLocalAsUri = false}) async {
+    final myAttempt = ++_setupAttempt; // guards against stale timeouts firing late
     final url = _resolvedUrl();
     if (url.isEmpty) { setState(() => _errorMessage = 'الرابط غير متاح'); return; }
     setState(() { _errorMessage = null; _isBuffering = true; });
     final isLocal = url.startsWith('/') || url.startsWith('file://');
+    VideoFormat? hint;
+    if (url.contains('.m3u8')) hint = VideoFormat.hls;
     // Support local file paths (downloads)
     if (isLocal) {
       final path = url.replaceFirst('file://', '');
@@ -3223,13 +3228,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
         });
         return;
       }
-      _vpc = VideoPlayerController.file(f);
+      // The fvp (mdk/FFmpeg) backend sometimes hangs forever on
+      // VideoPlayerController.file() for certain local files - going through
+      // networkUrl() with an explicit file:// Uri instead uses a different
+      // internal open path in mdk that is far more reliable for local
+      // playback while still working fine with the stock backend too.
+      _vpc = retryLocalAsUri
+          ? VideoPlayerController.networkUrl(Uri.file(f.path))
+          : VideoPlayerController.file(f);
     } else if (retryWithoutHeaders) {
-      // Fallback: some CDNs reject custom headers on redirect - try with none
-      _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+      // Fallback: some CDNs/backends hang or reject custom headers on redirect
+      _vpc = VideoPlayerController.networkUrl(Uri.parse(url), formatHint: hint);
     } else {
       _vpc = VideoPlayerController.networkUrl(
         Uri.parse(url),
+        formatHint: hint,
         httpHeaders: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
           'Referer': 'https://movie.vodu.me/',
@@ -3237,7 +3250,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
     try {
-      await _vpc!.initialize();
+      // A hard timeout is essential here: some backends (notably the mdk/FFmpeg
+      // engine used for broader codec support) can hang indefinitely instead of
+      // throwing when a stream can't be opened - without this, initialize()
+      // never resolves and the UI is stuck on an infinite loading spinner with
+      // no way to recover other than leaving the screen.
+      await _vpc!.initialize().timeout(const Duration(seconds: 14));
+      if (myAttempt != _setupAttempt) return; // a newer setup call superseded this one
       _vpc!.addListener(_onPlayerUpdate);
       final saved = WatchProgressStore.instance.progressFor(widget.itemId, episodeId: _currentEpisodeId);
       if (saved != null && saved.progressSeconds > 5 && saved.progressSeconds < saved.durationSeconds - 10) {
@@ -3248,12 +3267,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _scheduleHide();
       _startSaveTimer();
     } catch (e, st) {
-      debugPrint('PlayerScreen: video init failed for url=$url error=$e');
+      if (myAttempt != _setupAttempt) return; // stale attempt, a newer one is in flight
+      debugPrint('PlayerScreen: video init failed/timed out for url=$url error=$e');
       debugPrint(st.toString());
-      // Retry once without custom headers - some CDNs reject them on redirect
+      try { await _vpc?.dispose(); } catch (_) {}
+      _vpc = null;
+      // Local files: retry once using the file:// Uri path instead of the
+      // .file() constructor before giving up.
+      if (isLocal && !retryLocalAsUri) {
+        await _setupPlayer(retryLocalAsUri: true);
+        return;
+      }
+      // Streams: retry once without custom headers - some CDNs/backends hang
+      // or reject them on redirect. Covers both thrown errors AND timeouts.
       if (!isLocal && !retryWithoutHeaders) {
-        await _vpc?.dispose();
-        _vpc = null;
         await _setupPlayer(retryWithoutHeaders: true);
         return;
       }
