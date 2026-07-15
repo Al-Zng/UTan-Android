@@ -3389,9 +3389,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _initQuality() {
     final pref = AppSettings.instance.preferredQuality;
-    if (pref == 'q720' && widget.videoUrl720.isNotEmpty) _quality = VideoQuality.q720;
+    if (pref == 'q4k' && widget.videoUrl4k.isNotEmpty) _quality = VideoQuality.q4k;
     else if (pref == 'q1080' && widget.videoUrl1080.isNotEmpty) _quality = VideoQuality.q1080;
+    else if (pref == 'q720' && widget.videoUrl720.isNotEmpty) _quality = VideoQuality.q720;
     else if (pref == 'q360' && widget.videoUrl360.isNotEmpty) _quality = VideoQuality.q360;
+    else if (pref == 'q240' && widget.videoUrl240.isNotEmpty) _quality = VideoQuality.q240;
     else _quality = VideoQuality.auto;
   }
 
@@ -5235,7 +5237,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       isMovie: true,
       videoUrl: fix(d.movieUrl), videoUrl720: fix(d.movieUrl720),
       videoUrl1080: fix(d.movieUrl1080), videoUrl360: fix(d.movieUrl360),
-      videoUrl4k: fix(d.movieUrl4k),
+      videoUrl240: fix(d.movieUrl240), videoUrl4k: fix(d.movieUrl4k),
       subtitleUrl: d.movieSubtitleUrl, subtitleVttUrl: d.movieSubtitleVttUrl,
       episodeId: widget.itemId, episodeTitle: d.title,
     )));
@@ -5264,7 +5266,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       isMovie: false,
       videoUrl: resolved.movieUrl, videoUrl720: resolved.movieUrl720,
       videoUrl1080: resolved.movieUrl1080, videoUrl360: resolved.movieUrl360,
-      videoUrl4k: resolved.movieUrl4k,
+      videoUrl240: resolved.movieUrl240, videoUrl4k: resolved.movieUrl4k,
       subtitleUrl: resolved.movieSubtitleUrl, subtitleVttUrl: resolved.movieSubtitleVttUrl,
       episodeId: ep.id, episodeTitle: ep.title,
       episodes: d.episodes,
