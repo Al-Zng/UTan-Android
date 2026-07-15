@@ -746,7 +746,210 @@ w("lib/models/comment_item.dart", r"""class CommentItem {
 
 print("✅ All model files written")
 
-# --- lib/services/scraper.dart -----------------------------------------------
+# --- lib/services/local_proxy_server.dart -----------------------------------
+w("lib/services/local_proxy_server.dart", r"""import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+
+const String _proxyUserAgent =
+    'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
+const String _proxyReferer = 'https://cee.buzz/';
+
+/// A tiny local "download-accelerator" HTTP server that runs entirely
+/// in-process (loopback only, never exposed to the network). The video
+/// player is pointed at http://127.0.0.1:<port>/play?url=<origin>, and for
+/// every byte-range the player asks for, this splits that range into a few
+/// parallel sub-range requests against the real origin server and streams
+/// them back merged and in order - the same trick download managers like
+/// IDM use to get around a single-connection speed cap some CDNs impose.
+class LocalProxyServer {
+  static final LocalProxyServer instance = LocalProxyServer._();
+  LocalProxyServer._();
+
+  HttpServer? _server;
+  int? _port;
+  static const int _segments = 4;
+  // Anything above this per-request span is capped, since players ask for
+  // a fresh range every time they buffer forward anyway - no need to try to
+  // parallel-fetch a multi-hundred-MB span in one go.
+  static const int _maxSpanBytes = 12 * 1024 * 1024;
+
+  Future<int> ensureStarted() async {
+    final existing = _port;
+    if (_server != null && existing != null) return existing;
+    try {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      _server = server;
+      _port = server.port;
+      server.listen(_handle, onError: (e) {
+        debugPrint('[LocalProxyServer] server error: $e');
+      }, cancelOnError: false);
+      debugPrint('[LocalProxyServer] listening on 127.0.0.1:${server.port}');
+      return server.port;
+    } catch (e) {
+      debugPrint('[LocalProxyServer] failed to start: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _handle(HttpRequest request) async {
+    try {
+      if (request.uri.path != '/play') {
+        request.response.statusCode = 404;
+        await request.response.close();
+        return;
+      }
+      final target = request.uri.queryParameters['url'];
+      if (target == null || target.isEmpty) {
+        request.response.statusCode = 400;
+        await request.response.close();
+        return;
+      }
+      final origin = Uri.parse(target);
+      final rangeHeader = request.headers.value('range');
+      await _proxyRange(request, origin, rangeHeader);
+    } catch (e) {
+      debugPrint('[LocalProxyServer] request failed: $e');
+      try {
+        request.response.statusCode = 502;
+        await request.response.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<int?> _fetchContentLength(Uri origin) async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(origin);
+      req.headers.set('User-Agent', _proxyUserAgent);
+      req.headers.set('Referer', _proxyReferer);
+      req.headers.set('Range', 'bytes=0-0'); // 1-byte probe to read Content-Range's total
+      final resp = await req.close().timeout(const Duration(seconds: 6));
+      await resp.drain();
+      final contentRange = resp.headers.value('content-range'); // "bytes 0-0/12345678"
+      if (contentRange != null && contentRange.contains('/')) {
+        final total = int.tryParse(contentRange.split('/').last);
+        if (total != null && total > 0) return total;
+      }
+      final len = resp.headers.contentLength;
+      return len > 0 ? len : null;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> _proxyRange(HttpRequest request, Uri origin, String? rangeHeader) async {
+    int? start, end;
+    if (rangeHeader != null && rangeHeader.toLowerCase().startsWith('bytes=')) {
+      final spec = rangeHeader.substring(6).split('-');
+      start = int.tryParse(spec[0]);
+      if (spec.length > 1 && spec[1].trim().isNotEmpty) end = int.tryParse(spec[1]);
+    }
+    start ??= 0;
+
+    final total = await _fetchContentLength(origin);
+    if (total == null) {
+      // Couldn't determine size (some origins don't support byte-range
+      // probing) - fall back to a plain single-connection passthrough so
+      // playback still works, just without the multi-connection boost.
+      await _proxySingle(request, origin, rangeHeader);
+      return;
+    }
+    end ??= total - 1;
+    if (end > total - 1) end = total - 1;
+    if (end - start + 1 > _maxSpanBytes) end = start + _maxSpanBytes - 1;
+
+    final totalLen = end - start + 1;
+    request.response.statusCode = 206;
+    request.response.headers.set('Content-Type', 'video/mp4');
+    request.response.headers.set('Accept-Ranges', 'bytes');
+    request.response.headers.set('Content-Range', 'bytes $start-$end/$total');
+    request.response.headers.set('Content-Length', '$totalLen');
+
+    final segCount = totalLen > 512 * 1024 ? _segments : 1;
+    final chunkSize = (totalLen / segCount).ceil();
+    final futures = <Future<List<int>>>[];
+    for (int i = 0; i < segCount; i++) {
+      final segStart = start + i * chunkSize;
+      if (segStart > end) break;
+      final segEnd = (segStart + chunkSize - 1).clamp(segStart, end);
+      // Starting these now (not inside the later await-loop) is what makes
+      // them run concurrently - each call begins its HTTP request
+      // immediately and only the *awaiting* happens in order below.
+      futures.add(_fetchSegment(origin, segStart, segEnd));
+    }
+
+    try {
+      for (final future in futures) {
+        final bytes = await future;
+        request.response.add(bytes);
+      }
+    } catch (e) {
+      debugPrint('[LocalProxyServer] segmented stream failed: $e');
+    } finally {
+      try { await request.response.close(); } catch (_) {}
+    }
+  }
+
+  Future<List<int>> _fetchSegment(Uri origin, int start, int end) async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(origin);
+      req.headers.set('User-Agent', _proxyUserAgent);
+      req.headers.set('Referer', _proxyReferer);
+      req.headers.set('Range', 'bytes=$start-$end');
+      final resp = await req.close().timeout(const Duration(seconds: 10));
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in resp) {
+        builder.add(chunk);
+      }
+      return builder.takeBytes();
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> _proxySingle(HttpRequest request, Uri origin, String? rangeHeader) async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(origin);
+      req.headers.set('User-Agent', _proxyUserAgent);
+      req.headers.set('Referer', _proxyReferer);
+      if (rangeHeader != null) req.headers.set('Range', rangeHeader);
+      final resp = await req.close().timeout(const Duration(seconds: 10));
+      request.response.statusCode = resp.statusCode;
+      for (final name in ['content-length', 'content-range', 'content-type', 'accept-ranges']) {
+        final v = resp.headers.value(name);
+        if (v != null) request.response.headers.set(name, v);
+      }
+      await resp.pipe(request.response);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Builds the local-proxy playback URL for a given origin stream URL.
+  /// Caller must have already called [ensureStarted].
+  String buildPlayUrl(String originUrl) {
+    final port = _port;
+    if (port == null) return originUrl;
+    return 'http://127.0.0.1:$port/play?url=${Uri.encodeComponent(originUrl)}';
+  }
+}
+
+/// Cloudflare Worker reverse-proxy fallback - used when the local segmented
+/// proxy above can't establish a connection (network-level block/timeout).
+/// The worker forwards the request to the origin with its own IP, which
+/// also helps route around origin-side blocks tied to the device's own IP.
+String buildCloudflareProxyUrl(String originUrl) {
+  return 'https://cee.kuro-pq9.workers.dev/?video_url=${Uri.encodeComponent(originUrl)}';
+}
+""")
+print("✅ local_proxy_server.dart written")
+
 w("lib/services/scraper.dart", r"""import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -778,19 +981,13 @@ const int _level = 1;
 
 String _thumb(String path) => path.isEmpty ? '' : '$_thumbBase$path';
 
-/// Requests the 'large' poster variant instead of 'medium' for noticeably
-/// sharper artwork. cee.buzz serves posters filed by size (e.g.
-/// ".../medium/xxx.jpg" style directories or filename segments) - the field
-/// we get from the API is always the medium one (imgMediumThumb), so we
-/// swap the size marker in the resolved URL. Falls back to the medium URL
-/// untouched if no 'medium' marker is found to replace.
-String _thumbLarge(String path) {
-  final medium = _thumb(path);
-  if (medium.isEmpty) return medium;
-  if (medium.contains('medium')) return medium.replaceAll('medium', 'large');
-  if (medium.contains('Medium')) return medium.replaceAll('Medium', 'Large');
-  return medium;
-}
+// NOTE: an earlier revision tried swapping 'medium' -> 'large' in this URL
+// hoping for a sharper poster variant. That was never confirmed against the
+// real API and turned out to 404 for effectively every image, breaking
+// posters app-wide (hero carousel, category rows, and even the currently-
+// open title's own poster). _thumbLarge is now just an alias for the
+// confirmed-working medium thumb until a real large-poster path is verified.
+String _thumbLarge(String path) => _thumb(path);
 
 String _resolveMediaUrl(String u) {
   if (u.isEmpty) return '';
@@ -870,7 +1067,7 @@ class MovieScraper extends ChangeNotifier {
     try {
       final resp = await http
           .get(Uri.parse(url), headers: const {'Connection': 'keep-alive'})
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 8));
       if (log) debugPrint('[cee.buzz] GET $url -> HTTP ${resp.statusCode}');
       if (resp.statusCode != 200) return null;
       final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -893,10 +1090,15 @@ class MovieScraper extends ChangeNotifier {
 
   Future<List<VideoItem>> _fetchPopular(int page) async {
     // The real server occasionally returns an empty week list depending on
-    // the account's level; fall back through month/day before giving up.
-    for (final period in ['W', 'M', 'D']) {
-      final data = await _getJson('$_api/popularFilms/kind/$period/level/$_level/page/$page');
-      final items = _toVideoItems(data);
+    // the account's level - try week/month/day IN PARALLEL (not one after
+    // another) and take whichever non-empty result comes back, so a slow or
+    // hanging period never chains into a multi-x-8s wait on the home screen.
+    final results = await Future.wait(
+      ['W', 'M', 'D'].map((period) =>
+          _getJson('$_api/popularFilms/kind/$period/level/$_level/page/$page')
+              .then(_toVideoItems)),
+    );
+    for (final items in results) {
       if (items.isNotEmpty) return items;
     }
     return [];
@@ -929,54 +1131,65 @@ class MovieScraper extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      // videoGroups returns the site's own curated homepage rows directly
-      // (same rows cee.buzz itself shows), which is far richer than
-      // hand-picking 2-3 fixed sections.
-      final groupsData = await _getJson('$_api/videoGroups/lang/ar/level/$_level');
-      final sections = <({String name, List<VideoItem> items, int tagId})>[];
-      var tagCounter = 100;
-      for (final raw in _asList(groupsData)) {
-        if (raw is! Map) continue;
-        final g = raw.cast<String, dynamic>();
-        final items = _toVideoItems(g['videos'] ?? g['items'] ?? g['list']);
-        if (items.isEmpty) continue;
-        final name = (g['ar_title'] as String?)?.trim().isNotEmpty == true
-            ? g['ar_title'] as String
-            : (g['title'] as String? ?? g['name'] as String? ?? '');
-        if (name.isEmpty) continue;
-        sections.add((name: name, items: items, tagId: tagCounter++));
-      }
-
-      // Always guarantee at least latest-movies/series/popular even if
-      // videoGroups comes back empty for this account/level.
-      if (sections.isEmpty) {
-        final results = await Future.wait([
-          _fetchLatest('movies', 0),
-          _fetchLatest('series', 0),
-          _fetchPopular(0),
-        ]);
-        if (results[0].isNotEmpty) sections.add((name: 'أحدث الأفلام', items: results[0], tagId: 1));
-        if (results[1].isNotEmpty) sections.add((name: 'أحدث المسلسلات', items: results[1], tagId: 2));
-        if (results[2].isNotEmpty) sections.add((name: 'الأكثر مشاهدة', items: results[2], tagId: 3));
-      }
-
-      categories = sections;
-      allItemsPool = sections.expand((s) => s.items).toList();
-
-      // Hero carousel: prefer a real 'banner' endpoint if the account/level
-      // has one, otherwise fall back to the first section's items.
-      final bannerData = await _getJson('$_api/banner/level/$_level');
-      final bannerItems = _toVideoItems(bannerData);
-      heroItems = bannerItems.isNotEmpty
-          ? bannerItems.take(10).toList()
-          : (sections.isNotEmpty ? sections.first.items.take(10).toList() : []);
-
-      // Warm the real category list in the background for genre browsing -
-      // don't block the home screen on it.
-      unawaited(_ensureRealCategories());
-    } catch (_) {}
+      await _fetchHomeInner().timeout(const Duration(seconds: 12));
+    } catch (e) {
+      // Whatever we managed to gather before the timeout stays in
+      // categories/heroItems - the important thing is this NEVER hangs the
+      // splash/home screen indefinitely, even if cee.buzz is slow or down.
+      debugPrint('[cee.buzz] fetchHome timed out/failed: $e');
+    }
     isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> _fetchHomeInner() async {
+    // videoGroups (curated home rows) and banner (hero carousel) are
+    // independent - fetch them together instead of one after another.
+    final results = await Future.wait([
+      _getJson('$_api/videoGroups/lang/ar/level/$_level'),
+      _getJson('$_api/banner/level/$_level'),
+    ]);
+    final groupsData = results[0];
+    final bannerData = results[1];
+
+    final sections = <({String name, List<VideoItem> items, int tagId})>[];
+    var tagCounter = 100;
+    for (final raw in _asList(groupsData)) {
+      if (raw is! Map) continue;
+      final g = raw.cast<String, dynamic>();
+      final items = _toVideoItems(g['videos'] ?? g['items'] ?? g['list']);
+      if (items.isEmpty) continue;
+      final name = (g['ar_title'] as String?)?.trim().isNotEmpty == true
+          ? g['ar_title'] as String
+          : (g['title'] as String? ?? g['name'] as String? ?? '');
+      if (name.isEmpty) continue;
+      sections.add((name: name, items: items, tagId: tagCounter++));
+    }
+
+    // Always guarantee at least latest-movies/series/popular even if
+    // videoGroups comes back empty for this account/level.
+    if (sections.isEmpty) {
+      final fallback = await Future.wait([
+        _fetchLatest('movies', 0),
+        _fetchLatest('series', 0),
+        _fetchPopular(0),
+      ]);
+      if (fallback[0].isNotEmpty) sections.add((name: 'أحدث الأفلام', items: fallback[0], tagId: 1));
+      if (fallback[1].isNotEmpty) sections.add((name: 'أحدث المسلسلات', items: fallback[1], tagId: 2));
+      if (fallback[2].isNotEmpty) sections.add((name: 'الأكثر مشاهدة', items: fallback[2], tagId: 3));
+    }
+
+    categories = sections;
+    allItemsPool = sections.expand((s) => s.items).toList();
+
+    final bannerItems = _toVideoItems(bannerData);
+    heroItems = bannerItems.isNotEmpty
+        ? bannerItems.take(10).toList()
+        : (sections.isNotEmpty ? sections.first.items.take(10).toList() : []);
+
+    // Warm the real category list in the background for genre browsing -
+    // don't block the home screen on it.
+    unawaited(_ensureRealCategories());
   }
 
   Future<void> refreshHome() async => fetchHome();
@@ -1046,13 +1259,24 @@ class MovieScraper extends ChangeNotifier {
   Future<MediaDetails> fetchDetails(String id) async {
     final d = MediaDetails();
     try {
+      await _fetchDetailsInner(id, d).timeout(const Duration(seconds: 15));
+    } catch (e) {
+      // Same principle as fetchHome: never let the details screen spin
+      // forever - return whatever was gathered before the cutoff.
+      debugPrint('[cee.buzz] fetchDetails($id) timed out/failed: $e');
+    }
+    return d;
+  }
+
+  Future<void> _fetchDetailsInner(String id, MediaDetails d) async {
+    {
       final results = await Future.wait([
         _getJson('$_api/allVideoInfo/id/$id'),
         _getJson('$_api/transcoddedFiles/id/$id'),
       ]);
       final info = results[0];
       final filesData = results[1];
-      if (info == null) return d;
+      if (info == null) return;
 
       d.title = _pickTitle(info);
       d.year = info['year']?.toString() ?? '';
@@ -1143,7 +1367,7 @@ class MovieScraper extends ChangeNotifier {
       final seasonsList = _asList(seasonsData);
       if (seasonsList.isEmpty) {
         d.isMovie = true;
-        return d;
+        return;
       }
 
       final epsData = await _getJson('$_api/videoSeason/id/$id');
@@ -1172,10 +1396,7 @@ class MovieScraper extends ChangeNotifier {
         d.isMovie = false;
         d.episodes = episodes;
       }
-    } catch (e) {
-      debugPrint('[cee.buzz] fetchDetails($id) failed: $e');
     }
-    return d;
   }
 
   // Short-TTL cache keyed by video id so prewarm() actually saves the
@@ -3284,6 +3505,7 @@ import '../models/episode_item.dart';
 import '../models/subtitle_cue.dart';
 import '../services/subtitle_parser.dart';
 import '../services/scraper.dart';
+import '../services/local_proxy_server.dart';
 import '../providers/watch_progress_store.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
@@ -3429,7 +3651,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   int _setupAttempt = 0;
 
-  Future<void> _setupPlayer({bool retryWithoutHeaders = false, bool retryLocalAsUri = false}) async {
+  Future<void> _setupPlayer({
+    bool retryWithoutHeaders = false,
+    bool retryLocalAsUri = false,
+    int streamStage = 0, // 0 = local proxy, 1 = cloudflare worker, 2 = direct
+  }) async {
     final myAttempt = ++_setupAttempt; // guards against stale timeouts firing late
     final url = _resolvedUrl();
     if (url.isEmpty) { setState(() => _errorMessage = 'الرابط غير متاح'); return; }
@@ -3437,7 +3663,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final isLocal = url.startsWith('/') || url.startsWith('file://');
     VideoFormat? hint;
     if (url.contains('.m3u8')) hint = VideoFormat.hls;
-    // Support local file paths (downloads)
+
+    // The stage timeout is intentionally short for the local proxy (fast
+    // fail so we don't sit on a dead connection) and longer once we're on
+    // the Cloudflare Worker / direct fallbacks, matching the requested
+    // 5s -> 2.5s wait -> Cloudflare failover behavior.
+    Duration attemptTimeout = const Duration(seconds: 14);
+
+    // Support local file paths (downloads) - unaffected by the streaming
+    // accelerator/proxy chain below, which only applies to network streams.
     if (isLocal) {
       final path = url.replaceFirst('file://', '');
       final f = File(path);
@@ -3456,26 +3690,62 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _vpc = retryLocalAsUri
           ? VideoPlayerController.networkUrl(Uri.file(f.path))
           : VideoPlayerController.file(f);
-    } else if (retryWithoutHeaders) {
-      // Fallback: some CDNs/backends hang or reject custom headers on redirect
-      _vpc = VideoPlayerController.networkUrl(Uri.parse(url), formatHint: hint);
+    } else if (streamStage == 0) {
+      // Stage 0: local segmented-proxy "accelerator" - splits each range the
+      // player asks for into a few parallel connections against the origin,
+      // similar to how IDM-style downloaders get around a single-connection
+      // speed cap. Runs entirely on-device (127.0.0.1), never touches a
+      // third party. Short timeout: if the local server can't even connect
+      // within 5s, don't wait around - move on to the Cloudflare fallback.
+      attemptTimeout = const Duration(seconds: 5);
+      try {
+        final port = await LocalProxyServer.instance.ensureStarted();
+        final proxied = LocalProxyServer.instance.buildPlayUrl(url);
+        _vpc = VideoPlayerController.networkUrl(Uri.parse(proxied), formatHint: hint);
+        debugPrint('PlayerScreen: stage 0 (local proxy) -> 127.0.0.1:$port');
+      } catch (e) {
+        debugPrint('PlayerScreen: local proxy failed to start ($e), skipping to Cloudflare stage');
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 2500));
+          await _setupPlayer(streamStage: 1);
+        }
+        return;
+      }
+    } else if (streamStage == 1) {
+      // Stage 1: Cloudflare Worker reverse proxy - used when the local
+      // accelerator can't reach the origin at all (network-level block).
+      // The worker makes the request from its own IP and forwards the
+      // response back, which also helps route around origin-side blocks
+      // tied to the device's own IP/region.
+      final cfUrl = buildCloudflareProxyUrl(url);
+      _vpc = VideoPlayerController.networkUrl(
+        Uri.parse(cfUrl),
+        formatHint: hint,
+        httpHeaders: retryWithoutHeaders ? {} : {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
+          'Referer': 'https://cee.buzz/',
+        },
+      );
     } else {
+      // Stage 2 (last resort): go straight to the origin, exactly like the
+      // very first version of this player did, before any proxy layer.
       _vpc = VideoPlayerController.networkUrl(
         Uri.parse(url),
         formatHint: hint,
-        httpHeaders: {
+        httpHeaders: retryWithoutHeaders ? {} : {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
           'Referer': 'https://cee.buzz/',
         },
       );
     }
+
     try {
       // A hard timeout is essential here: some backends (notably the mdk/FFmpeg
       // engine used for broader codec support) can hang indefinitely instead of
       // throwing when a stream can't be opened - without this, initialize()
       // never resolves and the UI is stuck on an infinite loading spinner with
       // no way to recover other than leaving the screen.
-      await _vpc!.initialize().timeout(const Duration(seconds: 14));
+      await _vpc!.initialize().timeout(attemptTimeout);
       if (myAttempt != _setupAttempt) return; // a newer setup call superseded this one
       _vpc!.addListener(_onPlayerUpdate);
       final saved = WatchProgressStore.instance.progressFor(widget.itemId, episodeId: _currentEpisodeId);
@@ -3488,22 +3758,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _startSaveTimer();
     } catch (e, st) {
       if (myAttempt != _setupAttempt) return; // stale attempt, a newer one is in flight
-      debugPrint('PlayerScreen: video init failed/timed out for url=$url error=$e');
+      debugPrint('PlayerScreen: video init failed/timed out (stage=$streamStage local=$isLocal) url=$url error=$e');
       debugPrint(st.toString());
       try { await _vpc?.dispose(); } catch (_) {}
       _vpc = null;
+
       // Local files: retry once using the file:// Uri path instead of the
       // .file() constructor before giving up.
       if (isLocal && !retryLocalAsUri) {
         await _setupPlayer(retryLocalAsUri: true);
         return;
       }
-      // Streams: retry once without custom headers - some CDNs/backends hang
-      // or reject them on redirect. Covers both thrown errors AND timeouts.
-      if (!isLocal && !retryWithoutHeaders) {
-        await _setupPlayer(retryWithoutHeaders: true);
-        return;
+
+      if (!isLocal) {
+        // Stage 0 (local proxy) failed/timed out: per spec, wait 2.5s then
+        // fail over to the Cloudflare Worker proxy.
+        if (streamStage == 0) {
+          await Future.delayed(const Duration(milliseconds: 2500));
+          if (myAttempt != _setupAttempt) return;
+          await _setupPlayer(streamStage: 1);
+          return;
+        }
+        // Stage 1 (Cloudflare): retry once without custom headers first -
+        // some edge/CDN configs reject them - before falling through to the
+        // direct-origin last resort.
+        if (streamStage == 1 && !retryWithoutHeaders) {
+          await _setupPlayer(streamStage: 1, retryWithoutHeaders: true);
+          return;
+        }
+        if (streamStage == 1) {
+          await _setupPlayer(streamStage: 2);
+          return;
+        }
+        // Stage 2 direct: same header-retry safety net as before.
+        if (streamStage == 2 && !retryWithoutHeaders) {
+          await _setupPlayer(streamStage: 2, retryWithoutHeaders: true);
+          return;
+        }
       }
+
       setState(() {
         _errorMessage = isLocal
             ? 'تعذر تشغيل الملف المحلي. قد يكون التحميل لم يكتمل.'
@@ -4466,9 +4759,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (url.isEmpty) return;
     _vpc?.removeListener(_onPlayerUpdate);
     await _vpc?.dispose();
-    _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+    final isLocal = url.startsWith('/') || url.startsWith('file://');
+    String playUrl = url;
+    if (!isLocal) {
+      try {
+        await LocalProxyServer.instance.ensureStarted();
+        playUrl = LocalProxyServer.instance.buildPlayUrl(url);
+      } catch (_) {} // falls back to the raw origin URL below
+    }
+    _vpc = isLocal
+        ? VideoPlayerController.file(File(url.replaceFirst('file://', '')))
+        : VideoPlayerController.networkUrl(Uri.parse(playUrl));
     try {
-      await _vpc!.initialize();
+      await _vpc!.initialize().timeout(const Duration(seconds: 10));
       _vpc!.addListener(_onPlayerUpdate);
       await _vpc!.seekTo(Duration(milliseconds: (t * 1000).round()));
       if (_isPlaying) _vpc!.play();
