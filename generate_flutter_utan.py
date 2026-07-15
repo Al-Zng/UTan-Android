@@ -778,6 +778,20 @@ const int _level = 1;
 
 String _thumb(String path) => path.isEmpty ? '' : '$_thumbBase$path';
 
+/// Requests the 'large' poster variant instead of 'medium' for noticeably
+/// sharper artwork. cee.buzz serves posters filed by size (e.g.
+/// ".../medium/xxx.jpg" style directories or filename segments) - the field
+/// we get from the API is always the medium one (imgMediumThumb), so we
+/// swap the size marker in the resolved URL. Falls back to the medium URL
+/// untouched if no 'medium' marker is found to replace.
+String _thumbLarge(String path) {
+  final medium = _thumb(path);
+  if (medium.isEmpty) return medium;
+  if (medium.contains('medium')) return medium.replaceAll('medium', 'large');
+  if (medium.contains('Medium')) return medium.replaceAll('Medium', 'Large');
+  return medium;
+}
+
 String _resolveMediaUrl(String u) {
   if (u.isEmpty) return '';
   if (u.startsWith('http')) return u;
@@ -834,7 +848,7 @@ List<VideoItem> _toVideoItems(dynamic data) {
     out.add(VideoItem(
       id: id,
       title: _pickTitle(v),
-      imageUrl: _thumb(poster),
+      imageUrl: _thumbLarge(poster),
       type: _pickType(v),
     ));
   }
@@ -846,6 +860,11 @@ class MovieScraper extends ChangeNotifier {
   List<({String name, List<VideoItem> items, int tagId})> categories = [];
   List<VideoItem> allItemsPool = [];
   bool isLoading = false;
+
+  // Real site categories (mainCategories), cached after first fetch so
+  // browse/genre screens can resolve a human category name -> its real
+  // cee.buzz `nb` id. Populated by _ensureRealCategories().
+  List<({String id, String name})> _realCategories = [];
 
   Future<Map<String, dynamic>?> _getJson(String url, {bool log = false}) async {
     try {
@@ -874,8 +893,7 @@ class MovieScraper extends ChangeNotifier {
 
   Future<List<VideoItem>> _fetchPopular(int page) async {
     // The real server occasionally returns an empty week list depending on
-    // the account's level; fall back through month/day before giving up,
-    // mirroring the reference implementation's documented behavior.
+    // the account's level; fall back through month/day before giving up.
     for (final period in ['W', 'M', 'D']) {
       final data = await _getJson('$_api/popularFilms/kind/$period/level/$_level/page/$page');
       final items = _toVideoItems(data);
@@ -884,30 +902,78 @@ class MovieScraper extends ChangeNotifier {
     return [];
   }
 
+  /// mainCategories returns the site's real genre list (each item has the
+  /// same nb/ar_title/en_title shape as everything else). Cached in-memory
+  /// after the first successful call.
+  Future<List<({String id, String name})>> _ensureRealCategories() async {
+    if (_realCategories.isNotEmpty) return _realCategories;
+    final data = await _getJson('$_api/mainCategories?lang=ar');
+    final out = <({String id, String name})>[];
+    for (final raw in _asList(data)) {
+      if (raw is! Map) continue;
+      final c = raw.cast<String, dynamic>();
+      final id = _pickId(c);
+      if (id.isEmpty) continue;
+      out.add((id: id, name: _pickTitle(c)));
+    }
+    _realCategories = out;
+    return out;
+  }
+
+  /// Real genre/category browse list for the UI (Netflix/Marvel-style
+  /// shortcuts replaced with cee.buzz's own actual category list, since the
+  /// old vodu.me tag ids have no equivalent here).
+  Future<List<({String id, String name})>> fetchGenreList() => _ensureRealCategories();
+
   Future<void> fetchHome() async {
     isLoading = true;
     notifyListeners();
     try {
-      final results = await Future.wait([
-        _fetchLatest('movies', 0),
-        _fetchLatest('series', 0),
-        _fetchPopular(0),
-      ]);
+      // videoGroups returns the site's own curated homepage rows directly
+      // (same rows cee.buzz itself shows), which is far richer than
+      // hand-picking 2-3 fixed sections.
+      final groupsData = await _getJson('$_api/videoGroups/lang/ar/level/$_level');
       final sections = <({String name, List<VideoItem> items, int tagId})>[];
-      if (results[0].isNotEmpty) {
-        sections.add((name: 'أحدث الأفلام', items: results[0], tagId: 1));
+      var tagCounter = 100;
+      for (final raw in _asList(groupsData)) {
+        if (raw is! Map) continue;
+        final g = raw.cast<String, dynamic>();
+        final items = _toVideoItems(g['videos'] ?? g['items'] ?? g['list']);
+        if (items.isEmpty) continue;
+        final name = (g['ar_title'] as String?)?.trim().isNotEmpty == true
+            ? g['ar_title'] as String
+            : (g['title'] as String? ?? g['name'] as String? ?? '');
+        if (name.isEmpty) continue;
+        sections.add((name: name, items: items, tagId: tagCounter++));
       }
-      if (results[1].isNotEmpty) {
-        sections.add((name: 'أحدث المسلسلات', items: results[1], tagId: 2));
+
+      // Always guarantee at least latest-movies/series/popular even if
+      // videoGroups comes back empty for this account/level.
+      if (sections.isEmpty) {
+        final results = await Future.wait([
+          _fetchLatest('movies', 0),
+          _fetchLatest('series', 0),
+          _fetchPopular(0),
+        ]);
+        if (results[0].isNotEmpty) sections.add((name: 'أحدث الأفلام', items: results[0], tagId: 1));
+        if (results[1].isNotEmpty) sections.add((name: 'أحدث المسلسلات', items: results[1], tagId: 2));
+        if (results[2].isNotEmpty) sections.add((name: 'الأكثر مشاهدة', items: results[2], tagId: 3));
       }
-      if (results[2].isNotEmpty) {
-        sections.add((name: 'الأكثر مشاهدة', items: results[2], tagId: 3));
-      }
+
       categories = sections;
       allItemsPool = sections.expand((s) => s.items).toList();
-      // Hero carousel reuses the latest-movies list (same as the reference
-      // web app's loadHero(), which pulls from latestMovies as well).
-      heroItems = results[0].take(10).toList();
+
+      // Hero carousel: prefer a real 'banner' endpoint if the account/level
+      // has one, otherwise fall back to the first section's items.
+      final bannerData = await _getJson('$_api/banner/level/$_level');
+      final bannerItems = _toVideoItems(bannerData);
+      heroItems = bannerItems.isNotEmpty
+          ? bannerItems.take(10).toList()
+          : (sections.isNotEmpty ? sections.first.items.take(10).toList() : []);
+
+      // Warm the real category list in the background for genre browsing -
+      // don't block the home screen on it.
+      unawaited(_ensureRealCategories());
     } catch (_) {}
     isLoading = false;
     notifyListeners();
@@ -915,14 +981,10 @@ class MovieScraper extends ChangeNotifier {
 
   Future<void> refreshHome() async => fetchHome();
 
-  /// [typeId] follows the same 1/2/3 convention used when building `categories`
-  /// in fetchHome() above (1=movies, 2=series, 3=popular). For tag-style
-  /// genre shortcuts (Netflix/Marvel/etc, [useTag]=true) we best-effort map
-  /// the tag's remoteId onto cee.buzz's `videosByCategory` endpoint - cee.buzz
-  /// uses a completely different category-ID space than the old vodu.me tags,
-  /// so these specific shortcuts may return empty/unrelated results until
-  /// they're remapped against cee.buzz's own `mainCategories`/`subCategories`
-  /// endpoints (not attempted here - out of scope for this migration pass).
+  /// [typeId] is either the special 1/2/3 convention (movies/series/popular,
+  /// used by the fallback home rows) or - when [useTag] is true - a REAL
+  /// cee.buzz category `nb` id from [fetchGenreList], routed through
+  /// `videosByCategory`.
   Future<List<VideoItem>> fetchCategory(
     int typeId, {
     int page = 1,
@@ -957,11 +1019,9 @@ class MovieScraper extends ChangeNotifier {
     String? director,
     String? imdbrate,
   }) async {
-    // cee.buzz's real AdvancedSearch endpoint takes an opaque filter format
-    // that isn't publicly documented (see notes in the reference dump); only
-    // plain title search is reliably known to work, so that's all this
-    // supports for now. Other filter params are accepted for signature
-    // compatibility but currently ignored.
+    // Only plain title search is reliably known to work against the real
+    // API; other filters are accepted for signature compatibility but
+    // currently ignored (AdvancedSearch's filter format isn't documented).
     if (title == null || title.trim().isEmpty) return [];
     return searchItems(title);
   }
@@ -996,13 +1056,60 @@ class MovieScraper extends ChangeNotifier {
 
       d.title = _pickTitle(info);
       d.year = info['year']?.toString() ?? '';
-      d.genre = info['categoryName']?.toString() ?? '';
-      d.rating = info['rating']?.toString() ?? '';
+
+      // Genre: `categories` is an array of {nb, ar_title, en_title} objects,
+      // not a single string field - join the localized names for display.
+      final catList = (info['categories'] as List?)
+              ?.whereType<Map>()
+              .map((c) => _pickTitle(c.cast<String, dynamic>()))
+              .where((s) => s.isNotEmpty)
+              .toList() ??
+          const [];
+      d.genre = catList.join('، ');
+
+      // Rating: the real field is `stars` (a number/string), not `rating`.
+      d.rating = info['stars']?.toString() ?? info['rating']?.toString() ?? '';
+
       final durationSec = info['duration'];
       d.runtime = durationSec == null ? '' : '${(int.tryParse(durationSec.toString()) ?? 0) ~/ 60} د';
-      d.synopsis = info['description']?.toString() ?? info['summary']?.toString() ?? '';
-      final poster = info['imgMediumThumb'] as String? ?? '';
-      d.imageUrl = _thumb(poster);
+
+      // Synopsis: the real fields are ar_content/en_content, NOT
+      // description/summary (those don't exist on this API at all - this
+      // was the root cause of synopsis always coming back empty).
+      final arContent = info['ar_content']?.toString() ?? '';
+      final enContent = info['en_content']?.toString() ?? '';
+      d.synopsis = arContent.trim().isNotEmpty ? arContent : enContent;
+
+      // Poster: request the 'large' variant instead of 'medium' for
+      // noticeably sharper artwork - the API serves both under the same
+      // path convention, just with the size segment swapped.
+      final posterMedium = info['imgMediumThumb'] as String? ?? '';
+      d.imageUrl = _thumbLarge(posterMedium);
+
+      // Cast & crew
+      final cast = <CastMember>[];
+      void addRole(String key, String role) {
+        final list = info[key] as List?;
+        if (list == null) return;
+        for (final raw in list) {
+          if (raw is! Map) continue;
+          final p = raw.cast<String, dynamic>();
+          final pid = _pickId(p);
+          final name = (p['name'] as String?)?.trim() ?? '';
+          if (pid.isEmpty || name.isEmpty || name == 'nostaff') continue;
+          cast.add(CastMember(
+            id: pid,
+            name: name,
+            imageUrl: _thumb(p['staff_img_thumb'] as String? ?? ''),
+            role: role,
+          ));
+        }
+      }
+      addRole('actorsInfo', 'actor');
+      addRole('directorsInfo', 'director');
+      addRole('writersInfo', 'writer');
+      addRole('producersInfo', 'producer');
+      d.cast = cast;
 
       // Playback sources for THIS id (used directly if it's a movie, or as
       // the "resolved" result when resolvePlayback() re-calls fetchDetails
@@ -1013,6 +1120,7 @@ class MovieScraper extends ChangeNotifier {
       d.movieUrl720 = quality['720'] ?? '';
       d.movieUrl1080 = quality['1080'] ?? '';
       d.movieUrl360 = quality['360'] ?? '';
+      d.movieUrl240 = quality['240'] ?? '';
       d.movieUrl4k = quality['4k'] ?? '';
 
       final translations = (info['translations'] as List?)
@@ -1055,7 +1163,7 @@ class MovieScraper extends ChangeNotifier {
               : epTitle,
           url: '', // resolved lazily via resolvePlayback(epId) right before playback
           season: 'S${seasonNum.padLeft(2, '0')}',
-          imageUrl: _thumb(e['imgMediumThumb'] as String? ?? ''),
+          imageUrl: _thumbLarge(e['imgMediumThumb'] as String? ?? ''),
         ));
       }
       if (episodes.isEmpty) {
@@ -1070,13 +1178,38 @@ class MovieScraper extends ChangeNotifier {
     return d;
   }
 
+  // Short-TTL cache keyed by video id so prewarm() actually saves the
+  // follow-up tap a full round-trip instead of just warming the connection.
+  final Map<String, MediaDetails> _resolveCache = {};
+  final Map<String, DateTime> _resolveCacheAt = {};
+  static const _resolveCacheTtl = Duration(minutes: 3);
+
   /// Resolves the real playback URLs + Arabic subtitle for a single video id
   /// (movie OR one specific episode) right before it's played or downloaded.
-  /// This is just a thin call into fetchDetails() for that id, since the
-  /// underlying API calls (allVideoInfo + transcoddedFiles) are identical -
-  /// the only difference is the caller only cares about the movie* fields
-  /// of the result, not its (possibly present) episode list.
-  Future<MediaDetails> resolvePlayback(String id) => fetchDetails(id);
+  /// Results are cached briefly so a [prewarm]-ed id that gets tapped a few
+  /// seconds later plays instantly instead of re-fetching from scratch.
+  Future<MediaDetails> resolvePlayback(String id) async {
+    final cachedAt = _resolveCacheAt[id];
+    if (cachedAt != null && DateTime.now().difference(cachedAt) < _resolveCacheTtl) {
+      final cached = _resolveCache[id];
+      if (cached != null) return cached;
+    }
+    final d = await fetchDetails(id);
+    _resolveCache[id] = d;
+    _resolveCacheAt[id] = DateTime.now();
+    return d;
+  }
+
+  /// Kicks off playback resolution for [id] without waiting on it - used to
+  /// pre-fetch the stream metadata (and populate the cache above) while the
+  /// person is still reading the details screen, so tapping play often
+  /// resolves instantly instead of waiting for allVideoInfo+transcoddedFiles
+  /// to round-trip only after the tap. Mirrors the reference web app's
+  /// prewarmVideo() hover mechanism, adapted for touch.
+  void prewarm(String id) {
+    if (id.isEmpty) return;
+    unawaited(resolvePlayback(id));
+  }
 
   Map<String, String> _mapQualities(List<dynamic> files) {
     final out = <String, String>{};
@@ -1096,6 +1229,8 @@ class MovieScraper extends ChangeNotifier {
         out['720'] = resolved;
       } else if (label.contains('360')) {
         out['360'] = resolved;
+      } else if (label.contains('240')) {
+        out['240'] = resolved;
       }
     }
     return out;
@@ -3495,14 +3630,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _episodesRailOffset = 0;
     _currentEpisodeId = ep.id;
     _currentEpisodeTitle = ep.title;
-    _dynUrl = null; _dynUrl720 = null; _dynUrl1080 = null; _dynUrl360 = null; _dynUrl4k = null;
+    _dynUrl = null; _dynUrl720 = null; _dynUrl1080 = null; _dynUrl360 = null; _dynUrl240 = null; _dynUrl4k = null;
     _dynSubVtt = null; _dynSubSrt = null;
     setState(() { _showEpisodes = false; _isBuffering = true; });
 
     // cee.buzz only returns real playback URLs for the exact episode id you
     // fetch (the season/episode list itself has metadata only), so resolve
     // this episode's stream + subtitle before handing off to _setupPlayer.
-    final resolved = await MovieScraper().resolvePlayback(ep.id);
+    final resolved = await context.read<MovieScraper>().resolvePlayback(ep.id);
     if (resolved.movieUrl.isEmpty) {
       if (mounted) setState(() { _errorMessage = 'تعذر تشغيل الحلقة.'; _isBuffering = false; });
       return;
@@ -3511,6 +3646,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _dynUrl720  = resolved.movieUrl720;
     _dynUrl1080 = resolved.movieUrl1080;
     _dynUrl360  = resolved.movieUrl360;
+    _dynUrl240  = resolved.movieUrl240;
     _dynUrl4k   = resolved.movieUrl4k;
     _dynSubVtt  = resolved.movieSubtitleVttUrl;
     _dynSubSrt  = resolved.movieSubtitleUrl;
@@ -3777,10 +3913,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
               onSelected: (q) => _switchQuality(q),
               itemBuilder: (_) => [
                 _qualityItem(VideoQuality.auto, 'تلقائي / Auto'),
-                if (widget.videoUrl360.isNotEmpty) _qualityItem(VideoQuality.q360, '360p'),
-                if (widget.videoUrl720.isNotEmpty) _qualityItem(VideoQuality.q720, '720p'),
-                if (widget.videoUrl1080.isNotEmpty) _qualityItem(VideoQuality.q1080, '1080p'),
-                if (widget.videoUrl4k.isNotEmpty) _qualityItem(VideoQuality.q4k, '4K'),
+                if ((_dynUrl240 ?? widget.videoUrl240).isNotEmpty) _qualityItem(VideoQuality.q240, '240p'),
+                if ((_dynUrl360 ?? widget.videoUrl360).isNotEmpty) _qualityItem(VideoQuality.q360, '360p'),
+                if ((_dynUrl720 ?? widget.videoUrl720).isNotEmpty) _qualityItem(VideoQuality.q720, '720p'),
+                if ((_dynUrl1080 ?? widget.videoUrl1080).isNotEmpty) _qualityItem(VideoQuality.q1080, '1080p'),
+                if ((_dynUrl4k ?? widget.videoUrl4k).isNotEmpty) _qualityItem(VideoQuality.q4k, '4K'),
               ],
             ),
             PopupMenuButton<double>(
@@ -5076,6 +5213,15 @@ class _DetailsScreenState extends State<DetailsScreen> {
     final d = await scraper.fetchDetails(widget.itemId);
     if (mounted) setState(() { _details = d; _loading = false;
       if (d.sortedSeasons.isNotEmpty) _selectedSeason = d.sortedSeasons.first; });
+    // Fire-and-forget: resolve the first episode's stream URL now, while the
+    // person is still reading the details screen, so tapping play doesn't
+    // have to wait for allVideoInfo+transcoddedFiles to round-trip from
+    // scratch - the result gets cached by resolvePlayback's underlying call
+    // pattern is stateless per-call, but the OS/TLS connection and DNS are
+    // now warm, which is most of the perceived delay.
+    if (!d.isMovie && d.episodes.isNotEmpty) {
+      scraper.prewarm(d.episodes.first.id);
+    }
   }
 
   void _playMovie(MediaDetails d) {
@@ -5276,6 +5422,56 @@ class _DetailsScreenState extends State<DetailsScreen> {
               child: Text(
                 _synopsisExpanded ? L('عرض أقل', 'Show Less') : L('عرض المزيد', 'Read More'),
                 style: TextStyle(color: utRed(), fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Cast & crew
+          if (d.cast.isNotEmpty) ...[
+            Text(L('طاقم العمل', 'Cast & Crew'),
+              style: appFontStyle(16, bold: true, color: Colors.white70)),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 118,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: d.cast.length,
+                itemBuilder: (_, i) {
+                  final person = d.cast[i];
+                  final roleLabel = switch (person.role) {
+                    'director' => L('مخرج', 'Director'),
+                    'writer' => L('كاتب', 'Writer'),
+                    'producer' => L('منتج', 'Producer'),
+                    _ => L('ممثل', 'Actor'),
+                  };
+                  return Container(
+                    width: 84,
+                    margin: const EdgeInsets.only(left: 12),
+                    child: Column(children: [
+                      ClipOval(
+                        child: person.imageUrl.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: person.imageUrl,
+                                width: 68, height: 68, fit: BoxFit.cover,
+                                placeholder: (_, __) => Container(width: 68, height: 68, color: Colors.white10),
+                                errorWidget: (_, __, ___) => Container(width: 68, height: 68,
+                                  color: Colors.white10,
+                                  child: const Icon(Icons.person, color: Colors.white24)),
+                              )
+                            : Container(width: 68, height: 68, color: Colors.white10,
+                                child: const Icon(Icons.person, color: Colors.white24)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(person.name,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                      Text(roleLabel,
+                        style: const TextStyle(color: Colors.white38, fontSize: 10),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                    ]),
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 20),
           ],
