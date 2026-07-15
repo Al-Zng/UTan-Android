@@ -335,6 +335,20 @@ w("lib/models/episode_item.dart", r"""class EpisodeItem {
 # --- lib/models/media_details.dart ------------------------------------------
 w("lib/models/media_details.dart", r"""import 'episode_item.dart';
 
+class CastMember {
+  final String id;
+  final String name;
+  final String imageUrl;
+  final String role; // 'actor' | 'director' | 'writer' | 'producer'
+
+  const CastMember({
+    required this.id,
+    required this.name,
+    this.imageUrl = '',
+    this.role = 'actor',
+  });
+}
+
 class MediaDetails {
   String title;
   String imageUrl;
@@ -348,10 +362,12 @@ class MediaDetails {
   String movieUrl720;
   String movieUrl1080;
   String movieUrl360;
+  String movieUrl240;
   String movieUrl4k;
   String movieSubtitleUrl;
   String movieSubtitleVttUrl;
   List<EpisodeItem> episodes;
+  List<CastMember> cast;
 
   MediaDetails({
     this.title = '',
@@ -366,10 +382,12 @@ class MediaDetails {
     this.movieUrl720 = '',
     this.movieUrl1080 = '',
     this.movieUrl360 = '',
+    this.movieUrl240 = '',
     this.movieUrl4k = '',
     this.movieSubtitleUrl = '',
     this.movieSubtitleVttUrl = '',
     this.episodes = const [],
+    this.cast = const [],
   });
 
   Map<String, List<EpisodeItem>> get seasonsDict {
@@ -3135,7 +3153,7 @@ import '../providers/watch_progress_store.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
 
-enum VideoQuality { auto, q360, q720, q1080, q4k }
+enum VideoQuality { auto, q240, q360, q720, q1080, q4k }
 
 class PlayerScreen extends StatefulWidget {
   final String itemId;
@@ -3146,6 +3164,7 @@ class PlayerScreen extends StatefulWidget {
   final String videoUrl720;
   final String videoUrl1080;
   final String videoUrl360;
+  final String videoUrl240;
   final String videoUrl4k;
   final String subtitleUrl;
   final String subtitleVttUrl;
@@ -3158,7 +3177,7 @@ class PlayerScreen extends StatefulWidget {
     required this.itemId, required this.itemTitle, required this.itemImageUrl,
     required this.isMovie,
     required this.videoUrl, this.videoUrl720 = '', this.videoUrl1080 = '',
-    this.videoUrl360 = '', this.videoUrl4k = '',
+    this.videoUrl360 = '', this.videoUrl240 = '', this.videoUrl4k = '',
     this.subtitleUrl = '', this.subtitleVttUrl = '',
     required this.episodeId, required this.episodeTitle,
     this.episodes = const [],
@@ -3245,7 +3264,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // playback URLs for the exact episode id you fetch, not the whole season
   // list), these hold the freshly-resolved URLs for _currentEpisodeId and
   // take priority over the widget's original (initial-episode) URLs.
-  String? _dynUrl, _dynUrl720, _dynUrl1080, _dynUrl360, _dynUrl4k;
+  String? _dynUrl, _dynUrl720, _dynUrl1080, _dynUrl360, _dynUrl240, _dynUrl4k;
   String? _dynSubVtt, _dynSubSrt;
 
   String _resolvedUrl({VideoQuality? q}) {
@@ -3256,11 +3275,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return 'https://cdn.cee.buzz/$u';
     }
     final baseUrl    = _dynUrl     ?? widget.videoUrl;
+    final base240     = _dynUrl240  ?? widget.videoUrl240;
     final base360     = _dynUrl360  ?? widget.videoUrl360;
     final base720     = _dynUrl720  ?? widget.videoUrl720;
     final base1080    = _dynUrl1080 ?? widget.videoUrl1080;
     final base4k       = _dynUrl4k   ?? widget.videoUrl4k;
     switch (q) {
+      case VideoQuality.q240: return fix(base240.isNotEmpty ? base240 : baseUrl);
       case VideoQuality.q360: return fix(base360.isNotEmpty ? base360 : baseUrl);
       case VideoQuality.q720: return fix(base720.isNotEmpty ? base720 : baseUrl);
       case VideoQuality.q1080: return fix(base1080.isNotEmpty ? base1080 : baseUrl);
