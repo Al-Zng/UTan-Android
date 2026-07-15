@@ -730,27 +730,97 @@ print("✅ All model files written")
 
 # --- lib/services/scraper.dart -----------------------------------------------
 w("lib/services/scraper.dart", r"""import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/video_item.dart';
 import '../models/media_details.dart';
 import '../models/episode_item.dart';
 
-const String _baseUrl = 'https://movie.vodu.me/';
-const String _userAgent =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-    '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+// ============================================================================
+//  cee.buzz JSON API client (migrated from the old movie.vodu.me HTML scraper)
+//  Base rule: https://cee.buzz/api/android/<endpoint>
+//  Field-name quirks straight from the real API (do not "fix" these typos,
+//  they are exactly what the server returns):
+//    nb              -> unique numeric video id (used everywhere as {id})
+//    ar_title/en_title -> title fields (no plain "title")
+//    episodeNummer   -> episode number (misspelled with double m, intentional)
+//    season          -> season number for an episode
+//    rootSeries      -> parent series id, if this video is an episode
+//    imgMediumThumb  -> poster filename, appended to THUMB base
+//    translations    -> [{ extention: "vtt"|"ass", type: "ar"|"en"|.., name, file }]
+//                        (also misspelled: "extention" not "extension")
+//  Paging is 0-indexed. level = parental level (0 = general).
+// ============================================================================
 
-String _optimizeImageUrl(String url, {int w = 400, int h = 600}) {
-  if (url.contains('w=750') || url.contains('h=388')) return url;
-  final sep = url.contains('?') ? '&' : '?';
-  return '$url${sep}w=$w&h=$h&crop-to-fit';
-}
+const String _api = 'https://cee.buzz/api/android';
+const String _thumbBase = 'https://cnth2.cee.buzz/poster-images/';
+const String _cdnBase = 'https://cdn.cee.buzz/';
+const int _level = 1;
 
-String _fixUrl(String u) {
+String _thumb(String path) => path.isEmpty ? '' : '$_thumbBase$path';
+
+String _resolveMediaUrl(String u) {
   if (u.isEmpty) return '';
   if (u.startsWith('http')) return u;
-  return '$_baseUrl$u';
+  return u.startsWith('/') ? 'https://cdn.cee.buzz$u' : '$_cdnBase$u';
+}
+
+String _pickTitle(Map<String, dynamic> v) =>
+    (v['ar_title'] as String?)?.trim().isNotEmpty == true
+        ? v['ar_title'] as String
+        : (v['en_title'] as String?)?.trim().isNotEmpty == true
+            ? v['en_title'] as String
+            : (v['title'] as String? ?? v['name'] as String? ?? 'بدون عنوان');
+
+String _pickId(Map<String, dynamic> v) {
+  final raw = v['nb'] ?? v['id'] ?? v['videoId'] ?? v['video_id'];
+  return raw == null ? '' : raw.toString();
+}
+
+String _pickType(Map<String, dynamic> v) {
+  final kind = v['videoKind'] ?? v['kind'] ?? v['videoType'];
+  final kindStr = kind?.toString();
+  if (kindStr == '2') return 'series';
+  if (kindStr == '1') return 'movie';
+  if (v['isSeries'] == true) return 'series';
+  return 'movie';
+}
+
+/// Pulls a JSON list out of a decoded response body, regardless of whether
+/// the API wrapped it as a bare array, {videos:[...]}, {items:[...]}, or any
+/// other single top-level array field (cee.buzz is inconsistent about this
+/// across endpoints).
+List<dynamic> _asList(dynamic data) {
+  if (data == null) return const [];
+  if (data is List) return data;
+  if (data is Map) {
+    if (data['videos'] is List) return data['videos'] as List;
+    if (data['items'] is List) return data['items'] as List;
+    for (final v in data.values) {
+      if (v is List) return v;
+    }
+  }
+  return const [];
+}
+
+List<VideoItem> _toVideoItems(dynamic data) {
+  final out = <VideoItem>[];
+  for (final raw in _asList(data)) {
+    if (raw is! Map) continue;
+    final v = raw.cast<String, dynamic>();
+    final id = _pickId(v);
+    if (id.isEmpty) continue;
+    final poster = v['imgMediumThumb'] as String? ?? v['posterImage'] as String? ?? '';
+    if (out.any((e) => e.id == id)) continue;
+    out.add(VideoItem(
+      id: id,
+      title: _pickTitle(v),
+      imageUrl: _thumb(poster),
+      type: _pickType(v),
+    ));
+  }
+  return out;
 }
 
 class MovieScraper extends ChangeNotifier {
@@ -759,22 +829,67 @@ class MovieScraper extends ChangeNotifier {
   List<VideoItem> allItemsPool = [];
   bool isLoading = false;
 
+  Future<Map<String, dynamic>?> _getJson(String url, {bool log = false}) async {
+    try {
+      final resp = await http
+          .get(Uri.parse(url), headers: const {'Connection': 'keep-alive'})
+          .timeout(const Duration(seconds: 15));
+      if (log) debugPrint('[cee.buzz] GET $url -> HTTP ${resp.statusCode}');
+      if (resp.statusCode != 200) return null;
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      // Normalize to a Map so callers can use one code path; bare-array
+      // responses get wrapped under a synthetic 'videos' key.
+      if (decoded is List) return {'videos': decoded};
+      if (decoded is Map<String, dynamic>) return decoded;
+      return null;
+    } catch (e) {
+      debugPrint('[cee.buzz] request failed: $url -> $e');
+      return null;
+    }
+  }
+
+  Future<List<VideoItem>> _fetchLatest(String kind, int page) async {
+    final endpoint = kind == 'series' ? 'latestSeries' : 'latestMovies';
+    final data = await _getJson('$_api/$endpoint/level/$_level/itemsPerPage/24/page/$page/');
+    return _toVideoItems(data);
+  }
+
+  Future<List<VideoItem>> _fetchPopular(int page) async {
+    // The real server occasionally returns an empty week list depending on
+    // the account's level; fall back through month/day before giving up,
+    // mirroring the reference implementation's documented behavior.
+    for (final period in ['W', 'M', 'D']) {
+      final data = await _getJson('$_api/popularFilms/kind/$period/level/$_level/page/$page');
+      final items = _toVideoItems(data);
+      if (items.isNotEmpty) return items;
+    }
+    return [];
+  }
+
   Future<void> fetchHome() async {
     isLoading = true;
     notifyListeners();
     try {
-      final resp = await http.get(
-        Uri.parse('${_baseUrl}index.php'),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        final html = resp.body;
-        final result = await compute(_parseHomePage, html);
-        heroItems = result.$1;
-        final filtered = result.$2.where((s) => s.name.toLowerCase() != 'featured').toList();
-        categories = filtered;
-        allItemsPool = filtered.expand((s) => s.items).toList();
+      final results = await Future.wait([
+        _fetchLatest('movies', 0),
+        _fetchLatest('series', 0),
+        _fetchPopular(0),
+      ]);
+      final sections = <({String name, List<VideoItem> items, int tagId})>[];
+      if (results[0].isNotEmpty) {
+        sections.add((name: 'أحدث الأفلام', items: results[0], tagId: 1));
       }
+      if (results[1].isNotEmpty) {
+        sections.add((name: 'أحدث المسلسلات', items: results[1], tagId: 2));
+      }
+      if (results[2].isNotEmpty) {
+        sections.add((name: 'الأكثر مشاهدة', items: results[2], tagId: 3));
+      }
+      categories = sections;
+      allItemsPool = sections.expand((s) => s.items).toList();
+      // Hero carousel reuses the latest-movies list (same as the reference
+      // web app's loadHero(), which pulls from latestMovies as well).
+      heroItems = results[0].take(10).toList();
     } catch (_) {}
     isLoading = false;
     notifyListeners();
@@ -782,6 +897,14 @@ class MovieScraper extends ChangeNotifier {
 
   Future<void> refreshHome() async => fetchHome();
 
+  /// [typeId] follows the same 1/2/3 convention used when building `categories`
+  /// in fetchHome() above (1=movies, 2=series, 3=popular). For tag-style
+  /// genre shortcuts (Netflix/Marvel/etc, [useTag]=true) we best-effort map
+  /// the tag's remoteId onto cee.buzz's `videosByCategory` endpoint - cee.buzz
+  /// uses a completely different category-ID space than the old vodu.me tags,
+  /// so these specific shortcuts may return empty/unrelated results until
+  /// they're remapped against cee.buzz's own `mainCategories`/`subCategories`
+  /// endpoints (not attempted here - out of scope for this migration pass).
   Future<List<VideoItem>> fetchCategory(
     int typeId, {
     int page = 1,
@@ -789,27 +912,23 @@ class MovieScraper extends ChangeNotifier {
     String sort = 'date',
     String? genre,
   }) async {
-    final pageParam = page > 1 ? '&page=$page' : '';
-    var urlStr = useTag
-        ? '${_baseUrl}index.php?do=list&tag=$typeId$pageParam'
-        : '${_baseUrl}index.php?do=list&type=$typeId$pageParam';
-    if (sort.isNotEmpty) urlStr += '&sort=$sort';
-    if (genre != null && genre.isNotEmpty) urlStr += '&genre=$genre';
-    try {
-      final resp = await http.get(
-        Uri.parse(urlStr),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        return await compute(_parseListPage, resp.body);
-      }
-    } catch (_) {}
-    return [];
+    final zeroPage = page > 0 ? page - 1 : 0; // caller uses 1-based paging
+    if (useTag) {
+      final data = await _getJson(
+        '$_api/videosByCategory?categoryID=$typeId&orderby=$sort&videoKind=1&offset=${zeroPage * 24}&level=$_level');
+      return _toVideoItems(data);
+    }
+    switch (typeId) {
+      case 2:
+        return _fetchLatest('series', zeroPage);
+      case 3:
+        return _fetchPopular(zeroPage);
+      default:
+        return _fetchLatest('movies', zeroPage);
+    }
   }
 
-  Future<bool> hasMorePages(String html, int currentPage) async {
-    return compute(_detectHasMore, (html, currentPage));
-  }
+  Future<bool> hasMorePages(String html, int currentPage) async => true; // cee.buzz has no pagination markers to parse; caller stops on an empty page instead
 
   Future<List<VideoItem>> advancedSearch({
     String? title,
@@ -820,222 +939,149 @@ class MovieScraper extends ChangeNotifier {
     String? director,
     String? imdbrate,
   }) async {
-    final params = <String, String>{'do': 'list'};
-    if (title != null && title.isNotEmpty) params['title'] = title;
-    if (genre != null && genre.isNotEmpty) params['genre'] = genre;
-    if (type != null && type.isNotEmpty) params['type'] = type;
-    if (year != null && year.isNotEmpty) params['year'] = year;
-    if (language != null && language.isNotEmpty) params['language'] = language;
-    if (director != null && director.isNotEmpty) params['director'] = director;
-    if (imdbrate != null && imdbrate.isNotEmpty) params['imdbrate'] = imdbrate;
-    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
-    try {
-      final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
-          .timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        return await compute(_parseListPage, resp.body);
-      }
-    } catch (_) {}
-    return [];
+    // cee.buzz's real AdvancedSearch endpoint takes an opaque filter format
+    // that isn't publicly documented (see notes in the reference dump); only
+    // plain title search is reliably known to work, so that's all this
+    // supports for now. Other filter params are accepted for signature
+    // compatibility but currently ignored.
+    if (title == null || title.trim().isEmpty) return [];
+    return searchItems(title);
   }
 
   Future<List<VideoItem>> searchItems(String query) async {
-    if (query.trim().isEmpty) return [];
-    final params = <String, String>{'do': 'list', 'title': query.trim()};
-    final uri = Uri.parse(_baseUrl + 'index.php').replace(queryParameters: params);
-    try {
-      final resp = await http.get(uri, headers: {'User-Agent': _userAgent})
-          .timeout(const Duration(seconds: 20));
-      if (resp.statusCode == 200) {
-        return await compute(_parseListPage, resp.body);
-      }
-    } catch (_) {}
-    return [];
+    final q = query.trim();
+    if (q.isEmpty) return [];
+    final url = '$_api/video/V/2/itemsPerPage/20/video_title_search/'
+        '${Uri.encodeComponent(q)}/itemsPerPage/12/pageNumber/0/level/$_level';
+    final data = await _getJson(url);
+    return _toVideoItems(data);
   }
 
+  /// Fetches full details for a video (movie OR the top-level id the user
+  /// tapped, even if it later turns out to be a series). For movies this
+  /// resolves playback URLs immediately (transcoddedFiles) exactly like the
+  /// reference app's openVideo(); for series, individual episode playback
+  /// URLs are intentionally left empty here and must be resolved lazily via
+  /// [resolvePlayback] right before playing/downloading a specific episode,
+  /// since cee.buzz only returns per-episode stream URLs when you fetch that
+  /// exact episode's own id (videoSeason's episode list only has metadata).
   Future<MediaDetails> fetchDetails(String id) async {
+    final d = MediaDetails();
     try {
-      final resp = await http.get(
-        Uri.parse('${_baseUrl}index.php?do=view&type=post&id=$id'),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(const Duration(seconds: 25));
-      if (resp.statusCode == 200) {
-        return await compute(_parseDetails, resp.body);
+      final results = await Future.wait([
+        _getJson('$_api/allVideoInfo/id/$id'),
+        _getJson('$_api/transcoddedFiles/id/$id'),
+      ]);
+      final info = results[0];
+      final filesData = results[1];
+      if (info == null) return d;
+
+      d.title = _pickTitle(info);
+      d.year = info['year']?.toString() ?? '';
+      d.genre = info['categoryName']?.toString() ?? '';
+      d.rating = info['rating']?.toString() ?? '';
+      final durationSec = info['duration'];
+      d.runtime = durationSec == null ? '' : '${(int.tryParse(durationSec.toString()) ?? 0) ~/ 60} د';
+      d.synopsis = info['description']?.toString() ?? info['summary']?.toString() ?? '';
+      final poster = info['imgMediumThumb'] as String? ?? '';
+      d.imageUrl = _thumb(poster);
+
+      // Playback sources for THIS id (used directly if it's a movie, or as
+      // the "resolved" result when resolvePlayback() re-calls fetchDetails
+      // for a specific episode id).
+      final files = _asList(filesData);
+      final quality = _mapQualities(files);
+      d.movieUrl = quality['default'] ?? '';
+      d.movieUrl720 = quality['720'] ?? '';
+      d.movieUrl1080 = quality['1080'] ?? '';
+      d.movieUrl360 = quality['360'] ?? '';
+      d.movieUrl4k = quality['4k'] ?? '';
+
+      final translations = (info['translations'] as List?)
+              ?.whereType<Map>()
+              .map((t) => t.cast<String, dynamic>())
+              .where((t) => t['extention'] == 'vtt')
+              .toList() ??
+          const [];
+      final arSub = translations.firstWhere(
+        (t) => t['type'] == 'ar',
+        orElse: () => translations.isNotEmpty ? translations.first : const {},
+      );
+      d.movieSubtitleVttUrl = (arSub['file'] as String?) ?? '';
+      d.movieSubtitleUrl = d.movieSubtitleVttUrl; // cee.buzz only serves vtt
+
+      // Episodes: cee.buzz calls this for every video regardless of whether
+      // it turns out to be a movie or series, then hides the section if the
+      // list comes back empty - same pattern as the reference web app.
+      final seasonsData = await _getJson('$_api/videoSeasonNumber/id/$id');
+      final seasonsList = _asList(seasonsData);
+      if (seasonsList.isEmpty) {
+        d.isMovie = true;
+        return d;
       }
-    } catch (_) {}
-    return MediaDetails();
-  }
-}
 
-// -- Isolate-safe parsers ----------------------------------------------------
-
-(List<VideoItem>, List<({String name, List<VideoItem> items, int tagId})>)
-    _parseHomePage(String html) {
-  final carouselItems = <VideoItem>[];
-  final carRx = RegExp(
-    r'<a href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*alt="([^"]*)">');
-  for (final m in carRx.allMatches(html)) {
-    final id = m.group(1)!;
-    var img = m.group(2)!;
-    final title = m.group(3)!;
-    if (!img.startsWith('http')) img = _baseUrl + img;
-    if (!carouselItems.any((e) => e.id == id)) {
-      carouselItems.add(VideoItem(id: id, title: title, imageUrl: img, type: 'post'));
-    }
-  }
-
-  final sections = <({String name, List<VideoItem> items, int tagId})>[];
-  final headerRx = RegExp(r'<h2><a href="\?do=list&tag=(\d+)"[^>]*>([^<]+)</a></h2>');
-  final itemRx = RegExp(
-    r'<a href="index\.php\?do=view&type=post&id=(\d+)">\s*<img src="([^"]+)"[^>]*>\s*<div class="mytitle">([^<]*)</div>',
-    dotAll: true,
-  );
-
-  final headerMatches = headerRx.allMatches(html).toList();
-  for (int i = 0; i < headerMatches.length; i++) {
-    final hm = headerMatches[i];
-    final tagId = int.tryParse(hm.group(1)!) ?? -1;
-    final sectionName = hm.group(2)!.trim();
-    final blockStart = hm.end;
-    final blockEnd = i + 1 < headerMatches.length ? headerMatches[i + 1].start : html.length;
-    final block = html.substring(blockStart, blockEnd);
-    final items = <VideoItem>[];
-    for (final m in itemRx.allMatches(block)) {
-      final id = m.group(1)!;
-      var img = m.group(2)!;
-      final t = m.group(3)!.trim();
-      if (!img.startsWith('http')) img = _baseUrl + img;
-      img = _optimizeImageUrl(img);
-      if (!items.any((e) => e.id == id)) {
-        items.add(VideoItem(id: id, title: t, imageUrl: img, type: 'post'));
+      final epsData = await _getJson('$_api/videoSeason/id/$id');
+      final episodes = <EpisodeItem>[];
+      for (final raw in _asList(epsData)) {
+        if (raw is! Map) continue;
+        final e = raw.cast<String, dynamic>();
+        final epId = _pickId(e);
+        if (epId.isEmpty) continue;
+        final seasonNum = e['season']?.toString() ?? '1';
+        final epNum = e['episodeNummer'] ?? e['episodeNumber'];
+        final epTitle = _pickTitle(e);
+        episodes.add(EpisodeItem(
+          id: epId,
+          title: epTitle.isEmpty || epTitle == 'بدون عنوان'
+              ? 'الحلقة ${epNum ?? episodes.length + 1}'
+              : epTitle,
+          url: '', // resolved lazily via resolvePlayback(epId) right before playback
+          season: 'S${seasonNum.padLeft(2, '0')}',
+          imageUrl: _thumb(e['imgMediumThumb'] as String? ?? ''),
+        ));
       }
+      if (episodes.isEmpty) {
+        d.isMovie = true;
+      } else {
+        d.isMovie = false;
+        d.episodes = episodes;
+      }
+    } catch (e) {
+      debugPrint('[cee.buzz] fetchDetails($id) failed: $e');
     }
-    if (items.isNotEmpty) {
-      sections.add((name: sectionName, items: items, tagId: tagId));
-    }
-  }
-  return (carouselItems, sections);
-}
-
-List<VideoItem> _parseListPage(String html) {
-  final items = <VideoItem>[];
-  final rx = RegExp(
-    r'href="index\.php\?do=view&type=post&id=(\d+)"><img src="([^"]+)"[^>]*>\s*</a>\s*<div class="mytitle">\s*<a[^>]*>([^<]+)</a>',
-    dotAll: true,
-  );
-  for (final m in rx.allMatches(html)) {
-    final id = m.group(1)!;
-    var img = m.group(2)!;
-    final title = m.group(3)!.trim();
-    if (!img.startsWith('http')) img = _baseUrl + img;
-    if (!items.any((e) => e.id == id)) {
-      items.add(VideoItem(id: id, title: title, imageUrl: _optimizeImageUrl(img), type: 'post'));
-    }
-  }
-  return items;
-}
-
-bool _detectHasMore((String, int) args) {
-  final html = args.$1;
-  final currentPage = args.$2;
-  final paginationStart = html.indexOf('<ul class="pagination">');
-  if (paginationStart == -1) return false;
-  final paginationEnd = html.indexOf('</ul>', paginationStart);
-  if (paginationEnd == -1) return false;
-  final block = html.substring(paginationStart, paginationEnd);
-  final rx = RegExp(r'page=(\d+)');
-  final pages = rx.allMatches(block)
-      .map((m) => int.tryParse(m.group(1)!) ?? 0)
-      .toList();
-  final maxPage = pages.isEmpty ? 0 : pages.reduce((a, b) => a > b ? a : b);
-  return maxPage > currentPage;
-}
-
-MediaDetails _parseDetails(String html) {
-  final d = MediaDetails();
-
-  String? first(String pattern, {bool dotAll = false}) {
-    final rx = RegExp(pattern, dotAll: dotAll);
-    final m = rx.firstMatch(html);
-    if (m != null && m.groupCount >= 1) return m.group(1)?.trim();
-    return null;
+    return d;
   }
 
-  d.title   = first(r'<h1>(.*?)</h1>') ?? '';
-  d.year    = first(r'<span>Year:\s*</span>\s*([^<]+)') ?? '';
-  d.genre   = first(r'<span>Genre:\s*</span>\s*([^<]+)') ?? '';
-  d.rating  = first(r'<span>IMdB Rating:\s*</span>\s*([^<]+)') ?? '';
-  d.runtime = first(r'<span>Runtime:\s*</span>\s*([^<]+)') ?? '';
-  d.synopsis = first(r'<h3>Synopsis:</h3>.*?<h4>(.*?)</h4>', dotAll: true) ?? '';
+  /// Resolves the real playback URLs + Arabic subtitle for a single video id
+  /// (movie OR one specific episode) right before it's played or downloaded.
+  /// This is just a thin call into fetchDetails() for that id, since the
+  /// underlying API calls (allVideoInfo + transcoddedFiles) are identical -
+  /// the only difference is the caller only cares about the movie* fields
+  /// of the result, not its (possibly present) episode list.
+  Future<MediaDetails> resolvePlayback(String id) => fetchDetails(id);
 
-  final imgM = RegExp(r'<img src="([^"]+)" class="img-responsive"').firstMatch(html);
-  if (imgM != null) {
-    var img = imgM.group(1)!;
-    if (!img.startsWith('http')) img = _baseUrl + img;
-    d.imageUrl = _optimizeImageUrl(img, w: 800, h: 1200);
-  }
-
-  final episodes = <EpisodeItem>[];
-  final epBlockRx = RegExp(r'<li class="episodeitem">(.*?)</li>', dotAll: true);
-  String extract(String pattern, String text) {
-    final m = RegExp(pattern).firstMatch(text);
-    return m?.group(1)?.trim() ?? '';
-  }
-  for (final bm in epBlockRx.allMatches(html)) {
-    final block = bm.group(1)!;
-    final epId  = extract(r'data-id="(\d+)"', block);
-    if (epId.isEmpty) continue;
-    final epTitle = extract(r'data-title="([^"]*)"', block);
-    final epUrl   = extract(r'data-url="([^"]*)"', block);
-    if (epUrl.isEmpty) continue;
-    // Auto-detect season from title: S01E01, S1E1, الموسم 1, Season 1
-    String epSeason = '';
-    final sMatch = RegExp(r'[Ss](\d{1,2})[Ee]\d{1,3}').firstMatch(epTitle);
-    if (sMatch != null) {
-      epSeason = 'S${sMatch.group(1)!.padLeft(2, '0')}';
-    } else {
-      final arMatch = RegExp(r'الموسم\s*(\d+)').firstMatch(epTitle);
-      if (arMatch != null) epSeason = 'S${arMatch.group(1)!.padLeft(2, '0')}';
-      else {
-        final enMatch = RegExp(r'[Ss]eason\s*(\d+)').firstMatch(epTitle);
-        if (enMatch != null) epSeason = 'S${enMatch.group(1)!.padLeft(2, '0')}';
+  Map<String, String> _mapQualities(List<dynamic> files) {
+    final out = <String, String>{};
+    for (final raw in files) {
+      if (raw is! Map) continue;
+      final f = raw.cast<String, dynamic>();
+      final label = (f['quality'] ?? f['resolution'] ?? f['name'] ?? f['label'] ?? '').toString();
+      final src = (f['src'] ?? f['url'] ?? f['path'] ?? f['streamUrl'] ?? f['videoUrl'] ?? '').toString();
+      if (src.isEmpty) continue;
+      final resolved = _resolveMediaUrl(src);
+      out.putIfAbsent('default', () => resolved);
+      if (label.contains('2160') || label.toLowerCase().contains('4k')) {
+        out['4k'] = resolved;
+      } else if (label.contains('1080')) {
+        out['1080'] = resolved;
+      } else if (label.contains('720')) {
+        out['720'] = resolved;
+      } else if (label.contains('360')) {
+        out['360'] = resolved;
       }
     }
-    episodes.add(EpisodeItem(
-      id: epId,
-      title: epTitle.isEmpty ? 'الحلقة ${episodes.length + 1}' : epTitle,
-      url:     epUrl,
-      url720:  extract(r'data-url720="([^"]*)"', block),
-      url1080: extract(r'data-url1080="([^"]*)"', block),
-      url360:  extract(r'data-url360="([^"]*)"', block),
-      url4k:   extract(r'data-url4k="([^"]*)"', block),
-      subtitleUrl:    extract(r'data-srt="([^"]*)"', block),
-      subtitleVttUrl: extract(r'data-webvtt="([^"]*)"', block),
-      season: epSeason,
-    ));
+    return out;
   }
-
-  if (episodes.isEmpty) {
-    d.isMovie = true;
-    final movieRx = RegExp(
-      r'data-url="([^"]+)"[^>]*data-url360="([^"]*)"[^>]*(?:data-url4k="([^"]*)"[^>]*)?(?:data-url720="([^"]*)"[^>]*)?data-url1080="([^"]*)"[^>]*data-srt="([^"]*)"[^>]*data-webvtt="([^"]*)"',
-      dotAll: true,
-    );
-    final mm = movieRx.firstMatch(html);
-    if (mm != null) {
-      d.movieUrl         = mm.group(1) ?? '';
-      d.movieUrl360      = mm.group(2) ?? '';
-      d.movieUrl4k       = mm.group(3) ?? '';
-      d.movieUrl720      = mm.group(4) ?? '';
-      d.movieUrl1080     = mm.group(5) ?? '';
-      d.movieSubtitleUrl    = mm.group(6) ?? '';
-      d.movieSubtitleVttUrl = mm.group(7) ?? '';
-    }
-  } else {
-    d.isMovie  = false;
-    d.episodes = episodes;
-  }
-  return d;
 }
 """)
 
@@ -1059,7 +1105,7 @@ class SubtitleParser {
   static Future<List<SubtitleCue>> parse(String url) async {
     if (url.isEmpty) return [];
     var clean = url;
-    if (!clean.startsWith('http')) clean = 'https://movie.vodu.me/$clean';
+    if (!clean.startsWith('http')) clean = 'https://cdn.cee.buzz/$clean';
     try {
       final resp = await http.get(Uri.parse(clean))
           .timeout(const Duration(seconds: 15));
@@ -2157,7 +2203,7 @@ import '../app_settings.dart';
 const String _userAgent =
     'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
-const String _referer = 'https://movie.vodu.me/';
+const String _referer = 'https://cee.buzz/';
 
 class DownloadStore extends ChangeNotifier {
   static final DownloadStore instance = DownloadStore._();
@@ -2297,9 +2343,12 @@ class DownloadStore extends ChangeNotifier {
     try {
       final dir = await _downloadsDir();
       final baseName = _safeFileName(item.title, item.id);
-      final subPath = '$dir/${baseName}.srt';
+      // cee.buzz only serves .vtt subtitle files (no .srt), so keep the
+      // saved filename's extension matching what's actually inside it -
+      // external players trust the extension for auto-detection.
+      final subPath = '$dir/${baseName}.vtt';
       var subUrl = item.subtitleUrl;
-      if (!subUrl.startsWith('http')) subUrl = 'https://movie.vodu.me/$subUrl';
+      if (!subUrl.startsWith('http')) subUrl = 'https://cdn.cee.buzz/$subUrl';
       final resp = await Dio().get<List<int>>(subUrl,
         options: Options(
           responseType: ResponseType.bytes,
@@ -3081,6 +3130,7 @@ import 'package:provider/provider.dart';
 import '../models/episode_item.dart';
 import '../models/subtitle_cue.dart';
 import '../services/subtitle_parser.dart';
+import '../services/scraper.dart';
 import '../providers/watch_progress_store.dart';
 import '../app_colors.dart';
 import '../app_settings.dart';
@@ -3191,19 +3241,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
     else _quality = VideoQuality.auto;
   }
 
+  // When switching episodes inside the player (cee.buzz only returns real
+  // playback URLs for the exact episode id you fetch, not the whole season
+  // list), these hold the freshly-resolved URLs for _currentEpisodeId and
+  // take priority over the widget's original (initial-episode) URLs.
+  String? _dynUrl, _dynUrl720, _dynUrl1080, _dynUrl360, _dynUrl4k;
+  String? _dynSubVtt, _dynSubSrt;
+
   String _resolvedUrl({VideoQuality? q}) {
     q ??= _quality;
     String fix(String u) {
       if (u.isEmpty) return '';
       if (u.startsWith('http')) return u;
-      return 'https://movie.vodu.me/$u';
+      return 'https://cdn.cee.buzz/$u';
     }
+    final baseUrl    = _dynUrl     ?? widget.videoUrl;
+    final base360     = _dynUrl360  ?? widget.videoUrl360;
+    final base720     = _dynUrl720  ?? widget.videoUrl720;
+    final base1080    = _dynUrl1080 ?? widget.videoUrl1080;
+    final base4k       = _dynUrl4k   ?? widget.videoUrl4k;
     switch (q) {
-      case VideoQuality.q360: return fix(widget.videoUrl360.isNotEmpty ? widget.videoUrl360 : widget.videoUrl);
-      case VideoQuality.q720: return fix(widget.videoUrl720.isNotEmpty ? widget.videoUrl720 : widget.videoUrl);
-      case VideoQuality.q1080: return fix(widget.videoUrl1080.isNotEmpty ? widget.videoUrl1080 : widget.videoUrl);
-      case VideoQuality.q4k: return fix(widget.videoUrl4k.isNotEmpty ? widget.videoUrl4k : widget.videoUrl);
-      default: return fix(widget.videoUrl);
+      case VideoQuality.q360: return fix(base360.isNotEmpty ? base360 : baseUrl);
+      case VideoQuality.q720: return fix(base720.isNotEmpty ? base720 : baseUrl);
+      case VideoQuality.q1080: return fix(base1080.isNotEmpty ? base1080 : baseUrl);
+      case VideoQuality.q4k: return fix(base4k.isNotEmpty ? base4k : baseUrl);
+      default: return fix(baseUrl);
     }
   }
 
@@ -3245,7 +3307,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         formatHint: hint,
         httpHeaders: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
-          'Referer': 'https://movie.vodu.me/',
+          'Referer': 'https://cee.buzz/',
         },
       );
     }
@@ -3363,7 +3425,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadSubtitles() async {
-    final url = widget.subtitleVttUrl.isNotEmpty ? widget.subtitleVttUrl : widget.subtitleUrl;
+    final url = (_dynSubVtt?.isNotEmpty ?? false) ? _dynSubVtt!
+        : (_dynSubSrt?.isNotEmpty ?? false) ? _dynSubSrt!
+        : widget.subtitleVttUrl.isNotEmpty ? widget.subtitleVttUrl : widget.subtitleUrl;
     if (url.isEmpty) return;
     final cues = await SubtitleParser.parse(url);
     if (mounted) setState(() => _cues = cues);
@@ -3410,21 +3474,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _episodesRailOffset = 0;
     _currentEpisodeId = ep.id;
     _currentEpisodeTitle = ep.title;
+    _dynUrl = null; _dynUrl720 = null; _dynUrl1080 = null; _dynUrl360 = null; _dynUrl4k = null;
+    _dynSubVtt = null; _dynSubSrt = null;
     setState(() { _showEpisodes = false; _isBuffering = true; });
-    final url = ep.url.startsWith('http') ? ep.url : 'https://movie.vodu.me/\${ep.url}';
-    _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
-    try {
-      await _vpc!.initialize();
-      _vpc!.addListener(_onPlayerUpdate);
-      if (autoplay) _vpc!.play();
-      setState(() { _isPlaying = autoplay; _duration = _vpc!.value.duration.inMilliseconds / 1000.0; });
-    } catch (e) {
-      setState(() { _errorMessage = 'تعذر تشغيل الحلقة.'; _isBuffering = false; });
+
+    // cee.buzz only returns real playback URLs for the exact episode id you
+    // fetch (the season/episode list itself has metadata only), so resolve
+    // this episode's stream + subtitle before handing off to _setupPlayer.
+    final resolved = await MovieScraper().resolvePlayback(ep.id);
+    if (resolved.movieUrl.isEmpty) {
+      if (mounted) setState(() { _errorMessage = 'تعذر تشغيل الحلقة.'; _isBuffering = false; });
+      return;
     }
-    final subUrl = ep.subtitleVttUrl.isNotEmpty ? ep.subtitleVttUrl : ep.subtitleUrl;
-    if (subUrl.isNotEmpty) {
-      SubtitleParser.parse(subUrl).then((cues) { if (mounted) setState(() => _cues = cues); });
-    }
+    _dynUrl     = resolved.movieUrl;
+    _dynUrl720  = resolved.movieUrl720;
+    _dynUrl1080 = resolved.movieUrl1080;
+    _dynUrl360  = resolved.movieUrl360;
+    _dynUrl4k   = resolved.movieUrl4k;
+    _dynSubVtt  = resolved.movieSubtitleVttUrl;
+    _dynSubSrt  = resolved.movieSubtitleUrl;
+
+    // Reuses the same timeout/retry/HLS-hint logic as the initial episode -
+    // no more hand-rolled VideoPlayerController setup duplicated here.
+    await _setupPlayer();
+    if (!autoplay) { _vpc?.pause(); setState(() => _isPlaying = false); }
   }
 
   void _scheduleHide() {
@@ -5001,19 +5074,31 @@ class _DetailsScreenState extends State<DetailsScreen> {
     )));
   }
 
-  void _playEpisode(MediaDetails d, EpisodeItem ep) {
-    String fix(String u) {
-      if (u.isEmpty) return '';
-      if (u.startsWith('http')) return u;
-      return u; // URLs must be absolute from cee.buzz
+  void _playEpisode(MediaDetails d, EpisodeItem ep) async {
+    // Episode playback URLs aren't included in the episode list (cee.buzz
+    // only returns them when you fetch that exact episode's own id) - so we
+    // resolve them here, right before playing, exactly like the reference
+    // web app's openVideo(epId) does on every episode click.
+    showDialog(
+      context: context, barrierDismissible: false,
+      builder: (_) => Center(child: CircularProgressIndicator(color: utRed())));
+    final resolved = await context.read<MovieScraper>().resolvePlayback(ep.id);
+    if (mounted) Navigator.of(context, rootNavigator: true).pop(); // close loading dialog
+    if (resolved.movieUrl.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(L('تعذر جلب رابط الحلقة', 'Could not load episode link'))));
+      }
+      return;
     }
+    if (!mounted) return;
     Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
       itemId: widget.itemId, itemTitle: d.title, itemImageUrl: d.imageUrl,
       isMovie: false,
-      videoUrl: fix(ep.url), videoUrl720: fix(ep.url720),
-      videoUrl1080: fix(ep.url1080), videoUrl360: fix(ep.url360),
-      videoUrl4k: fix(ep.url4k),
-      subtitleUrl: ep.subtitleUrl, subtitleVttUrl: ep.subtitleVttUrl,
+      videoUrl: resolved.movieUrl, videoUrl720: resolved.movieUrl720,
+      videoUrl1080: resolved.movieUrl1080, videoUrl360: resolved.movieUrl360,
+      videoUrl4k: resolved.movieUrl4k,
+      subtitleUrl: resolved.movieSubtitleUrl, subtitleVttUrl: resolved.movieSubtitleVttUrl,
       episodeId: ep.id, episodeTitle: ep.title,
       episodes: d.episodes,
     )));
@@ -5151,7 +5236,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
               () => _showAddToListDialog(context, item)),
             const SizedBox(width: 8),
             _actionIconBtn(Icons.download_outlined, L('تحميل', 'Download'),
-              () => _downloadUrl(d.isMovie ? d.movieUrl : (d.episodes.isNotEmpty ? d.episodes.first.url : ''))),
+              () => _downloadUrl(d.isMovie ? null : (d.episodes.isNotEmpty ? d.episodes.first : null))),
           ]),
           const SizedBox(height: 20),
 
@@ -5432,7 +5517,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         // Download button outside the tile
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: () => _downloadUrl(ep.url, ep: ep),
+          onTap: () => _downloadUrl(ep),
           child: const Icon(Icons.download_outlined, color: Colors.white38, size: 22),
         ),
       ]),
@@ -5460,12 +5545,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       ]),
     );
 
-  Future<void> _downloadUrl(String url, {EpisodeItem? ep}) async {
-    if (url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(L('رابط التحميل غير متاح', 'Download URL not available'))));
-      return;
-    }
+  Future<void> _downloadUrl(EpisodeItem? ep) async {
     final d = _details!;
     final epId  = ep?.id   ?? widget.itemId;
     final title = ep?.title ?? d.title;
@@ -5478,15 +5558,34 @@ class _DetailsScreenState extends State<DetailsScreen> {
       return;
     }
 
-    final subUrl = ep != null
-        ? (ep.subtitleVttUrl.isNotEmpty ? ep.subtitleVttUrl : ep.subtitleUrl)
-        : (d.movieSubtitleVttUrl.isNotEmpty ? d.movieSubtitleVttUrl : d.movieSubtitleUrl);
+    String url, subUrl;
+    if (ep == null) {
+      // Movie: already resolved when the details screen loaded.
+      url = d.movieUrl;
+      subUrl = d.movieSubtitleVttUrl.isNotEmpty ? d.movieSubtitleVttUrl : d.movieSubtitleUrl;
+    } else {
+      // Episode: cee.buzz only returns the real playback URL when fetching
+      // that specific episode's own id, so resolve it now before downloading.
+      final resolved = await context.read<MovieScraper>().resolvePlayback(ep.id);
+      url = resolved.movieUrl;
+      subUrl = resolved.movieSubtitleVttUrl.isNotEmpty
+          ? resolved.movieSubtitleVttUrl : resolved.movieSubtitleUrl;
+    }
+
+    if (url.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(L('رابط التحميل غير متاح', 'Download URL not available'))));
+      return;
+    }
+
     store.startDownload(DownloadItem(
       id: dlId, itemId: widget.itemId, episodeId: epId,
       title: title, imageUrl: d.imageUrl, url: url,
       subtitleUrl: subUrl,
     ));
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       backgroundColor: utRed(),
       content: Text(L('بدأ التحميل: $title', 'Downloading: $title'),
@@ -5765,7 +5864,7 @@ class _DownloadTile extends StatelessWidget {
   /// .srt extension) so we can hand it directly to the external player.
   String _siblingSubtitlePath(DownloadItem item) {
     final base = item.filePath.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '');
-    return '$base.srt';
+    return '$base.vtt';
   }
 
   void _playLocal(BuildContext context, DownloadItem item) async {
