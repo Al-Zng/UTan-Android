@@ -1215,6 +1215,27 @@ class MovieScraper extends ChangeNotifier {
         ? bannerItems.take(10).toList()
         : (sections.isNotEmpty ? sections.first.items.take(10).toList() : []);
 
+    // Real diagnostics instead of guessing image paths a third time: this
+    // prints the EXACT constructed URLs to logcat. Run `adb logcat | grep
+    // "IMG DEBUG"`, open the printed URLs directly in a mobile browser, and
+    // report back whether they load there - that tells us definitively
+    // whether this is a wrong-path bug (browser also fails) or a
+    // Flutter/CachedNetworkImage-side bug (browser works fine, app doesn't).
+    if (heroItems.isNotEmpty) {
+      debugPrint('IMG DEBUG hero[0] title="${heroItems.first.title}" url=${heroItems.first.imageUrl}');
+    }
+    if (sections.isNotEmpty && sections.first.items.isNotEmpty) {
+      final first = sections.first.items.first;
+      debugPrint('IMG DEBUG category[0] title="${first.title}" url=${first.imageUrl}');
+    }
+    if (_asList(groupsData).isNotEmpty && _asList(groupsData).first is Map) {
+      final firstGroup = (_asList(groupsData).first as Map).cast<String, dynamic>();
+      final firstVideos = _asList(firstGroup['videos'] ?? firstGroup['items'] ?? firstGroup['list']);
+      if (firstVideos.isNotEmpty && firstVideos.first is Map) {
+        debugPrint('IMG DEBUG raw video fields: ${(firstVideos.first as Map).cast<String, dynamic>()}');
+      }
+    }
+
     // Warm the real category list in the background for genre browsing -
     // don't block the home screen on it.
     unawaited(_ensureRealCategories());
@@ -3683,7 +3704,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _setupPlayer({
     bool retryWithoutHeaders = false,
     bool retryLocalAsUri = false,
-    int streamStage = 0, // 0 = local proxy, 1 = cloudflare worker, 2 = direct
+    // Local-proxy "accelerator" (stage 0) and the Cloudflare Worker relay
+    // (stage 1) are both DISABLED by default for now - after switching to
+    // this multi-stage chain, playback started hanging indefinitely at
+    // 00:00, and localhost/the local HTTP server is the prime suspect
+    // (either the loopback connection itself stalls on some devices, or a
+    // bug in the segmented-range logic never resolves). Rather than risk a
+    // third unverified guess, this goes straight back to the plain direct
+    // connection that was reliably working before the proxy chain was
+    // introduced. The proxy code is left in place (untouched) in case it's
+    // wanted again later, but it is no longer reachable from here.
+    int streamStage = 2, // 2 = direct connection (was 0 = local proxy)
   }) async {
     final myAttempt = ++_setupAttempt; // guards against stale timeouts firing late
     final url = _resolvedUrl();
@@ -4794,16 +4825,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _vpc?.removeListener(_onPlayerUpdate);
     await _vpc?.dispose();
     final isLocal = url.startsWith('/') || url.startsWith('file://');
-    String playUrl = url;
-    if (!isLocal) {
-      try {
-        await LocalProxyServer.instance.ensureStarted();
-        playUrl = LocalProxyServer.instance.buildPlayUrl(url);
-      } catch (_) {} // falls back to the raw origin URL below
-    }
+    // Local proxy disabled here too, same reason as _setupPlayer above -
+    // go straight to the origin URL.
     _vpc = isLocal
         ? VideoPlayerController.file(File(url.replaceFirst('file://', '')))
-        : VideoPlayerController.networkUrl(Uri.parse(playUrl));
+        : VideoPlayerController.networkUrl(Uri.parse(url));
     try {
       await _vpc!.initialize().timeout(const Duration(seconds: 10));
       _vpc!.addListener(_onPlayerUpdate);
