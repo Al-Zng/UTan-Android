@@ -662,36 +662,32 @@ w("lib/models/site_category.dart", r"""class SiteCategory {
   String localizedName(String lang) => lang == 'en' ? nameEn : nameAr;
 }
 
+// These category IDs are taken directly from cee.buzz's own live sidebar
+// navigation (/movies?category_id=N and /series?category_id=N links),
+// not guessed or derived - they are confirmed genre IDs the real site uses.
+// Unlike the old vodu.me tag system (Netflix/Marvel/HBO/Disney+ groupings),
+// cee.buzz only has genre-based categories; movie vs series is a separate
+// route/kind, not a category, so isTag routes through videosByCategory with
+// this id while the movie/series split happens via videoKind elsewhere.
 const List<SiteCategory> siteCategories = [
-  SiteCategory(id: 1,    nameAr: 'مسلسلات أجنبية',        nameEn: 'Foreign Series'),
-  SiteCategory(id: 2,    nameAr: 'مسلسلات عربية',         nameEn: 'Arabic Series'),
-  SiteCategory(id: 3,    nameAr: 'أنمي مدبلج عربي',       nameEn: 'Arabic Dubbed Anime'),
-  SiteCategory(id: 4,    nameAr: 'أنمي مترجم',            nameEn: 'Subbed Anime'),
-  SiteCategory(id: 5,    nameAr: 'أفلام بوليوود',         nameEn: 'Bollywood Movies'),
-  SiteCategory(id: 6,    nameAr: 'مسلسلات هندية',         nameEn: 'Indian Series'),
-  SiteCategory(id: 7,    nameAr: 'أفلام عربية',           nameEn: 'Arabic Movies'),
-  SiteCategory(id: 8,    nameAr: 'مسلسلات بوليوود',       nameEn: 'Bollywood Series'),
-  SiteCategory(id: 9,    nameAr: 'أفلام أنمي',            nameEn: 'Anime Movies'),
-  SiteCategory(id: 10,   nameAr: 'أفلام مكتب الصندوق',    nameEn: 'US Box Office'),
-  SiteCategory(id: 13,   nameAr: 'سينما عربية',           nameEn: 'Arabic Cinemas'),
-  SiteCategory(id: 14,   nameAr: 'أفلام تركية',           nameEn: 'Turkish Movies'),
-  SiteCategory(id: 15,   nameAr: 'مسلسلات تركية',         nameEn: 'Turkish Series'),
-  SiteCategory(id: 16,   nameAr: 'أفلام كرتون',           nameEn: 'Cartoon Movies'),
-  SiteCategory(id: 17,   nameAr: 'مسلسلات كرتون',         nameEn: 'Cartoon Series'),
-  SiteCategory(id: 18,   nameAr: 'أفلام أجنبية',          nameEn: 'Foreign Movies'),
-  SiteCategory(id: 20,   nameAr: 'مسلسلات مدبلجة عربي',   nameEn: 'Arabic Dubbed Series'),
-  SiteCategory(id: 21,   nameAr: 'أفلام مدبلجة عربي',    nameEn: 'Arabic Dubbed Movies'),
-  SiteCategory(id: 1014, nameAr: 'أفلام كردية',           nameEn: 'Kurdish Movies'),
-  SiteCategory(id: 1015, nameAr: 'مسلسلات كردية',         nameEn: 'Kurdish Series'),
-  SiteCategory(id: 1022, nameAr: 'أنمي عربي',             nameEn: 'Arabic Anime'),
-  SiteCategory(id: 1029, nameAr: 'أنمي مدبلج إنجليزي',   nameEn: 'English Dubbed Anime'),
-  SiteCategory(id: 44,  remoteId: 44,  isTag: true, nameAr: 'نيتفلكس',          nameEn: 'Netflix'),
-  SiteCategory(id: 9014, remoteId: 14, isTag: true, nameAr: 'عالم مارفل',        nameEn: 'Marvel'),
-  SiteCategory(id: 73,  remoteId: 73,  isTag: true, nameAr: 'اتش بي او ماكس',   nameEn: 'HBO Max'),
-  SiteCategory(id: 72,  remoteId: 72,  isTag: true, nameAr: 'ديزني',             nameEn: 'Disney+'),
-  SiteCategory(id: 9018, remoteId: 18, isTag: true, nameAr: 'للاطفال',           nameEn: 'For KIDS'),
+  SiteCategory(id: 84, remoteId: 84, isTag: true, nameAr: 'اكشن',           nameEn: 'Action'),
+  SiteCategory(id: 62, remoteId: 62, isTag: true, nameAr: 'دراما',          nameEn: 'Drama'),
+  SiteCategory(id: 59, remoteId: 59, isTag: true, nameAr: 'كوميدي',         nameEn: 'Comedy'),
+  SiteCategory(id: 70, remoteId: 70, isTag: true, nameAr: 'رعب',            nameEn: 'Horror'),
+  SiteCategory(id: 78, remoteId: 78, isTag: true, nameAr: 'خيال علمي',      nameEn: 'Sci-Fi'),
+  SiteCategory(id: 67, remoteId: 67, isTag: true, nameAr: 'خيالي',          nameEn: 'Fantasy'),
+  SiteCategory(id: 80, remoteId: 80, isTag: true, nameAr: 'اثارة',          nameEn: 'Thriller'),
+  SiteCategory(id: 60, remoteId: 60, isTag: true, nameAr: 'جريمة',          nameEn: 'Crime'),
+  SiteCategory(id: 76, remoteId: 76, isTag: true, nameAr: 'غموض',           nameEn: 'Mystery'),
+  SiteCategory(id: 77, remoteId: 77, isTag: true, nameAr: 'رومانسي',        nameEn: 'Romance'),
+  SiteCategory(id: 56, remoteId: 56, isTag: true, nameAr: 'مغامرة',         nameEn: 'Adventure'),
+  SiteCategory(id: 57, remoteId: 57, isTag: true, nameAr: 'رسوم متحركة',    nameEn: 'Animation'),
+  SiteCategory(id: 61, remoteId: 61, isTag: true, nameAr: 'وثائقي',         nameEn: 'Documentary'),
+  SiteCategory(id: 79, remoteId: 79, isTag: true, nameAr: 'رياضي',          nameEn: 'Sports'),
+  SiteCategory(id: 89, remoteId: 89, isTag: true, nameAr: 'حياة الغرب',     nameEn: 'Western'),
 ];
-""")
+"""
+)
 
 # --- lib/models/feedback_item.dart ------------------------------------------
 w("lib/models/feedback_item.dart", r"""class FeedbackItem {
@@ -975,11 +971,41 @@ import '../models/episode_item.dart';
 // ============================================================================
 
 const String _api = 'https://cee.buzz/api/android';
-const String _thumbBase = 'https://cnth2.cee.buzz/poster-images/';
+// Confirmed directly from the live site's rendered DOM: posters live under
+// vascin-poster-images (NOT poster-images - that was a guess and 404s for
+// every single image), and the hero/banner carousel uses a totally
+// different folder (vascin-cover-images) with a "_cover.jpg" suffix, not
+// the same imgMediumThumb path used for regular poster cards.
+const String _thumbBase = 'https://cnth2.cee.buzz/vascin-poster-images/';
+const String _coverBase = 'https://cnth2.cee.buzz/vascin-cover-images/';
+// NOT independently confirmed from a live page (the DOM sample available
+// didn't include an actor photo) - inferred from the site's consistent
+// "vascin-<type>-images" naming convention seen for posters/covers. If
+// actor photos still don't load, this folder name is the first thing to
+// re-check/report back.
+const String _staffBase = 'https://cnth2.cee.buzz/vascin-staff-images/';
 const String _cdnBase = 'https://cdn.cee.buzz/';
 const int _level = 1;
 
 String _thumb(String path) => path.isEmpty ? '' : '$_thumbBase$path';
+String _staffThumb(String path) => path.isEmpty ? '' : '$_staffBase$path';
+
+/// Builds the hero/banner cover image URL. Falls back to the regular
+/// poster thumb if no dedicated cover field is present on the item, since
+/// the exact cover field name isn't confirmed from the API docs (only
+/// observed live in the rendered page, where it's a separate field from
+/// imgMediumThumb).
+String _cover(Map<String, dynamic> v) {
+  final coverField = v['imgCover'] as String? ??
+      v['img_cover'] as String? ??
+      v['coverImage'] as String? ??
+      v['cover'] as String?;
+  if (coverField != null && coverField.isNotEmpty) {
+    return '$_coverBase$coverField';
+  }
+  final poster = v['imgMediumThumb'] as String? ?? '';
+  return _thumb(poster);
+}
 
 // NOTE: an earlier revision tried swapping 'medium' -> 'large' in this URL
 // hoping for a sharper poster variant. That was never confirmed against the
@@ -1033,19 +1059,21 @@ List<dynamic> _asList(dynamic data) {
   return const [];
 }
 
-List<VideoItem> _toVideoItems(dynamic data) {
+List<VideoItem> _toVideoItems(dynamic data, {bool useCover = false}) {
   final out = <VideoItem>[];
   for (final raw in _asList(data)) {
     if (raw is! Map) continue;
     final v = raw.cast<String, dynamic>();
     final id = _pickId(v);
     if (id.isEmpty) continue;
-    final poster = v['imgMediumThumb'] as String? ?? v['posterImage'] as String? ?? '';
     if (out.any((e) => e.id == id)) continue;
+    final imageUrl = useCover
+        ? _cover(v)
+        : _thumbLarge(v['imgMediumThumb'] as String? ?? v['posterImage'] as String? ?? '');
     out.add(VideoItem(
       id: id,
       title: _pickTitle(v),
-      imageUrl: _thumbLarge(poster),
+      imageUrl: imageUrl,
       type: _pickType(v),
     ));
   }
@@ -1182,7 +1210,7 @@ class MovieScraper extends ChangeNotifier {
     categories = sections;
     allItemsPool = sections.expand((s) => s.items).toList();
 
-    final bannerItems = _toVideoItems(bannerData);
+    final bannerItems = _toVideoItems(bannerData, useCover: true);
     heroItems = bannerItems.isNotEmpty
         ? bannerItems.take(10).toList()
         : (sections.isNotEmpty ? sections.first.items.take(10).toList() : []);
@@ -1204,11 +1232,12 @@ class MovieScraper extends ChangeNotifier {
     bool useTag = false,
     String sort = 'date',
     String? genre,
+    int videoKind = 1, // 1 = movies, 2 = series - only relevant when useTag
   }) async {
     final zeroPage = page > 0 ? page - 1 : 0; // caller uses 1-based paging
     if (useTag) {
       final data = await _getJson(
-        '$_api/videosByCategory?categoryID=$typeId&orderby=$sort&videoKind=1&offset=${zeroPage * 24}&level=$_level');
+        '$_api/videosByCategory?categoryID=$typeId&orderby=$sort&videoKind=$videoKind&offset=${zeroPage * 24}&level=$_level');
       return _toVideoItems(data);
     }
     switch (typeId) {
@@ -1324,7 +1353,7 @@ class MovieScraper extends ChangeNotifier {
           cast.add(CastMember(
             id: pid,
             name: name,
-            imageUrl: _thumb(p['staff_img_thumb'] as String? ?? ''),
+            imageUrl: _staffThumb(p['staff_img_thumb'] as String? ?? ''),
             role: role,
           ));
         }
@@ -3668,7 +3697,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // fail so we don't sit on a dead connection) and longer once we're on
     // the Cloudflare Worker / direct fallbacks, matching the requested
     // 5s -> 2.5s wait -> Cloudflare failover behavior.
-    Duration attemptTimeout = const Duration(seconds: 14);
+    // Kept tight on purpose: worst case is stage0(5s) + wait(2.5s) +
+    // stage1(8s) + stage1-retry(8s) + stage2(8s) + stage2-retry(8s) = ~40s
+    // absolute max before a definitive error shows - still bounded, never
+    // an actual infinite spinner, but fails over fast enough to feel snappy
+    // on the common case where stage 0 or 1 just works.
+    Duration attemptTimeout = const Duration(seconds: 8);
 
     // Support local file paths (downloads) - unaffected by the streaming
     // accelerator/proxy chain below, which only applies to network streams.
@@ -5187,6 +5221,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   int _page = 1;
   String _sort = 'date';
   String _genre = '';
+  int _videoKind = 1; // 1 = movies, 2 = series
   final ScrollController _scroll = ScrollController();
   static const _genres = ['Action','Adventure','Animation','Comedy','Drama',
     'Fantasy','Horror','Romance','Sci-Fi','Thriller'];
@@ -5209,6 +5244,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
       widget.category.remoteId, page: _page,
       useTag: widget.category.isTag, sort: _sort,
       genre: _genre.isEmpty ? null : _genre,
+      videoKind: _videoKind,
     );
     if (!mounted) return;
     final existingIds = _items.map((i) => i.id).toSet();
@@ -5238,6 +5274,25 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
         elevation: 0,
       ),
       body: Column(children: [
+        // Movies / Series toggle - genre categories on cee.buzz apply to
+        // both, filtered separately via the videoKind param.
+        if (widget.category.isTag)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: SegmentedButton<int>(
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: utRed(),
+                foregroundColor: Colors.white,
+                selectedForegroundColor: Colors.white,
+              ),
+              segments: [
+                ButtonSegment(value: 1, label: Text(L('أفلام', 'Movies'))),
+                ButtonSegment(value: 2, label: Text(L('مسلسلات', 'Series'))),
+              ],
+              selected: {_videoKind},
+              onSelectionChanged: (s) { setState(() => _videoKind = s.first); _reset(); },
+            ),
+          ),
         // Sort & filter bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
