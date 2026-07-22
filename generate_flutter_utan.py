@@ -955,129 +955,66 @@ import '../models/media_details.dart';
 import '../models/episode_item.dart';
 
 // ============================================================================
-//  cee.buzz JSON API client (migrated from the old movie.vodu.me HTML scraper)
-//  Base rule: https://cee.buzz/api/android/<endpoint>
-//  Field-name quirks straight from the real API (do not "fix" these typos,
-//  they are exactly what the server returns):
-//    nb              -> unique numeric video id (used everywhere as {id})
-//    ar_title/en_title -> title fields (no plain "title")
-//    episodeNummer   -> episode number (misspelled with double m, intentional)
-//    season          -> season number for an episode
-//    rootSeries      -> parent series id, if this video is an episode
-//    imgMediumThumb  -> poster filename, appended to THUMB base
-//    translations    -> [{ extention: "vtt"|"ass", type: "ar"|"en"|.., name, file }]
-//                        (also misspelled: "extention" not "extension")
-//  Paging is 0-indexed. level = parental level (0 = general).
+//  cinemana.cc scraper
+//  ------------------------------------------------------------------------
+//  This site has NO single "show info" page - every episode is its own
+//  WordPress post with its own watch=<id> URL and a title like:
+//      "مسلسل Dream to You الموسم الاول – الحلقة 4"
+//      "انمي Mato Seihei no Slave 2 – الحلقة 1"
+//      "فيلم The Death of Robin Hood 2026 مترجم"
+//  So a raw listing shows the same show once per episode. To present it
+//  properly:
+//    1. Every post title is cleaned down to a stable "show key" (strip the
+//       انمي/فيلم/مسلسل prefix and the season/episode/مترجم suffix) and
+//       listing cards are deduped by that key, keeping one representative
+//       post per show.
+//    2. The details screen fetches that one representative watch=<id>
+//       page - it always embeds the COMPLETE season/episode tree for the
+//       whole show via numbered "season-<id>" tab widgets (with real
+//       digit season numbers, not the unreliable Arabic ordinal words in
+//       titles), regardless of which specific episode's post we landed on.
+//    3. The actual video file isn't in the page at all - the site's own JS
+//       fetches it via a POST to Server.php with the post's id right after
+//       the page loads. resolvePlayback()/_fetchVideoSource() replay that
+//       exact call, using the same lazy-per-episode pattern as everywhere
+//       else in this app. NOTE: the exact shape of that AJAX response
+//       wasn't available to verify offline - _fetchVideoSource() tries
+//       every embed pattern the site is known to use and logs the raw
+//       response on a miss so it can be pinpointed exactly if needed.
 // ============================================================================
 
-const String _api = 'https://cee.buzz/api/android';
-// Confirmed directly from the live site's rendered DOM: posters live under
-// vascin-poster-images (NOT poster-images - that was a guess and 404s for
-// every single image), and the hero/banner carousel uses a totally
-// different folder (vascin-cover-images) with a "_cover.jpg" suffix, not
-// the same imgMediumThumb path used for regular poster cards.
-const String _thumbBase = 'https://cnth2.cee.buzz/vascin-poster-images/';
-const String _coverBase = 'https://cnth2.cee.buzz/vascin-cover-images/';
-// NOT independently confirmed from a live page (the DOM sample available
-// didn't include an actor photo) - inferred from the site's consistent
-// "vascin-<type>-images" naming convention seen for posters/covers. If
-// actor photos still don't load, this folder name is the first thing to
-// re-check/report back.
-const String _staffBase = 'https://cnth2.cee.buzz/vascin-staff-images/';
-const String _cdnBase = 'https://cdn.cee.buzz/';
-const int _level = 1;
+const String _cnBase = 'https://cinemana.cc';
+const String _cnUa =
+    'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
 
-String _thumb(String path) => path.isEmpty ? '' : '$_thumbBase$path';
-String _staffThumb(String path) => path.isEmpty ? '' : '$_staffBase$path';
+Map<String, String> _cnHeaders([String? referer]) => {
+  'User-Agent': _cnUa,
+  if (referer != null) 'Referer': referer,
+};
 
-/// Builds the hero/banner cover image URL. Falls back to the regular
-/// poster thumb if no dedicated cover field is present on the item, since
-/// the exact cover field name isn't confirmed from the API docs (only
-/// observed live in the rendered page, where it's a separate field from
-/// imgMediumThumb).
-String _cover(Map<String, dynamic> v) {
-  final coverField = v['imgCover'] as String? ??
-      v['img_cover'] as String? ??
-      v['coverImage'] as String? ??
-      v['cover'] as String?;
-  if (coverField != null && coverField.isNotEmpty) {
-    return '$_coverBase$coverField';
+/// Strips the "مسلسل/انمي/فيلم" prefix and the trailing season/episode/
+/// "مترجم" suffix from a raw post title, leaving a stable key so every
+/// episode of the same show groups under one entry.
+({String key, bool isMovie}) _cnCleanTitle(String raw) {
+  var t = raw.trim();
+  var isMovie = false;
+  if (t.startsWith('فيلم ')) {
+    isMovie = true;
+    t = t.substring(5);
+  } else if (t.startsWith('انمي ')) {
+    t = t.substring(5);
+  } else if (t.startsWith('مسلسل ')) {
+    t = t.substring(6);
   }
-  final poster = v['imgMediumThumb'] as String? ?? '';
-  return _thumb(poster);
-}
-
-// NOTE: an earlier revision tried swapping 'medium' -> 'large' in this URL
-// hoping for a sharper poster variant. That was never confirmed against the
-// real API and turned out to 404 for effectively every image, breaking
-// posters app-wide (hero carousel, category rows, and even the currently-
-// open title's own poster). _thumbLarge is now just an alias for the
-// confirmed-working medium thumb until a real large-poster path is verified.
-String _thumbLarge(String path) => _thumb(path);
-
-String _resolveMediaUrl(String u) {
-  if (u.isEmpty) return '';
-  if (u.startsWith('http')) return u;
-  return u.startsWith('/') ? 'https://cdn.cee.buzz$u' : '$_cdnBase$u';
-}
-
-String _pickTitle(Map<String, dynamic> v) =>
-    (v['ar_title'] as String?)?.trim().isNotEmpty == true
-        ? v['ar_title'] as String
-        : (v['en_title'] as String?)?.trim().isNotEmpty == true
-            ? v['en_title'] as String
-            : (v['title'] as String? ?? v['name'] as String? ?? 'بدون عنوان');
-
-String _pickId(Map<String, dynamic> v) {
-  final raw = v['nb'] ?? v['id'] ?? v['videoId'] ?? v['video_id'];
-  return raw == null ? '' : raw.toString();
-}
-
-String _pickType(Map<String, dynamic> v) {
-  final kind = v['videoKind'] ?? v['kind'] ?? v['videoType'];
-  final kindStr = kind?.toString();
-  if (kindStr == '2') return 'series';
-  if (kindStr == '1') return 'movie';
-  if (v['isSeries'] == true) return 'series';
-  return 'movie';
-}
-
-/// Pulls a JSON list out of a decoded response body, regardless of whether
-/// the API wrapped it as a bare array, {videos:[...]}, {items:[...]}, or any
-/// other single top-level array field (cee.buzz is inconsistent about this
-/// across endpoints).
-List<dynamic> _asList(dynamic data) {
-  if (data == null) return const [];
-  if (data is List) return data;
-  if (data is Map) {
-    if (data['videos'] is List) return data['videos'] as List;
-    if (data['items'] is List) return data['items'] as List;
-    for (final v in data.values) {
-      if (v is List) return v;
-    }
-  }
-  return const [];
-}
-
-List<VideoItem> _toVideoItems(dynamic data, {bool useCover = false}) {
-  final out = <VideoItem>[];
-  for (final raw in _asList(data)) {
-    if (raw is! Map) continue;
-    final v = raw.cast<String, dynamic>();
-    final id = _pickId(v);
-    if (id.isEmpty) continue;
-    if (out.any((e) => e.id == id)) continue;
-    final imageUrl = useCover
-        ? _cover(v)
-        : _thumbLarge(v['imgMediumThumb'] as String? ?? v['posterImage'] as String? ?? '');
-    out.add(VideoItem(
-      id: id,
-      title: _pickTitle(v),
-      imageUrl: imageUrl,
-      type: _pickType(v),
-    ));
-  }
-  return out;
+  t = t.replaceAll(RegExp(r'[\-–—]\s*الحلقة\s*\d+(\s*والأخيرة)?\s*$'), '');
+  t = t.replaceAll(
+      RegExp(r'الموسم\s+(الاول|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)\s*$'),
+      '');
+  t = t.replaceAll(RegExp(r'\s*(مترجم|مدبلج)\s*$'), '');
+  t = t.replaceAll(RegExp(' {2,}'), ' ').trim();
+  if (t.isEmpty) t = raw.trim();
+  return (key: t, isMovie: isMovie);
 }
 
 class MovieScraper extends ChangeNotifier {
@@ -1086,192 +1023,100 @@ class MovieScraper extends ChangeNotifier {
   List<VideoItem> allItemsPool = [];
   bool isLoading = false;
 
-  // Real site categories (mainCategories), cached after first fetch so
-  // browse/genre screens can resolve a human category name -> its real
-  // cee.buzz `nb` id. Populated by _ensureRealCategories().
-  List<({String id, String name})> _realCategories = [];
-
-  Future<Map<String, dynamic>?> _getJson(String url, {bool log = false}) async {
+  Future<String?> _getHtml(String url) async {
     try {
       final resp = await http
-          .get(Uri.parse(url), headers: const {'Connection': 'keep-alive'})
-          .timeout(const Duration(seconds: 8));
-      if (log) debugPrint('[cee.buzz] GET $url -> HTTP ${resp.statusCode}');
+          .get(Uri.parse(url), headers: _cnHeaders())
+          .timeout(const Duration(seconds: 10));
       if (resp.statusCode != 200) return null;
-      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
-      // Normalize to a Map so callers can use one code path; bare-array
-      // responses get wrapped under a synthetic 'videos' key.
-      if (decoded is List) return {'videos': decoded};
-      if (decoded is Map<String, dynamic>) return decoded;
-      return null;
+      return utf8.decode(resp.bodyBytes, allowMalformed: true);
     } catch (e) {
-      debugPrint('[cee.buzz] request failed: $url -> $e');
+      debugPrint('[cinemana] GET failed: $url -> $e');
       return null;
     }
   }
 
-  Future<List<VideoItem>> _fetchLatest(String kind, int page) async {
-    final endpoint = kind == 'series' ? 'latestSeries' : 'latestMovies';
-    final data = await _getJson('$_api/$endpoint/level/$_level/itemsPerPage/24/page/$page/');
-    return _toVideoItems(data);
-  }
-
-  Future<List<VideoItem>> _fetchPopular(int page) async {
-    // The real server occasionally returns an empty week list depending on
-    // the account's level - try week/month/day IN PARALLEL (not one after
-    // another) and take whichever non-empty result comes back, so a slow or
-    // hanging period never chains into a multi-x-8s wait on the home screen.
-    final results = await Future.wait(
-      ['W', 'M', 'D'].map((period) =>
-          _getJson('$_api/popularFilms/kind/$period/level/$_level/page/$page')
-              .then(_toVideoItems)),
+  /// Parses one listing page's post cards (watch=<id> link + <h3> title)
+  /// and dedupes by cleaned show key, keeping the first post seen for each
+  /// show (listings are newest-first, so that's the most recent episode).
+  List<VideoItem> _parseListing(String html) {
+    final cardRx = RegExp(
+      r'''href="https://cinemana\.cc/watch=(\d+)/"[^>]*>.*?<h3[^>]*>\s*([^<]+?)\s*</h3>''',
+      dotAll: true,
     );
-    for (final items in results) {
-      if (items.isNotEmpty) return items;
+    final bgRx = RegExp(r'''background-image:\s*url\(&#39;([^&]+?)&#39;\)''');
+    final seen = <String>{};
+    final out = <VideoItem>[];
+    for (final m in cardRx.allMatches(html)) {
+      final id = m.group(1)!;
+      final rawTitle = m.group(2)!.trim();
+      if (rawTitle.isEmpty) continue;
+      final cleaned = _cnCleanTitle(rawTitle);
+      if (seen.contains(cleaned.key)) continue;
+      seen.add(cleaned.key);
+      final sliceStart = (m.start - 800).clamp(0, html.length);
+      final slice = html.substring(sliceStart, m.start);
+      final bgm = bgRx.firstMatch(slice);
+      final poster = bgm != null ? bgm.group(1)! : '';
+      out.add(VideoItem(
+        id: id,
+        title: cleaned.key,
+        imageUrl: poster,
+        type: cleaned.isMovie ? 'movie' : 'series',
+      ));
     }
-    return [];
-  }
-
-  /// mainCategories returns the site's real genre list (each item has the
-  /// same nb/ar_title/en_title shape as everything else). Cached in-memory
-  /// after the first successful call.
-  Future<List<({String id, String name})>> _ensureRealCategories() async {
-    if (_realCategories.isNotEmpty) return _realCategories;
-    final data = await _getJson('$_api/mainCategories?lang=ar');
-    final out = <({String id, String name})>[];
-    for (final raw in _asList(data)) {
-      if (raw is! Map) continue;
-      final c = raw.cast<String, dynamic>();
-      final id = _pickId(c);
-      if (id.isEmpty) continue;
-      out.add((id: id, name: _pickTitle(c)));
-    }
-    _realCategories = out;
     return out;
   }
-
-  /// Real genre/category browse list for the UI (Netflix/Marvel-style
-  /// shortcuts replaced with cee.buzz's own actual category list, since the
-  /// old vodu.me tag ids have no equivalent here).
-  Future<List<({String id, String name})>> fetchGenreList() => _ensureRealCategories();
 
   Future<void> fetchHome() async {
     isLoading = true;
     notifyListeners();
     try {
-      await _fetchHomeInner().timeout(const Duration(seconds: 12));
+      await _fetchHomeInner().timeout(const Duration(seconds: 15));
     } catch (e) {
-      // Whatever we managed to gather before the timeout stays in
-      // categories/heroItems - the important thing is this NEVER hangs the
-      // splash/home screen indefinitely, even if cee.buzz is slow or down.
-      debugPrint('[cee.buzz] fetchHome timed out/failed: $e');
+      debugPrint('[cinemana] fetchHome failed: $e');
     }
     isLoading = false;
     notifyListeners();
   }
 
   Future<void> _fetchHomeInner() async {
-    // videoGroups (curated home rows) and banner (hero carousel) are
-    // independent - fetch them together instead of one after another.
     final results = await Future.wait([
-      _getJson('$_api/videoGroups/lang/ar/level/$_level'),
-      _getJson('$_api/banner/level/$_level'),
+      _getHtml('$_cnBase/series/'),
+      _getHtml('$_cnBase/movies/'),
     ]);
-    final groupsData = results[0];
-    final bannerData = results[1];
+    final seriesHtml = results[0];
+    final moviesHtml = results[1];
+    final series = seriesHtml != null ? _parseListing(seriesHtml) : <VideoItem>[];
+    final movies = moviesHtml != null ? _parseListing(moviesHtml) : <VideoItem>[];
 
-    final sections = <({String name, List<VideoItem> items, int tagId})>[];
-    var tagCounter = 100;
-    for (final raw in _asList(groupsData)) {
-      if (raw is! Map) continue;
-      final g = raw.cast<String, dynamic>();
-      final items = _toVideoItems(g['videos'] ?? g['items'] ?? g['list']);
-      if (items.isEmpty) continue;
-      final name = (g['ar_title'] as String?)?.trim().isNotEmpty == true
-          ? g['ar_title'] as String
-          : (g['title'] as String? ?? g['name'] as String? ?? '');
-      if (name.isEmpty) continue;
-      sections.add((name: name, items: items, tagId: tagCounter++));
-    }
-
-    // Always guarantee at least latest-movies/series/popular even if
-    // videoGroups comes back empty for this account/level.
-    if (sections.isEmpty) {
-      final fallback = await Future.wait([
-        _fetchLatest('movies', 0),
-        _fetchLatest('series', 0),
-        _fetchPopular(0),
-      ]);
-      if (fallback[0].isNotEmpty) sections.add((name: 'أحدث الأفلام', items: fallback[0], tagId: 1));
-      if (fallback[1].isNotEmpty) sections.add((name: 'أحدث المسلسلات', items: fallback[1], tagId: 2));
-      if (fallback[2].isNotEmpty) sections.add((name: 'الأكثر مشاهدة', items: fallback[2], tagId: 3));
-    }
-
-    categories = sections;
-    allItemsPool = sections.expand((s) => s.items).toList();
-
-    final bannerItems = _toVideoItems(bannerData, useCover: true);
-    heroItems = bannerItems.isNotEmpty
-        ? bannerItems.take(10).toList()
-        : (sections.isNotEmpty ? sections.first.items.take(10).toList() : []);
-
-    // Real diagnostics instead of guessing image paths a third time: this
-    // prints the EXACT constructed URLs to logcat. Run `adb logcat | grep
-    // "IMG DEBUG"`, open the printed URLs directly in a mobile browser, and
-    // report back whether they load there - that tells us definitively
-    // whether this is a wrong-path bug (browser also fails) or a
-    // Flutter/CachedNetworkImage-side bug (browser works fine, app doesn't).
-    if (heroItems.isNotEmpty) {
-      debugPrint('IMG DEBUG hero[0] title="${heroItems.first.title}" url=${heroItems.first.imageUrl}');
-    }
-    if (sections.isNotEmpty && sections.first.items.isNotEmpty) {
-      final first = sections.first.items.first;
-      debugPrint('IMG DEBUG category[0] title="${first.title}" url=${first.imageUrl}');
-    }
-    if (_asList(groupsData).isNotEmpty && _asList(groupsData).first is Map) {
-      final firstGroup = (_asList(groupsData).first as Map).cast<String, dynamic>();
-      final firstVideos = _asList(firstGroup['videos'] ?? firstGroup['items'] ?? firstGroup['list']);
-      if (firstVideos.isNotEmpty && firstVideos.first is Map) {
-        debugPrint('IMG DEBUG raw video fields: ${(firstVideos.first as Map).cast<String, dynamic>()}');
-      }
-    }
-
-    // Warm the real category list in the background for genre browsing -
-    // don't block the home screen on it.
-    unawaited(_ensureRealCategories());
+    heroItems = [...series.take(8), ...movies.take(4)];
+    allItemsPool = [...series, ...movies];
+    categories = [
+      (name: 'مسلسلات وأنمي', items: series, tagId: 2),
+      (name: 'أفلام', items: movies, tagId: 1),
+    ];
   }
 
   Future<void> refreshHome() async => fetchHome();
 
-  /// [typeId] is either the special 1/2/3 convention (movies/series/popular,
-  /// used by the fallback home rows) or - when [useTag] is true - a REAL
-  /// cee.buzz category `nb` id from [fetchGenreList], routed through
-  /// `videosByCategory`.
+  Future<List<({String id, String name})>> fetchGenreList() async => const [];
+
   Future<List<VideoItem>> fetchCategory(
     int typeId, {
     int page = 1,
     bool useTag = false,
     String sort = 'date',
     String? genre,
-    int videoKind = 1, // 1 = movies, 2 = series - only relevant when useTag
+    int videoKind = 1,
   }) async {
-    final zeroPage = page > 0 ? page - 1 : 0; // caller uses 1-based paging
-    if (useTag) {
-      final data = await _getJson(
-        '$_api/videosByCategory?categoryID=$typeId&orderby=$sort&videoKind=$videoKind&offset=${zeroPage * 24}&level=$_level');
-      return _toVideoItems(data);
-    }
-    switch (typeId) {
-      case 2:
-        return _fetchLatest('series', zeroPage);
-      case 3:
-        return _fetchPopular(zeroPage);
-      default:
-        return _fetchLatest('movies', zeroPage);
-    }
+    final path = typeId == 2 ? 'series' : 'movies';
+    final pageSeg = page > 1 ? 'page/$page/' : '';
+    final html = await _getHtml('$_cnBase/$path/$pageSeg');
+    return html != null ? _parseListing(html) : [];
   }
 
-  Future<bool> hasMorePages(String html, int currentPage) async => true; // cee.buzz has no pagination markers to parse; caller stops on an empty page instead
+  Future<bool> hasMorePages(String html, int currentPage) async => true;
 
   Future<List<VideoItem>> advancedSearch({
     String? title,
@@ -1282,9 +1127,6 @@ class MovieScraper extends ChangeNotifier {
     String? director,
     String? imdbrate,
   }) async {
-    // Only plain title search is reliably known to work against the real
-    // API; other filters are accepted for signature compatibility but
-    // currently ignored (AdvancedSearch's filter format isn't documented).
     if (title == null || title.trim().isEmpty) return [];
     return searchItems(title);
   }
@@ -1292,173 +1134,98 @@ class MovieScraper extends ChangeNotifier {
   Future<List<VideoItem>> searchItems(String query) async {
     final q = query.trim();
     if (q.isEmpty) return [];
-    final url = '$_api/video/V/2/itemsPerPage/20/video_title_search/'
-        '${Uri.encodeComponent(q)}/itemsPerPage/12/pageNumber/0/level/$_level';
-    final data = await _getJson(url);
-    return _toVideoItems(data);
+    final html = await _getHtml('$_cnBase/?s=${Uri.encodeComponent(q)}');
+    return html != null ? _parseListing(html) : [];
   }
 
   /// Fetches full details for a video (movie OR the top-level id the user
-  /// tapped, even if it later turns out to be a series). For movies this
-  /// resolves playback URLs immediately (transcoddedFiles) exactly like the
-  /// reference app's openVideo(); for series, individual episode playback
-  /// URLs are intentionally left empty here and must be resolved lazily via
-  /// [resolvePlayback] right before playing/downloading a specific episode,
-  /// since cee.buzz only returns per-episode stream URLs when you fetch that
-  /// exact episode's own id (videoSeason's episode list only has metadata).
+  /// tapped). Playback URLs are intentionally left empty here and resolved
+  /// lazily via [resolvePlayback] right before playing/downloading a
+  /// specific movie or episode, since cinemana.cc only reveals the real
+  /// stream link through a separate AJAX call made against that exact id.
   Future<MediaDetails> fetchDetails(String id) async {
     final d = MediaDetails();
     try {
       await _fetchDetailsInner(id, d).timeout(const Duration(seconds: 15));
     } catch (e) {
-      // Same principle as fetchHome: never let the details screen spin
-      // forever - return whatever was gathered before the cutoff.
-      debugPrint('[cee.buzz] fetchDetails($id) timed out/failed: $e');
+      debugPrint('[cinemana] fetchDetails($id) failed: $e');
     }
     return d;
   }
 
   Future<void> _fetchDetailsInner(String id, MediaDetails d) async {
-    {
-      final results = await Future.wait([
-        _getJson('$_api/allVideoInfo/id/$id'),
-        _getJson('$_api/transcoddedFiles/id/$id'),
-      ]);
-      final info = results[0];
-      final filesData = results[1];
-      if (info == null) return;
+    final html = await _getHtml('$_cnBase/watch=$id/');
+    if (html == null) return;
 
-      d.title = _pickTitle(info);
-      d.year = info['year']?.toString() ?? '';
+    final h1m = RegExp(r'<h1[^>]*>\s*([^<]+?)\s*</h1>').firstMatch(html);
+    final rawTitle = h1m != null ? h1m.group(1)!.trim() : '';
+    final cleaned = _cnCleanTitle(rawTitle.isNotEmpty ? rawTitle : 'بدون عنوان');
+    d.title = cleaned.key;
 
-      // Genre: `categories` is an array of {nb, ar_title, en_title} objects,
-      // not a single string field - join the localized names for display.
-      final catList = (info['categories'] as List?)
-              ?.whereType<Map>()
-              .map((c) => _pickTitle(c.cast<String, dynamic>()))
-              .where((s) => s.isNotEmpty)
-              .toList() ??
-          const [];
-      d.genre = catList.join('، ');
+    final posterM = RegExp(r"poster:\s*'([^']+)'").firstMatch(html);
+    if (posterM != null) {
+      d.imageUrl = posterM.group(1)!;
+    } else {
+      final ogM = RegExp(r'''<meta property="og:image" content="([^"]+)"''').firstMatch(html);
+      d.imageUrl = ogM != null ? ogM.group(1)! : '';
+    }
 
-      // Rating: the real field is `stars` (a number/string), not `rating`.
-      d.rating = info['stars']?.toString() ?? info['rating']?.toString() ?? '';
+    final descM = RegExp(r'''<meta name="description" content="([^"]*)"''').firstMatch(html);
+    d.synopsis = descM != null ? descM.group(1)!.trim() : '';
 
-      final durationSec = info['duration'];
-      d.runtime = durationSec == null ? '' : '${(int.tryParse(durationSec.toString()) ?? 0) ~/ 60} د';
+    // Season tabs: data-target="season-<id>" ... موسم <N>  (real digits,
+    // far more reliable than parsing Arabic ordinal words out of a title).
+    final tabRx = RegExp(r'''data-target="(season-\d+)"[^>]*>\s*موسم\s*(\d+)''', dotAll: true);
+    final tabs = tabRx.allMatches(html).toList();
 
-      // Synopsis: the real fields are ar_content/en_content, NOT
-      // description/summary (those don't exist on this API at all - this
-      // was the root cause of synopsis always coming back empty).
-      final arContent = info['ar_content']?.toString() ?? '';
-      final enContent = info['en_content']?.toString() ?? '';
-      d.synopsis = arContent.trim().isNotEmpty ? arContent : enContent;
+    if (tabs.isEmpty) {
+      d.isMovie = true; // no season widget at all -> standalone movie
+      return;
+    }
 
-      // Poster: request the 'large' variant instead of 'medium' for
-      // noticeably sharper artwork - the API serves both under the same
-      // path convention, just with the size segment swapped.
-      final posterMedium = info['imgMediumThumb'] as String? ?? '';
-      d.imageUrl = _thumbLarge(posterMedium);
-
-      // Cast & crew
-      final cast = <CastMember>[];
-      void addRole(String key, String role) {
-        final list = info[key] as List?;
-        if (list == null) return;
-        for (final raw in list) {
-          if (raw is! Map) continue;
-          final p = raw.cast<String, dynamic>();
-          final pid = _pickId(p);
-          final name = (p['name'] as String?)?.trim() ?? '';
-          if (pid.isEmpty || name.isEmpty || name == 'nostaff') continue;
-          cast.add(CastMember(
-            id: pid,
-            name: name,
-            imageUrl: _staffThumb(p['staff_img_thumb'] as String? ?? ''),
-            role: role,
-          ));
-        }
-      }
-      addRole('actorsInfo', 'actor');
-      addRole('directorsInfo', 'director');
-      addRole('writersInfo', 'writer');
-      addRole('producersInfo', 'producer');
-      d.cast = cast;
-
-      // Playback sources for THIS id (used directly if it's a movie, or as
-      // the "resolved" result when resolvePlayback() re-calls fetchDetails
-      // for a specific episode id).
-      final files = _asList(filesData);
-      final quality = _mapQualities(files);
-      d.movieUrl = quality['default'] ?? '';
-      d.movieUrl720 = quality['720'] ?? '';
-      d.movieUrl1080 = quality['1080'] ?? '';
-      d.movieUrl360 = quality['360'] ?? '';
-      d.movieUrl240 = quality['240'] ?? '';
-      d.movieUrl4k = quality['4k'] ?? '';
-
-      final translations = (info['translations'] as List?)
-              ?.whereType<Map>()
-              .map((t) => t.cast<String, dynamic>())
-              .where((t) => t['extention'] == 'vtt')
-              .toList() ??
-          const [];
-      final arSub = translations.firstWhere(
-        (t) => t['type'] == 'ar',
-        orElse: () => translations.isNotEmpty ? translations.first : const {},
+    final episodes = <EpisodeItem>[];
+    for (var i = 0; i < tabs.length; i++) {
+      final seasonWrapperId = tabs[i].group(1)!;
+      final seasonNum = tabs[i].group(2)!;
+      final startIdx = html.indexOf('id="$seasonWrapperId"');
+      if (startIdx == -1) continue;
+      final nextIdx = (i + 1 < tabs.length)
+          ? html.indexOf('id="${tabs[i + 1].group(1)}"', startIdx)
+          : -1;
+      final blockEnd = nextIdx != -1 ? nextIdx : (startIdx + 20000).clamp(0, html.length);
+      final block = html.substring(startIdx, blockEnd);
+      final epRx = RegExp(
+        r'''href="https://cinemana\.cc/watch=(\d+)/"[^>]*>.*?<span[^>]*>\s*(\d+)\s*</span>''',
+        dotAll: true,
       );
-      d.movieSubtitleVttUrl = (arSub['file'] as String?) ?? '';
-      d.movieSubtitleUrl = d.movieSubtitleVttUrl; // cee.buzz only serves vtt
-
-      // Episodes: cee.buzz calls this for every video regardless of whether
-      // it turns out to be a movie or series, then hides the section if the
-      // list comes back empty - same pattern as the reference web app.
-      final seasonsData = await _getJson('$_api/videoSeasonNumber/id/$id');
-      final seasonsList = _asList(seasonsData);
-      if (seasonsList.isEmpty) {
-        d.isMovie = true;
-        return;
-      }
-
-      final epsData = await _getJson('$_api/videoSeason/id/$id');
-      final episodes = <EpisodeItem>[];
-      for (final raw in _asList(epsData)) {
-        if (raw is! Map) continue;
-        final e = raw.cast<String, dynamic>();
-        final epId = _pickId(e);
-        if (epId.isEmpty) continue;
-        final seasonNum = e['season']?.toString() ?? '1';
-        final epNum = e['episodeNummer'] ?? e['episodeNumber'];
-        final epTitle = _pickTitle(e);
+      for (final em in epRx.allMatches(block)) {
         episodes.add(EpisodeItem(
-          id: epId,
-          title: epTitle.isEmpty || epTitle == 'بدون عنوان'
-              ? 'الحلقة ${epNum ?? episodes.length + 1}'
-              : epTitle,
-          url: '', // resolved lazily via resolvePlayback(epId) right before playback
+          id: em.group(1)!,
+          title: 'الحلقة ${em.group(2)}',
+          url: '', // resolved lazily via resolvePlayback(epId)
           season: 'S${seasonNum.padLeft(2, '0')}',
-          imageUrl: _thumbLarge(e['imgMediumThumb'] as String? ?? ''),
+          imageUrl: d.imageUrl,
         ));
       }
-      if (episodes.isEmpty) {
-        d.isMovie = true;
-      } else {
-        d.isMovie = false;
-        d.episodes = episodes;
-      }
+    }
+
+    if (episodes.isEmpty) {
+      d.isMovie = true;
+    } else {
+      d.isMovie = false;
+      episodes.sort((a, b) => (a.episodeNumber ?? 0).compareTo(b.episodeNumber ?? 0));
+      d.episodes = episodes;
     }
   }
 
-  // Short-TTL cache keyed by video id so prewarm() actually saves the
-  // follow-up tap a full round-trip instead of just warming the connection.
   final Map<String, MediaDetails> _resolveCache = {};
   final Map<String, DateTime> _resolveCacheAt = {};
   static const _resolveCacheTtl = Duration(minutes: 3);
 
-  /// Resolves the real playback URLs + Arabic subtitle for a single video id
-  /// (movie OR one specific episode) right before it's played or downloaded.
-  /// Results are cached briefly so a [prewarm]-ed id that gets tapped a few
-  /// seconds later plays instantly instead of re-fetching from scratch.
+  /// Resolves the actual playable video URL for one post id (a movie OR a
+  /// single episode - both are just individual cinemana.cc posts) by
+  /// replaying the same POST the site's own player JS makes right after the
+  /// watch page loads, trying each numbered server until one works.
   Future<MediaDetails> resolvePlayback(String id) async {
     final cachedAt = _resolveCacheAt[id];
     if (cachedAt != null && DateTime.now().difference(cachedAt) < _resolveCacheTtl) {
@@ -1466,45 +1233,68 @@ class MovieScraper extends ChangeNotifier {
       if (cached != null) return cached;
     }
     final d = await fetchDetails(id);
+    String? videoUrl;
+    for (final server in [0, 1, 2]) {
+      videoUrl = await _fetchVideoSource(id, server: server);
+      if (videoUrl != null && videoUrl.isNotEmpty) break;
+    }
+    d.movieUrl = videoUrl ?? '';
+    d.movieUrl720 = d.movieUrl;
+    d.movieUrl1080 = d.movieUrl;
+    d.movieUrl360 = d.movieUrl;
+    d.movieUrl4k = d.movieUrl;
     _resolveCache[id] = d;
     _resolveCacheAt[id] = DateTime.now();
     return d;
   }
 
-  /// Kicks off playback resolution for [id] without waiting on it - used to
-  /// pre-fetch the stream metadata (and populate the cache above) while the
-  /// person is still reading the details screen, so tapping play often
-  /// resolves instantly instead of waiting for allVideoInfo+transcoddedFiles
-  /// to round-trip only after the tap. Mirrors the reference web app's
-  /// prewarmVideo() hover mechanism, adapted for touch.
   void prewarm(String id) {
     if (id.isEmpty) return;
     unawaited(resolvePlayback(id));
   }
 
-  Map<String, String> _mapQualities(List<dynamic> files) {
-    final out = <String, String>{};
-    for (final raw in files) {
-      if (raw is! Map) continue;
-      final f = raw.cast<String, dynamic>();
-      final label = (f['quality'] ?? f['resolution'] ?? f['name'] ?? f['label'] ?? '').toString();
-      final src = (f['src'] ?? f['url'] ?? f['path'] ?? f['streamUrl'] ?? f['videoUrl'] ?? '').toString();
-      if (src.isEmpty) continue;
-      final resolved = _resolveMediaUrl(src);
-      out.putIfAbsent('default', () => resolved);
-      if (label.contains('2160') || label.toLowerCase().contains('4k')) {
-        out['4k'] = resolved;
-      } else if (label.contains('1080')) {
-        out['1080'] = resolved;
-      } else if (label.contains('720')) {
-        out['720'] = resolved;
-      } else if (label.contains('360')) {
-        out['360'] = resolved;
-      } else if (label.contains('240')) {
-        out['240'] = resolved;
-      }
+  /// Replays the site's own "load player" AJAX call. The exact shape of the
+  /// response HTML wasn't available to verify live from this environment -
+  /// this tries every embed pattern the site is known to use (iframe src,
+  /// direct .m3u8/.mp4 links, generic src=) in order, and logs the raw
+  /// response on a miss so it can be pinpointed and fixed precisely if none
+  /// of them match in practice.
+  Future<String?> _fetchVideoSource(String postId, {int server = 0}) async {
+    try {
+      final resp = await http
+          .post(
+            Uri.parse('$_cnBase/wp-content/themes/EEE/Inc/Ajax/Single/Server.php'),
+            headers: {
+              ..._cnHeaders('$_cnBase/watch=$postId/'),
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: {'post_id': postId, 'server': '$server'},
+          )
+          .timeout(const Duration(seconds: 12));
+      if (resp.statusCode != 200) return null;
+      final body = utf8.decode(resp.bodyBytes, allowMalformed: true).trim();
+      if (body.isEmpty || body == 'RE_RENDER_NOW') return null;
+
+      final iframeM = RegExp('''<iframe[^>]+src=["']([^"']+)["']''').firstMatch(body);
+      if (iframeM != null) return iframeM.group(1);
+
+      final m3u8M = RegExp(r'''(https?:[^"'\s]+\.m3u8[^"'\s]*)''').firstMatch(body);
+      if (m3u8M != null) return m3u8M.group(1);
+
+      final mp4M = RegExp(r'''(https?:[^"'\s]+\.mp4[^"'\s]*)''').firstMatch(body);
+      if (mp4M != null) return mp4M.group(1);
+
+      final srcM = RegExp('''src=["'](https?:[^"']+)["']''').firstMatch(body);
+      if (srcM != null) return srcM.group(1);
+
+      debugPrint('[cinemana] server=$server unrecognized response for $postId: '
+          '${body.substring(0, body.length > 300 ? 300 : body.length)}');
+      return null;
+    } catch (e) {
+      debugPrint('[cinemana] video fetch failed for $postId server=$server: $e');
+      return null;
     }
-    return out;
   }
 }
 """)
