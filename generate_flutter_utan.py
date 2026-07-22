@@ -662,29 +662,14 @@ w("lib/models/site_category.dart", r"""class SiteCategory {
   String localizedName(String lang) => lang == 'en' ? nameEn : nameAr;
 }
 
-// These category IDs are taken directly from cee.buzz's own live sidebar
-// navigation (/movies?category_id=N and /series?category_id=N links),
-// not guessed or derived - they are confirmed genre IDs the real site uses.
-// Unlike the old vodu.me tag system (Netflix/Marvel/HBO/Disney+ groupings),
-// cee.buzz only has genre-based categories; movie vs series is a separate
-// route/kind, not a category, so isTag routes through videosByCategory with
-// this id while the movie/series split happens via videoKind elsewhere.
+// cinemana.cc has no genre/tag browsing at all - the only real sections on
+// the site are content type: Movies, Series, Anime (confirmed from the
+// site's own nav bar and captured page listings). remoteId here maps
+// directly to MovieScraper.fetchCategory's typeId (1/2/3).
 const List<SiteCategory> siteCategories = [
-  SiteCategory(id: 84, remoteId: 84, isTag: true, nameAr: 'اكشن',           nameEn: 'Action'),
-  SiteCategory(id: 62, remoteId: 62, isTag: true, nameAr: 'دراما',          nameEn: 'Drama'),
-  SiteCategory(id: 59, remoteId: 59, isTag: true, nameAr: 'كوميدي',         nameEn: 'Comedy'),
-  SiteCategory(id: 70, remoteId: 70, isTag: true, nameAr: 'رعب',            nameEn: 'Horror'),
-  SiteCategory(id: 78, remoteId: 78, isTag: true, nameAr: 'خيال علمي',      nameEn: 'Sci-Fi'),
-  SiteCategory(id: 67, remoteId: 67, isTag: true, nameAr: 'خيالي',          nameEn: 'Fantasy'),
-  SiteCategory(id: 80, remoteId: 80, isTag: true, nameAr: 'اثارة',          nameEn: 'Thriller'),
-  SiteCategory(id: 60, remoteId: 60, isTag: true, nameAr: 'جريمة',          nameEn: 'Crime'),
-  SiteCategory(id: 76, remoteId: 76, isTag: true, nameAr: 'غموض',           nameEn: 'Mystery'),
-  SiteCategory(id: 77, remoteId: 77, isTag: true, nameAr: 'رومانسي',        nameEn: 'Romance'),
-  SiteCategory(id: 56, remoteId: 56, isTag: true, nameAr: 'مغامرة',         nameEn: 'Adventure'),
-  SiteCategory(id: 57, remoteId: 57, isTag: true, nameAr: 'رسوم متحركة',    nameEn: 'Animation'),
-  SiteCategory(id: 61, remoteId: 61, isTag: true, nameAr: 'وثائقي',         nameEn: 'Documentary'),
-  SiteCategory(id: 79, remoteId: 79, isTag: true, nameAr: 'رياضي',          nameEn: 'Sports'),
-  SiteCategory(id: 89, remoteId: 89, isTag: true, nameAr: 'حياة الغرب',     nameEn: 'Western'),
+  SiteCategory(id: 1, remoteId: 1, nameAr: 'أفلام',   nameEn: 'Movies'),
+  SiteCategory(id: 2, remoteId: 2, nameAr: 'مسلسلات', nameEn: 'Series'),
+  SiteCategory(id: 3, remoteId: 3, nameAr: 'أنمي',    nameEn: 'Anime'),
 ];
 """
 )
@@ -750,7 +735,7 @@ import 'package:flutter/foundation.dart';
 const String _proxyUserAgent =
     'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
-const String _proxyReferer = 'https://cee.buzz/';
+const String _proxyReferer = 'https://cinemana.cc/';
 
 /// A tiny local "download-accelerator" HTTP server that runs entirely
 /// in-process (loopback only, never exposed to the network). The video
@@ -1007,7 +992,7 @@ Map<String, String> _cnHeaders([String? referer]) => {
   } else if (t.startsWith('مسلسل ')) {
     t = t.substring(6);
   }
-  t = t.replaceAll(RegExp(r'[\-–—]\s*الحلقة\s*\d+(\s*والأخيرة)?\s*$'), '');
+  t = t.replaceAll(RegExp(r'[\-–—]?\s*الحلق[ةه]\s*\d+(\s*والأخيرة)?\s*$'), '');
   t = t.replaceAll(
       RegExp(r'الموسم\s+(الاول|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)\s*$'),
       '');
@@ -1019,7 +1004,7 @@ Map<String, String> _cnHeaders([String? referer]) => {
 
 class MovieScraper extends ChangeNotifier {
   List<VideoItem> heroItems = [];
-  List<({String name, List<VideoItem> items, int tagId})> categories = [];
+  List<({String name, List<VideoItem> items, int tagId, String slug})> categories = [];
   List<VideoItem> allItemsPool = [];
   bool isLoading = false;
 
@@ -1084,17 +1069,21 @@ class MovieScraper extends ChangeNotifier {
     final results = await Future.wait([
       _getHtml('$_cnBase/series/'),
       _getHtml('$_cnBase/movies/'),
+      _getHtml('$_cnBase/${Uri.encodeComponent('عالم-الأنمي')}/'),
     ]);
     final seriesHtml = results[0];
     final moviesHtml = results[1];
+    final animeHtml = results[2];
     final series = seriesHtml != null ? _parseListing(seriesHtml) : <VideoItem>[];
     final movies = moviesHtml != null ? _parseListing(moviesHtml) : <VideoItem>[];
+    final anime = animeHtml != null ? _parseListing(animeHtml) : <VideoItem>[];
 
-    heroItems = [...series.take(8), ...movies.take(4)];
-    allItemsPool = [...series, ...movies];
+    heroItems = [...series.take(6), ...movies.take(4), ...anime.take(4)];
+    allItemsPool = [...series, ...movies, ...anime];
     categories = [
-      (name: 'مسلسلات وأنمي', items: series, tagId: 2),
+      (name: 'مسلسلات', items: series, tagId: 2),
       (name: 'أفلام', items: movies, tagId: 1),
+      (name: 'أنمي', items: anime, tagId: 3),
     ];
   }
 
@@ -1102,6 +1091,10 @@ class MovieScraper extends ChangeNotifier {
 
   Future<List<({String id, String name})>> fetchGenreList() async => const [];
 
+  /// typeId: 1 = أفلام (movies), 2 = مسلسلات (series), 3 = أنمي (anime).
+  /// cinemana.cc has no genre/tag filtering endpoints, so [genre] and
+  /// [useTag] are accepted for API-compatibility with the rest of the app
+  /// but have no effect here - the only real axis is content type.
   Future<List<VideoItem>> fetchCategory(
     int typeId, {
     int page = 1,
@@ -1110,7 +1103,11 @@ class MovieScraper extends ChangeNotifier {
     String? genre,
     int videoKind = 1,
   }) async {
-    final path = typeId == 2 ? 'series' : 'movies';
+    final path = switch (typeId) {
+      2 => 'series',
+      3 => Uri.encodeComponent('عالم-الأنمي'),
+      _ => 'movies',
+    };
     final pageSeg = page > 1 ? 'page/$page/' : '';
     final html = await _getHtml('$_cnBase/$path/$pageSeg');
     return html != null ? _parseListing(html) : [];
@@ -1176,10 +1173,59 @@ class MovieScraper extends ChangeNotifier {
     // Season tabs: data-target="season-<id>" ... موسم <N>  (real digits,
     // far more reliable than parsing Arabic ordinal words out of a title).
     final tabRx = RegExp(r'''data-target="(season-\d+)"[^>]*>\s*موسم\s*(\d+)''', dotAll: true);
-    final tabs = tabRx.allMatches(html).toList();
+    var tabs = tabRx.allMatches(html).toList();
 
+    // Single-season shows don't render a season switcher at all (nothing to
+    // switch between) but still wrap their episode grid in an identical
+    // <div id="season-<id>" class="season-wrapper">...</div> - just without
+    // the matching .season-trigger button. Confirmed from a real captured
+    // single-season page. Fall back to any bare season-wrapper div id(s) so
+    // these shows aren't misdetected as movies with zero episodes.
     if (tabs.isEmpty) {
-      d.isMovie = true; // no season widget at all -> standalone movie
+      final bareRx = RegExp(r'''id="(season-\d+)"\s+class="season-wrapper''');
+      final bare = bareRx.allMatches(html).toList();
+      if (bare.isEmpty) {
+        d.isMovie = true; // genuinely no season widget at all -> movie
+        return;
+      }
+      // Build synthetic (wrapperId, seasonNumber) pairs, numbered 1..N in
+      // the order they appear on the page.
+      final synthetic = <({String wrapperId, String num})>[];
+      for (var i = 0; i < bare.length; i++) {
+        synthetic.add((wrapperId: bare[i].group(1)!, num: '${i + 1}'));
+      }
+      final episodes = <EpisodeItem>[];
+      for (var i = 0; i < synthetic.length; i++) {
+        final seasonWrapperId = synthetic[i].wrapperId;
+        final seasonNum = synthetic[i].num;
+        final startIdx = html.indexOf('id="$seasonWrapperId"');
+        if (startIdx == -1) continue;
+        final nextIdx = (i + 1 < synthetic.length)
+            ? html.indexOf('id="${synthetic[i + 1].wrapperId}"', startIdx)
+            : -1;
+        final blockEnd = nextIdx != -1 ? nextIdx : (startIdx + 20000).clamp(0, html.length);
+        final block = html.substring(startIdx, blockEnd);
+        final epRx = RegExp(
+          r'''href="https://cinemana\.cc/watch=(\d+)/"[^>]*>.*?<span[^>]*>\s*(\d+)\s*</span>''',
+          dotAll: true,
+        );
+        for (final em in epRx.allMatches(block)) {
+          episodes.add(EpisodeItem(
+            id: em.group(1)!,
+            title: 'الحلقة ${em.group(2)}',
+            url: '',
+            season: 'S${seasonNum.padLeft(2, '0')}',
+            imageUrl: d.imageUrl,
+          ));
+        }
+      }
+      if (episodes.isEmpty) {
+        d.isMovie = true;
+      } else {
+        d.isMovie = false;
+        episodes.sort((a, b) => (a.episodeNumber ?? 0).compareTo(b.episodeNumber ?? 0));
+        d.episodes = episodes;
+      }
       return;
     }
 
@@ -1222,10 +1268,20 @@ class MovieScraper extends ChangeNotifier {
   final Map<String, DateTime> _resolveCacheAt = {};
   static const _resolveCacheTtl = Duration(minutes: 3);
 
-  /// Resolves the actual playable video URL for one post id (a movie OR a
-  /// single episode - both are just individual cinemana.cc posts) by
-  /// replaying the same POST the site's own player JS makes right after the
-  /// watch page loads, trying each numbered server until one works.
+  /// Resolves the actual playable video URL(s) for one post id (a movie OR
+  /// a single episode - both are just individual cinemana.cc posts).
+  ///
+  /// Confirmed from a captured HAR of the real site: the Server.php AJAX
+  /// response embeds a small player-init script containing a JS object
+  /// literal like:
+  ///   const originalUrls = {"1080":"https://<cdn>/.../playlist.m3u8",
+  ///                          "720":"...","360":"..."};
+  /// These raw CDN links are hotlink-protected and don't play directly -
+  /// the site's own player always routes them through its own proxy:
+  ///   https://cinemana.cc/stream.php?url=<originalUrl>&session=<postId>
+  /// with header Referer: https://cinemana.cc/watch=<postId>/ - confirmed
+  /// against the HAR down to the individual .ts segment requests, which
+  /// all go through the same stream.php proxy with the same referer.
   Future<MediaDetails> resolvePlayback(String id) async {
     final cachedAt = _resolveCacheAt[id];
     if (cachedAt != null && DateTime.now().difference(cachedAt) < _resolveCacheTtl) {
@@ -1233,16 +1289,21 @@ class MovieScraper extends ChangeNotifier {
       if (cached != null) return cached;
     }
     final d = await fetchDetails(id);
-    String? videoUrl;
+    Map<String, String>? qualities;
     for (final server in [0, 1, 2]) {
-      videoUrl = await _fetchVideoSource(id, server: server);
-      if (videoUrl != null && videoUrl.isNotEmpty) break;
+      qualities = await _fetchVideoQualities(id, server: server);
+      if (qualities != null && qualities.isNotEmpty) break;
     }
-    d.movieUrl = videoUrl ?? '';
-    d.movieUrl720 = d.movieUrl;
-    d.movieUrl1080 = d.movieUrl;
-    d.movieUrl360 = d.movieUrl;
-    d.movieUrl4k = d.movieUrl;
+    qualities ??= const {};
+    d.movieUrl1080 = qualities['1080'] ?? '';
+    d.movieUrl720  = qualities['720'] ?? '';
+    d.movieUrl360  = qualities['360'] ?? '';
+    d.movieUrl4k   = qualities['2160'] ?? qualities['4k'] ?? '';
+    d.movieUrl = d.movieUrl1080.isNotEmpty
+        ? d.movieUrl1080
+        : (d.movieUrl720.isNotEmpty
+            ? d.movieUrl720
+            : (d.movieUrl360.isNotEmpty ? d.movieUrl360 : (qualities.values.isNotEmpty ? qualities.values.first : '')));
     _resolveCache[id] = d;
     _resolveCacheAt[id] = DateTime.now();
     return d;
@@ -1253,19 +1314,32 @@ class MovieScraper extends ChangeNotifier {
     unawaited(resolvePlayback(id));
   }
 
-  /// Replays the site's own "load player" AJAX call. The exact shape of the
-  /// response HTML wasn't available to verify live from this environment -
-  /// this tries every embed pattern the site is known to use (iframe src,
-  /// direct .m3u8/.mp4 links, generic src=) in order, and logs the raw
-  /// response on a miss so it can be pinpointed and fixed precisely if none
-  /// of them match in practice.
-  Future<String?> _fetchVideoSource(String postId, {int server = 0}) async {
+  /// Every video request for cinemana.cc content (the proxy page itself,
+  /// and every .m3u8/.ts segment behind it) must carry this Referer or the
+  /// server rejects it - confirmed directly from the captured HAR.
+  static String refererFor(String postId) => '$_cnBase/watch=$postId/';
+
+  /// Turns one raw CDN quality URL into the URL our player should actually
+  /// request - .mp4/.mkv links are hotlink-safe and used as-is (matches the
+  /// site's own player logic), everything else (HLS .m3u8) is routed
+  /// through cinemana's own stream.php proxy exactly like the real site.
+  String _proxiedStreamUrl(String rawUrl, String postId) {
+    if (RegExp(r'\.(mp4|mkv)(\?|$)', caseSensitive: false).hasMatch(rawUrl)) {
+      return rawUrl;
+    }
+    return '$_cnBase/stream.php?url=${Uri.encodeComponent(rawUrl)}&session=$postId';
+  }
+
+  /// Calls the site's "load player" AJAX endpoint and pulls the
+  /// `originalUrls` quality map out of the returned player-init script,
+  /// then converts each entry into the actual URL our player should hit.
+  Future<Map<String, String>?> _fetchVideoQualities(String postId, {int server = 0}) async {
     try {
       final resp = await http
           .post(
             Uri.parse('$_cnBase/wp-content/themes/EEE/Inc/Ajax/Single/Server.php'),
             headers: {
-              ..._cnHeaders('$_cnBase/watch=$postId/'),
+              ..._cnHeaders(refererFor(postId)),
               'X-Requested-With': 'XMLHttpRequest',
               'Content-Type': 'application/x-www-form-urlencoded',
             },
@@ -1276,21 +1350,30 @@ class MovieScraper extends ChangeNotifier {
       final body = utf8.decode(resp.bodyBytes, allowMalformed: true).trim();
       if (body.isEmpty || body == 'RE_RENDER_NOW') return null;
 
-      final iframeM = RegExp('''<iframe[^>]+src=["']([^"']+)["']''').firstMatch(body);
-      if (iframeM != null) return iframeM.group(1);
-
-      final m3u8M = RegExp(r'''(https?:[^"'\s]+\.m3u8[^"'\s]*)''').firstMatch(body);
-      if (m3u8M != null) return m3u8M.group(1);
-
-      final mp4M = RegExp(r'''(https?:[^"'\s]+\.mp4[^"'\s]*)''').firstMatch(body);
-      if (mp4M != null) return mp4M.group(1);
-
-      final srcM = RegExp('''src=["'](https?:[^"']+)["']''').firstMatch(body);
-      if (srcM != null) return srcM.group(1);
-
-      debugPrint('[cinemana] server=$server unrecognized response for $postId: '
-          '${body.substring(0, body.length > 300 ? 300 : body.length)}');
-      return null;
+      final m = RegExp(r'const\s+originalUrls\s*=\s*(\{.*?\});', dotAll: true).firstMatch(body);
+      if (m == null) {
+        // Alternate servers (server=1/2) often use a much simpler response
+        // shape with no proxy at all - just a single direct source:
+        //   const src = 'https://.../playlist.m3u8';
+        // Confirmed from a captured HAR: this variant has no `originalUrls`
+        // map and doesn't go through stream.php.
+        final srcM = RegExp(r'''const\s+src\s*=\s*['"]([^'"]+)['"]''').firstMatch(body);
+        if (srcM != null) {
+          return {'auto': srcM.group(1)!};
+        }
+        debugPrint('[cinemana] server=$server: no known video pattern for $postId, '
+            'response head: ${body.substring(0, body.length > 300 ? 300 : body.length)}');
+        return null;
+      }
+      final decoded = jsonDecode(m.group(1)!);
+      if (decoded is! Map) return null;
+      final out = <String, String>{};
+      decoded.forEach((k, v) {
+        if (v is String && v.isNotEmpty) {
+          out[k.toString()] = _proxiedStreamUrl(v, postId);
+        }
+      });
+      return out.isEmpty ? null : out;
     } catch (e) {
       debugPrint('[cinemana] video fetch failed for $postId server=$server: $e');
       return null;
@@ -2417,7 +2500,7 @@ import '../app_settings.dart';
 const String _userAgent =
     'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36';
-const String _referer = 'https://cee.buzz/';
+const String _referer = 'https://cinemana.cc/';
 
 class DownloadStore extends ChangeNotifier {
   static final DownloadStore instance = DownloadStore._();
@@ -3578,7 +3661,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         formatHint: hint,
         httpHeaders: retryWithoutHeaders ? {} : {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
-          'Referer': 'https://cee.buzz/',
+          'Referer': 'https://cinemana.cc/',
         },
       );
     } else {
@@ -3589,7 +3672,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         formatHint: hint,
         httpHeaders: retryWithoutHeaders ? {} : {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
-          'Referer': 'https://cee.buzz/',
+          'Referer': 'https://cinemana.cc/',
         },
       );
     }
@@ -4841,7 +4924,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             decoration: BoxDecoration(color: utRed(),
                               borderRadius: BorderRadius.circular(2))),
                           const SizedBox(width: 8),
-                          Text(L('تصفح بالتصنيف', 'Browse by Genre'),
+                          Text(L('الأقسام', 'Sections'),
                             style: appFontStyle(17, bold: true)),
                         ]),
                       ),
@@ -4958,48 +5041,46 @@ class BrowseScreen extends StatelessWidget {
           style: appFontStyle(20, bold: true)),
         elevation: 0,
       ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, childAspectRatio: 2.5, crossAxisSpacing: 14, mainAxisSpacing: 14,
-        ),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(18),
         itemCount: siteCategories.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
         itemBuilder: (_, i) {
           final cat = siteCategories[i];
           final color = categoryColor(cat.nameEn);
           return GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => CategoryListScreen(category: cat))),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
+            child: Container(
+              height: 110,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [color.withOpacity(0.5), color.withOpacity(0.12)],
+                  colors: [color.withOpacity(0.55), color.withOpacity(0.14)],
                   begin: Alignment.topRight, end: Alignment.bottomLeft,
                 ),
-                border: Border.all(color: color.withOpacity(0.25)),
-                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: color.withOpacity(0.28)),
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Stack(children: [
                 Positioned(
-                  top: 8, right: 8,
+                  left: 14, top: 14, bottom: 14,
                   child: Icon(categoryIcon(cat.nameEn),
-                    size: 36, color: color.withOpacity(0.3)),
+                    size: 40, color: color.withOpacity(0.9)),
                 ),
                 Positioned(
-                  left: 12, bottom: 10,
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(cat.localizedName(lang),
-                      style: TextStyle(
-                        fontFamily: 'ExpoArabic', fontSize: 14,
-                        fontWeight: FontWeight.w700, color: Colors.white,
-                      ),
-                      maxLines: 2,
-                    ),
-                    if (lang == 'ar' && cat.nameEn.isNotEmpty)
-                      Text(cat.nameEn,
-                        style: const TextStyle(fontSize: 10, color: Colors.white54)),
-                  ]),
+                  right: 18, top: 0, bottom: 0,
+                  child: Center(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text(cat.localizedName(lang),
+                        style: const TextStyle(
+                          fontFamily: 'ExpoArabic', fontSize: 20,
+                          fontWeight: FontWeight.w700, color: Colors.white,
+                        )),
+                      if (lang == 'ar' && cat.nameEn.isNotEmpty)
+                        Text(cat.nameEn,
+                          style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                    ]),
+                  ),
                 ),
               ]),
             ),
@@ -5039,8 +5120,6 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   String _genre = '';
   int _videoKind = 1; // 1 = movies, 2 = series
   final ScrollController _scroll = ScrollController();
-  static const _genres = ['Action','Adventure','Animation','Comedy','Drama',
-    'Fantasy','Horror','Romance','Sci-Fi','Thriller'];
 
   @override void initState() {
     super.initState();
@@ -5109,40 +5188,6 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
               onSelectionChanged: (s) { setState(() => _videoKind = s.first); _reset(); },
             ),
           ),
-        // Sort & filter bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Row(children: [
-            Expanded(child: SegmentedButton<String>(
-              style: SegmentedButton.styleFrom(
-                selectedBackgroundColor: utRed(),
-                foregroundColor: Colors.white,
-                selectedForegroundColor: Colors.white,
-              ),
-              segments: [
-                ButtonSegment(value: 'date', label: Text(L('تاريخ', 'Date'))),
-                ButtonSegment(value: 'year', label: Text(L('سنة', 'Year'))),
-                ButtonSegment(value: 'views', label: Text(L('مشاهدات', 'Views'))),
-                ButtonSegment(value: 'rating', label: Text(L('تقييم', 'Rating'))),
-              ],
-              selected: {_sort},
-              onSelectionChanged: (s) { _sort = s.first; _reset(); },
-            )),
-            const SizedBox(width: 8),
-            PopupMenuButton<String>(
-              icon: Icon(Icons.tune,
-                color: _genre.isEmpty ? Colors.white70 : utRed()),
-              color: const Color(0xFF1A1A1A),
-              onSelected: (g) { _genre = g == 'All' ? '' : g; _reset(); },
-              itemBuilder: (_) => [
-                PopupMenuItem(value: 'All', child: Text(L('الكل', 'All'),
-                  style: const TextStyle(color: Colors.white))),
-                ..._genres.map((g) => PopupMenuItem(value: g,
-                  child: Text(g, style: const TextStyle(color: Colors.white)))),
-              ],
-            ),
-          ]),
-        ),
         Expanded(child: RefreshIndicator(
           onRefresh: _reset,
           color: utRed(),
@@ -5196,31 +5241,24 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _titleCtrl = TextEditingController();
-  final _genreCtrl = TextEditingController();
-  final _yearCtrl  = TextEditingController();
   List<VideoItem> _results = [];
   bool _searching = false;
-  bool _showFilters = false;
   Timer? _debounce;
 
   @override void dispose() {
-    _titleCtrl.dispose(); _genreCtrl.dispose(); _yearCtrl.dispose();
+    _titleCtrl.dispose();
     _debounce?.cancel(); super.dispose();
   }
 
   void _performSearch() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () async {
-      if (_titleCtrl.text.isEmpty && _genreCtrl.text.isEmpty && _yearCtrl.text.isEmpty) {
+      if (_titleCtrl.text.isEmpty) {
         setState(() => _results = []); return;
       }
       setState(() => _searching = true);
       final scraper = context.read<MovieScraper>();
-      final r = await scraper.advancedSearch(
-        title: _titleCtrl.text,
-        genre: _genreCtrl.text,
-        year: _yearCtrl.text,
-      );
+      final r = await scraper.advancedSearch(title: _titleCtrl.text);
       if (mounted) setState(() { _results = r; _searching = false; });
     });
   }
@@ -5263,30 +5301,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   icon: const Icon(Icons.close, color: Colors.white54, size: 18),
                   onPressed: () { _titleCtrl.clear(); setState(() => _results = []); },
                 ),
-              IconButton(
-                icon: Icon(Icons.tune, color: _showFilters ? utRed() : Colors.white54),
-                onPressed: () => setState(() => _showFilters = !_showFilters),
-              ),
             ]),
           ),
         ),
-
-        // Advanced filters
-        if (_showFilters)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Row(children: [
-              Expanded(child: _filterField(_genreCtrl, L('النوع', 'Genre'))),
-              const SizedBox(width: 8),
-              Expanded(child: _filterField(_yearCtrl, L('السنة', 'Year'))),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: utRed()),
-                onPressed: _performSearch,
-                child: Text(L('بحث', 'Search')),
-              ),
-            ]),
-          ),
 
         // Results grid
         Expanded(child: _results.isEmpty && !_searching
@@ -5317,18 +5334,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _filterField(TextEditingController ctrl, String hint) =>
-    TextField(
-      controller: ctrl,
-      style: const TextStyle(color: Colors.white, fontSize: 13),
-      decoration: InputDecoration(
-        hintText: hint, hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
-        filled: true, fillColor: Colors.white.withOpacity(0.07),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-    );
 }
 """)
 
