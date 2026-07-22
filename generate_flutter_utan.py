@@ -1004,7 +1004,7 @@ Map<String, String> _cnHeaders([String? referer]) => {
 
 class MovieScraper extends ChangeNotifier {
   List<VideoItem> heroItems = [];
-  List<({String name, List<VideoItem> items, int tagId, String slug})> categories = [];
+  List<({String name, List<VideoItem> items, int tagId})> categories = [];
   List<VideoItem> allItemsPool = [];
   bool isLoading = false;
 
